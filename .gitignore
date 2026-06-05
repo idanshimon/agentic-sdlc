@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+.pytype/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+.swc/
+
+# Editors / OS
+.vscode/
+!.vscode/settings.example.json
+!.vscode/mcp.json
+.idea/
+.DS_Store
+*.swp
+*~
+
+# Env files (keep templates)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs / tmp
+*.log
+logs/
+/tmp/
+tmp/
+
+# Hermes plans (private notes)
+.hermes/
+
+# Secrets — belt and suspenders
+secrets.json
+*-secret.yaml
+*-secret.yml
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Local data
+*.db
+*.sqlite
+*.sqlite3
+local-data/

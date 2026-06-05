@@ -1,0 +1,36 @@
+# OpenSpec configuration
+project_id: agentic-sdlc-v0.7
+project_name: Agentic SDLC v0.7 — Governed Multi-Agent Reference Design
+license: MIT
+authors:
+  - name: Idan Shimon
+    email: 3396189+idanshimon@users.noreply.github.com
+
+# Capability namespaces — each is a module of related specs
+capabilities:
+  - name: pipeline
+    description: 9-stage governed pipeline (ingest → deliver), gates, providers
+  - name: ledger
+    description: Decision Ledger schema, MCP server, Cosmos persistence, runtime/meta entries
+  - name: standards-bundles
+    description: Per-department policy bundles, versioning, canary rollout, committee review
+  - name: pipeline-doctor
+    description: Drift detection, bounded auto-fix, change-proposal authoring
+  - name: agent-hq-integration
+    description: Hooks, custom agents, IDE/CLI/coding-agent ledger coverage
+  - name: telemetry
+    description: /telemetry UI, ledger insights, cost-per-decision, class drift
+  - name: deployment
+    description: Azure Container Apps, VNET private endpoints, RG topology
+
+# Strict-validation rules
+strict:
+  require_proposal: true
+  require_tasks: true
+  require_spec_deltas: true
+  require_test_targets: true
+  require_rollback_plan: true
+  ban_hidden_dependencies: true
+
+# Active changes are listed under openspec/changes/
+# Archived (merged/cancelled) changes move to openspec/changes/archive/
