@@ -1,0 +1,320 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "150688000092753215"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location (defaults to RG location)"
+      }
+    },
+    "acrLoginServer": {
+      "type": "string",
+      "metadata": {
+        "description": "ACR login server (e.g. myacr.azurecr.io)"
+      }
+    },
+    "cosmosEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos document endpoint URL"
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account name"
+      }
+    },
+    "workloadMiId": {
+      "type": "string",
+      "metadata": {
+        "description": "User-assigned MI resource id"
+      }
+    },
+    "workloadMiClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "User-assigned MI client id (for env var injection)"
+      }
+    },
+    "caeId": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Apps Environment id"
+      }
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights connection string"
+      }
+    },
+    "orchestratorImageTag": {
+      "type": "string",
+      "defaultValue": "0.7.0-rc1",
+      "metadata": {
+        "description": "Image tags"
+      }
+    },
+    "ledgerMcpImageTag": {
+      "type": "string",
+      "defaultValue": "0.7.0-rc1"
+    },
+    "pipelineDoctorImageTag": {
+      "type": "string",
+      "defaultValue": "0.7.0-rc1"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "ca-orchestrator",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', parameters('workloadMiId'))]": {}
+        }
+      },
+      "properties": {
+        "managedEnvironmentId": "[parameters('caeId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 8000,
+            "transport": "auto",
+            "allowInsecure": false
+          },
+          "registries": [
+            {
+              "server": "[parameters('acrLoginServer')]",
+              "identity": "[parameters('workloadMiId')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "orchestrator",
+              "image": "[format('{0}/orchestrator:{1}', parameters('acrLoginServer'), parameters('orchestratorImageTag'))]",
+              "resources": {
+                "cpu": 1,
+                "memory": "2Gi"
+              },
+              "env": [
+                {
+                  "name": "COSMOS_ENDPOINT",
+                  "value": "[parameters('cosmosEndpoint')]"
+                },
+                {
+                  "name": "COSMOS_DB",
+                  "value": "agentic-sdlc"
+                },
+                {
+                  "name": "COSMOS_LEDGER_CONTAINER",
+                  "value": "decision-ledger"
+                },
+                {
+                  "name": "COSMOS_RUNS_CONTAINER",
+                  "value": "pipeline-runs"
+                },
+                {
+                  "name": "STORAGE_ACCOUNT_NAME",
+                  "value": "[parameters('storageAccountName')]"
+                },
+                {
+                  "name": "AZURE_CLIENT_ID",
+                  "value": "[parameters('workloadMiClientId')]"
+                },
+                {
+                  "name": "APPINSIGHTS_CONNECTION_STRING",
+                  "value": "[parameters('appInsightsConnectionString')]"
+                },
+                {
+                  "name": "DELIVER_PROVIDER",
+                  "value": "github"
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 3
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "ca-ledger-mcp",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', parameters('workloadMiId'))]": {}
+        }
+      },
+      "properties": {
+        "managedEnvironmentId": "[parameters('caeId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 3001,
+            "transport": "auto",
+            "allowInsecure": false
+          },
+          "registries": [
+            {
+              "server": "[parameters('acrLoginServer')]",
+              "identity": "[parameters('workloadMiId')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "ledger-mcp",
+              "image": "[format('{0}/decision-ledger-mcp:{1}', parameters('acrLoginServer'), parameters('ledgerMcpImageTag'))]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": [
+                {
+                  "name": "COSMOS_ENDPOINT",
+                  "value": "[parameters('cosmosEndpoint')]"
+                },
+                {
+                  "name": "COSMOS_DB",
+                  "value": "agentic-sdlc"
+                },
+                {
+                  "name": "COSMOS_LEDGER_CONTAINER",
+                  "value": "decision-ledger"
+                },
+                {
+                  "name": "AZURE_CLIENT_ID",
+                  "value": "[parameters('workloadMiClientId')]"
+                },
+                {
+                  "name": "MCP_TRANSPORT",
+                  "value": "http"
+                },
+                {
+                  "name": "MCP_PORT",
+                  "value": "3001"
+                },
+                {
+                  "name": "STANDARDS_BUNDLES_ROOT",
+                  "value": "/app/standards-bundles"
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 3
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/jobs",
+      "apiVersion": "2024-03-01",
+      "name": "cj-pipeline-doctor",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', parameters('workloadMiId'))]": {}
+        }
+      },
+      "properties": {
+        "environmentId": "[parameters('caeId')]",
+        "configuration": {
+          "triggerType": "Schedule",
+          "replicaTimeout": 600,
+          "replicaRetryLimit": 1,
+          "scheduleTriggerConfig": {
+            "cronExpression": "0 * * * *",
+            "parallelism": 1,
+            "replicaCompletionCount": 1
+          },
+          "registries": [
+            {
+              "server": "[parameters('acrLoginServer')]",
+              "identity": "[parameters('workloadMiId')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "pipeline-doctor",
+              "image": "[format('{0}/pipeline-doctor:{1}', parameters('acrLoginServer'), parameters('pipelineDoctorImageTag'))]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": [
+                {
+                  "name": "COSMOS_ENDPOINT",
+                  "value": "[parameters('cosmosEndpoint')]"
+                },
+                {
+                  "name": "COSMOS_DB",
+                  "value": "agentic-sdlc"
+                },
+                {
+                  "name": "AZURE_CLIENT_ID",
+                  "value": "[parameters('workloadMiClientId')]"
+                },
+                {
+                  "name": "STANDARDS_BUNDLES_ROOT",
+                  "value": "/app/standards-bundles"
+                },
+                {
+                  "name": "DOCTOR_MODE",
+                  "value": "dry-run"
+                },
+                {
+                  "name": "LEDGER_TEAM_ID",
+                  "value": "team-demo"
+                }
+              ],
+              "args": [
+                "--mode",
+                "dry-run",
+                "--team-id",
+                "team-demo"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "orchestratorFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', 'ca-orchestrator'), '2024-03-01').configuration.ingress.fqdn]"
+    },
+    "ledgerMcpFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', 'ca-ledger-mcp'), '2024-03-01').configuration.ingress.fqdn]"
+    }
+  }
+}

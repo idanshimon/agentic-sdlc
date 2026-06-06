@@ -1,18 +1,31 @@
 #!/usr/bin/env bash
 # deploy/scripts/02-build-and-push-images.sh
-# Builds + pushes the four images to ACR via az acr build (no local docker required).
+# Phase 2: builds + pushes 3 images via az acr build (no local docker required).
+#
+# v0.7-rc1 image set:
+#   orchestrator        — Python 3.11 FastAPI
+#   decision-ledger-mcp — Node 20 TS
+#   pipeline-doctor     — Python 3.11 (depends on packages/ledger-core)
+#
+# Deferred:
+#   ledger-insights-ui — Next.js (resolver-ui port not done yet, deferred to v0.7+1)
 set -euo pipefail
 
-RG="${RG:-rg-agentic-sdlc-v07-eastus}"
+RG="${RG:-rg-agentic-sdlc-v07-eastus2}"
 TAG="${TAG:-0.7.0-rc1}"
 
-# Discover ACR name from RG
-ACR_NAME=$(az acr list --resource-group "$RG" --query '[0].name' -o tsv)
-if [[ -z "$ACR_NAME" ]]; then
-  echo "ERROR: No ACR found in $RG. Run 01-create-rg-and-infra.sh first." >&2
+if [[ ! -f /tmp/agentic-v07-base.json ]]; then
+  ACR_NAME=$(az acr list --resource-group "$RG" --query '[0].name' -o tsv)
+else
+  ACR_NAME=$(jq -r '.properties.outputs.acrName.value' /tmp/agentic-v07-base.json)
+fi
+
+if [[ -z "$ACR_NAME" || "$ACR_NAME" == "null" ]]; then
+  echo "ERROR: Could not resolve ACR name" >&2
   exit 1
 fi
-echo "Using ACR: $ACR_NAME"
+
+echo "ACR: $ACR_NAME"
 echo "Tag: $TAG"
 
 REPO_ROOT="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )/../.." &> /dev/null && pwd )"
@@ -22,31 +35,33 @@ build() {
   local img="$1"; local context="$2"; local dockerfile="$3"; shift 3
   echo
   echo "=== Building $img:$TAG ==="
-  az acr build \
+  if ! az acr build \
     --registry "$ACR_NAME" \
     --image "$img:$TAG" \
     --image "$img:latest" \
     --file "$dockerfile" \
     "$@" \
-    "$context" \
-    2>&1 | tail -20
+    "$context"; then
+    echo "FAILED: $img"
+    return 1
+  fi
 }
 
-# 1. orchestrator
+# 1. orchestrator (Python 3.11 FastAPI). Build context: apps/orchestrator/.
 build orchestrator "$REPO_ROOT/apps/orchestrator" "$REPO_ROOT/apps/orchestrator/Dockerfile"
 
-# 2. decision-ledger-mcp
+# 2. decision-ledger-mcp (Node TS). Build context: apps/decision-ledger-mcp/.
+# The Dockerfile expects standards-bundles to be copied in at /app/standards-bundles
+# at runtime via volume; for build, just package the app.
 build decision-ledger-mcp "$REPO_ROOT/apps/decision-ledger-mcp" "$REPO_ROOT/apps/decision-ledger-mcp/Dockerfile"
 
-# 3. pipeline-doctor (needs ledger-core + standards-bundles in build context)
-# Strategy: build context = repo root, dockerfile = apps/pipeline-doctor/Dockerfile
-# Update Dockerfile path expectations later; for v0.7 demo we use a flatter Dockerfile.
-
-# 4. ledger-insights-ui — placeholder until UI is ported
-echo
-echo "NOTE: ledger-insights-ui not yet ported from v0.6 resolver-ui — skipping build."
-echo "      Orchestrator + ledger-mcp + pipeline-doctor will be deployable."
+# 3. pipeline-doctor (Python 3.11). Needs ledger-core wheel + standards-bundles.
+# We use a Dockerfile that builds from repo root context to access both.
+build pipeline-doctor "$REPO_ROOT" "$REPO_ROOT/apps/pipeline-doctor/Dockerfile.repo-root"
 
 echo
 echo "Done. Images in ACR:"
 az acr repository list --name "$ACR_NAME" --output table
+
+echo
+echo "Next: bash deploy/scripts/03-deploy-apps.sh"

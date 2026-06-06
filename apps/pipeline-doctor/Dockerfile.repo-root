@@ -1,0 +1,51 @@
+# Dockerfile.repo-root — build pipeline-doctor with repo root as context
+# Required so the build can copy packages/ledger-core/ + standards-bundles/.
+#
+# Usage:
+#   az acr build --file apps/pipeline-doctor/Dockerfile.repo-root \
+#     --image pipeline-doctor:0.7.0-rc1 .
+#
+# syntax=docker/dockerfile:1.7
+FROM python:3.11-slim AS builder
+WORKDIR /build
+
+# Copy ledger-core first (so pipeline-doctor can find it)
+COPY packages/ledger-core /build/ledger-core
+RUN pip install --no-cache-dir /build/ledger-core
+
+# Copy pipeline-doctor source
+COPY apps/pipeline-doctor /build/pipeline-doctor
+RUN pip install --no-cache-dir /build/pipeline-doctor
+
+# Copy templates + standards bundles for runtime read
+COPY apps/pipeline-doctor/templates /build/templates
+COPY standards-bundles /build/standards-bundles
+
+FROM python:3.11-slim AS runtime
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install gh CLI (for change_proposer.py opening PRs)
+RUN type -p curl >/dev/null && \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bring in installed Python deps from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy templates + standards bundles to expected paths
+COPY --from=builder /build/templates /app/templates
+COPY --from=builder /build/standards-bundles /app/standards-bundles
+
+ENV STANDARDS_BUNDLES_ROOT=/app/standards-bundles
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "-m", "pipeline_doctor"]
+CMD ["--mode", "dry-run"]

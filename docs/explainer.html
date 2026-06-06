@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Agentic SDLC v0.7 — Four-Plane Reference Design</title>
+<style>
+  :root {
+    --bg: #0c0d10;
+    --bg-card: #14161c;
+    --bg-card-2: #1a1d26;
+    --fg: #e7e9ee;
+    --fg-dim: #9aa1b2;
+    --fg-faint: #5a6273;
+    --accent: #6fb3ff;
+    --accent-2: #b388ff;
+    --green: #3ddc84;
+    --amber: #ffb74d;
+    --red: #ff6b6b;
+    --border: #2a2e3a;
+    --code: #2a2e3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    padding: 40px 20px;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  h1 {
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 0 0 8px;
+    letter-spacing: -0.5px;
+  }
+  h2 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--fg);
+    margin: 40px 0 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  h3 { font-size: 18px; font-weight: 600; color: var(--accent); margin: 24px 0 8px; }
+  .lede { color: var(--fg-dim); font-size: 17px; max-width: 800px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(111, 179, 255, 0.15);
+    color: var(--accent);
+    border: 1px solid rgba(111, 179, 255, 0.3);
+    margin-right: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge.green { background: rgba(61,220,132,0.13); color: var(--green); border-color: rgba(61,220,132,0.3); }
+  .badge.amber { background: rgba(255,183,77,0.13); color: var(--amber); border-color: rgba(255,183,77,0.3); }
+  .badge.red { background: rgba(255,107,107,0.13); color: var(--red); border-color: rgba(255,107,107,0.3); }
+  .meta {
+    color: var(--fg-faint);
+    font-size: 13px;
+    margin-top: 6px;
+  }
+
+  /* The four-plane diagram */
+  .planes {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin: 32px 0;
+  }
+  .plane {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 18px 22px;
+  }
+  .plane.standards { border-left-color: var(--green); }
+  .plane.pipeline { border-left-color: var(--accent); }
+  .plane.ledger { border-left-color: var(--accent-2); }
+  .plane.runtime { border-left-color: var(--amber); }
+  .plane h3 { margin-top: 0; }
+  .plane.standards h3 { color: var(--green); }
+  .plane.pipeline h3 { color: var(--accent); }
+  .plane.ledger h3 { color: var(--accent-2); }
+  .plane.runtime h3 { color: var(--amber); }
+
+  .ascii {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--fg-dim);
+    font: 12.5px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+    padding: 14px 18px;
+    white-space: pre;
+    overflow-x: auto;
+    margin: 16px 0;
+  }
+  .ascii .em { color: var(--accent); font-weight: 600; }
+  .ascii .green { color: var(--green); }
+  .ascii .amber { color: var(--amber); }
+  .ascii .purple { color: var(--accent-2); }
+  .ascii .red { color: var(--red); }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+  }
+  .card h4 { font-size: 14px; margin: 0 0 6px; color: var(--accent); }
+  .card .desc { color: var(--fg-dim); font-size: 13px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--fg-dim); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+  td code { background: var(--code); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+
+  .ledger-types {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .ledger-types .card .runtime-tag { color: var(--accent); font-weight: 600; }
+  .ledger-types .card .meta-tag { color: var(--accent-2); font-weight: 600; }
+
+  pre {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--fg);
+    font: 12.5px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+    padding: 14px 18px;
+    overflow-x: auto;
+  }
+  code.inline { background: var(--code); padding: 1px 6px; border-radius: 3px; font-size: 13px; color: var(--fg); }
+  ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  .honest {
+    background: rgba(255, 183, 77, 0.07);
+    border: 1px solid rgba(255, 183, 77, 0.3);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 18px 0;
+  }
+  .honest h4 { margin-top: 0; color: var(--amber); }
+  footer {
+    margin-top: 60px;
+    color: var(--fg-faint);
+    font-size: 12px;
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .arrow { color: var(--accent); font-weight: 600; }
+  .never { color: var(--red); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Agentic SDLC v0.7</h1>
+  <p class="lede">Reference design for governed agentic software development. Four planes — Standards, Pipeline, Decision Ledger, Agent HQ Runtime — sharing one audit substrate.</p>
+  <p class="meta">
+    <span class="badge">v0.7-rc1</span>
+    <span class="badge green">62 tests passing</span>
+    <span class="badge amber">VNET-free dev variant</span>
+    <span class="badge">MIT</span>
+  </p>
+</header>
+
+<h2>Why this exists</h2>
+<p>v0.6 of the agentic SDLC reference design proved one thing: <strong>governance is the differentiator, not codegen quality.</strong> Decision Ledger as audit spine, HITL gates at ambiguity classes, cost-per-decision dashboards. Two limits became visible during the workshop tour:</p>
+<ol>
+  <li><strong>Coverage gap.</strong> The Ledger only saw orchestrator pipeline runs &mdash; about 20% of an organization's agentic activity. Engineer IDE sessions, coding-agent issue&rarr;PR flows, reviewer Copilot Code Review runs were invisible. Compliance had audit on a fifth of the surface.</li>
+  <li><strong>Standards rigidity.</strong> Department rules (Architect, Security, Privacy, FinOps) lived as scattered prompts and APIM policies. Changing a rule meant editing code. There was no place where "Architect proposes a relaxed PHI rule" could be reviewed by Security + Privacy + Legal as a committee.</li>
+</ol>
+<p>v0.7 closes both gaps with a four-plane architecture and a self-improving Pipeline Doctor that bridges them.</p>
+
+<h2>The four planes</h2>
+
+<div class="planes">
+
+  <div class="plane standards">
+    <h3>1. Standards Bundles &mdash; the per-department policy plane</h3>
+    <p>Architect, Security, Privacy, FinOps each own a versioned, signed bundle:</p>
+    <pre><code>standards-bundles/<dept>/v<n.n.n>/
+  ├── rules.yaml        the rules themselves
+  ├── envelope.yaml     what Pipeline Doctor may auto-fix
+  ├── reviewers.yaml    blast-class &rarr; reviewer roster
+  └── README.md         rationale</code></pre>
+    <p>Changes are PRs. The <code class="inline">standards-change-agent</code> classifies blast class, drafts an ADR, assigns reviewers per <code class="inline">reviewers.yaml</code>, blocks merge until quorum.</p>
+    <p>Canary rollout: 5% of teams pinned for 7 days, Pipeline Doctor watches metrics, auto-PR opens to either fully promote or revert.</p>
+  </div>
+
+  <div class="plane pipeline">
+    <h3>2. Pipeline &mdash; the heavy lane (orchestrator)</h3>
+    <p>The 9-stage governed pipeline kept verbatim from v0.6, with one substantive change:</p>
+    <div class="ascii"><span class="em">PRD &rarr; ingest &rarr; assessor &rarr; resolver* &rarr; architect &rarr; design-review &rarr; test-plan &rarr; codegen &rarr; review-scan &rarr; deliver</span>
+
+* <span class="amber">HITL gate</span>; PHI cards never autopilot.</div>
+    <p>v0.7 swap: <strong>deliver targets GitHub by default</strong> (was: ADO). ADO remains opt-in via <code class="inline">deliver_provider="ado"</code>.</p>
+  </div>
+
+  <div class="plane ledger">
+    <h3>3. Decision Ledger &mdash; the audit spine (with two entry types)</h3>
+    <p>Cosmos DB, team-partitioned. <strong>One container, two entry types</strong>:</p>
+    <div class="ledger-types">
+      <div class="card">
+        <h4><span class="runtime-tag">runtime</span></h4>
+        <p class="desc">Decisions made during a pipeline run, IDE session, or coding-agent flow. PHI gate APPROVED, cost $0.027, model claude-sonnet-4-6.</p>
+      </div>
+      <div class="card">
+        <h4><span class="meta-tag">meta</span></h4>
+        <p class="desc">Decisions about the rules themselves. PHI rule X relaxed for de-identified datasets, effective bundle v0.1.1, blast HIGH, 3 reviewers.</p>
+      </div>
+    </div>
+    <p>Exposed three ways: REST API, MCP server (any GitHub runtime), hook payload I/O.</p>
+  </div>
+
+  <div class="plane runtime">
+    <h3>4. Agent HQ Runtime Lanes &mdash; medium + light</h3>
+    <p>Three lanes feed the same ledger:</p>
+    <table>
+      <thead><tr><th>Lane</th><th>Surface</th><th>Writer</th></tr></thead>
+      <tbody>
+      <tr><td><span class="badge amber">heavy</span></td><td>Orchestrator pipeline (PRD&rarr;PR)</td><td>stage-by-stage</td></tr>
+      <tr><td><span class="badge">medium</span></td><td>GH coding agent (issue&rarr;PR from Slack/Teams/Linear/Boards)</td><td>SubagentStop hook</td></tr>
+      <tr><td><span class="badge green">light</span></td><td>VS Code Copilot, Copilot CLI</td><td>5 lifecycle hooks</td></tr>
+      </tbody>
+    </table>
+    <p>Hooks fire client-side (fast-path PHI guard) and write to the same Decision Ledger via the MCP server.</p>
+  </div>
+
+</div>
+
+<h2>System diagram</h2>
+<div class="ascii">      <span class="green">STANDARDS BUNDLES</span>                                   <span class="amber">AGENT HQ RUNTIME</span>
+      (per-department, versioned,                       (medium + light lanes)
+       committee-reviewed)
+                                                        &middot; Coding Agent (issue &rarr; PR)
+      architect/v0.1.0/                                  &middot; IDE Copilot (VS Code)
+      security/v0.1.0/                                   &middot; Chat bridges (Slack/Teams/Linear/Boards)
+      privacy/v0.1.0/
+      finops/v0.1.0/                                     5 lifecycle hooks: SessionStart, UserPromptSubmit,
+                          &darr; pinned per team           PreToolUse (BLOCK), PostToolUse, SessionEnd
+                          &darr;
+      &boxur;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+      &boxv;  <span class="em">PIPELINE</span> (heavy lane &mdash; orchestrator)                       &boxv;
+      &boxv;                                                              &boxv;
+      &boxv;  PRD &rarr; ingest &rarr; assessor &rarr; <span class="amber">resolver*</span> &rarr; architect &rarr;          &boxv;
+      &boxv;       design &rarr; test-plan &rarr; codegen &rarr; review-scan &rarr;          &boxv;
+      &boxv;       <span class="em">deliver (GitHub PR)</span>                                       &boxv;
+      &boxv;                                                              &boxv;
+      &boxv;  * HITL gate via Plan Mode or chat bridges                   &boxv;
+      &boxul;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxur;
+                                  &darr;
+                                  &darr; runtime ledger entries
+                                  &darr;
+      &boxur;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+      &boxv;  <span class="purple">DECISION LEDGER</span> (Cosmos, team-partitioned)              &boxv;
+      &boxv;  &middot; entry_type: <span class="em">runtime</span> &mdash; pipeline runs, IDE, agent PRs &boxv;
+      &boxv;  &middot; entry_type: <span class="em">meta</span>    &mdash; standards-change merges        &boxv;
+      &boxv;  Exposed: REST API &middot; MCP server &middot; hook payload I/O   &boxv;
+      &boxul;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxur;
+                          &darr;                          &darr;
+                          &darr;                          &darr;
+                /telemetry UI               <span class="amber">PIPELINE DOCTOR</span>
+                (Ledger Insights:           (Foundry agent)
+                 drift, cost, class)        &middot; drift detection (5 signal types)
+                                            &middot; bounded auto-fix (envelope-validated)
+                                            &middot; change-proposal PRs (with ADR)</div>
+
+<h2>Hard rules &mdash; cannot be overridden</h2>
+<ul>
+  <li><strong>PHI rules <span class="never">NEVER</span> auto-fixed by Pipeline Doctor.</strong> Hard-coded in <code class="inline">envelope_validator.py</code> &mdash; defense in depth even if a bundle's <code class="inline">envelope.yaml</code> is mis-edited.</li>
+  <li><strong>Deny rules</strong> (<code class="inline">severity: BLOCK</code> or <code class="inline">rule_pattern: "deny/*"</code>) <strong>NEVER</strong> loosened.</li>
+  <li><strong>Auto-fix rate-limited</strong> to 5 / department / 7-day window.</li>
+  <li><strong>Standards changes always go through committee.</strong> Pipeline Doctor proposes; humans dispose. Even on highest confidence.</li>
+  <li><strong>Privacy DPO + Security Lead + Legal</strong> required reviewers for any HIGH-blast change in security/privacy bundles.</li>
+</ul>
+
+<h2>Pipeline Doctor signals</h2>
+<table>
+<thead><tr><th>Signal</th><th>Trigger</th><th>Auto-fix envelope</th></tr></thead>
+<tbody>
+<tr><td><code class="inline">autopilot_rejection_rate_high</code></td><td>&gt;25% rejection on a class for 7 days</td><td>Lower threshold &plusmn;0.05 (finops only)</td></tr>
+<tr><td><code class="inline">cost_per_decision_climbing</code></td><td>Stage cost &gt;1.5&times; 30-day baseline</td><td>Switch provider routing (architect)</td></tr>
+<tr><td><code class="inline">class_drift_unexpected</code></td><td>New class &gt;5% with no precedent</td><td><span class="never">never</span> &mdash; always proposes change</td></tr>
+<tr><td><code class="inline">bundle_rule_unused</code></td><td>Rule with zero <code class="inline">bundle_refs</code> over 30 days</td><td><span class="never">never</span> &mdash; tags for committee</td></tr>
+<tr><td><code class="inline">phi_class_violation</code></td><td>Orchestrator rejected a PHI write</td><td><span class="never">never</span> &mdash; immediate human escalation</td></tr>
+</tbody>
+</table>
+
+<h2>Repository layout</h2>
+<pre><code>agentic-sdlc/
+&boxvr;&boxh; AGENTS.md                          repo-wide guardrails (every Copilot agent reads)
+&boxvr;&boxh; openspec/                          5 strict-valid proposals
+&boxvr;&boxh; .github/
+&boxv;   &boxvr;&boxh; agents/                        6 custom agent files (assessor, architect, codegen, ...)
+&boxv;   &boxur;&boxh; hooks/                         5 lifecycle hooks (PHI guard, ledger writers)
+&boxvr;&boxh; standards-bundles/                 4 bundles &times; v0.1.0 (rules + envelope + reviewers)
+&boxvr;&boxh; packages/
+&boxv;   &boxur;&boxh; ledger-core/                   shared library (Pydantic v2 + async Cosmos)
+&boxvr;&boxh; apps/
+&boxv;   &boxvr;&boxh; orchestrator/                  9-stage FastAPI pipeline
+&boxv;   &boxvr;&boxh; decision-ledger-mcp/           Node TS MCP server (stdio + HTTP)
+&boxv;   &boxur;&boxh; pipeline-doctor/               drift detection + auto-fix + change-proposal
+&boxvr;&boxh; infra/                             base.bicep + apps.bicep (two-phase deploy)
+&boxur;&boxh; deploy/scripts/                    01-deploy-base &middot; 02-build-images &middot; 03-deploy-apps</code></pre>
+
+<h2>Honest disclaimers</h2>
+<div class="honest">
+<h4>What's working vs not</h4>
+<ul>
+  <li><span class="badge green">working</span> Decision Ledger schema (62 tests passing across 4 components, 0 failing)</li>
+  <li><span class="badge green">working</span> PHI guard (live-tested: raw MRN &rarr; BLOCK with citation)</li>
+  <li><span class="badge green">working</span> Envelope validator (PHI hard-block + deny hard-block + bounds + preconditions + rate limits)</li>
+  <li><span class="badge green">working</span> Standards bundles (4 reference bundles validate, integration tests pass)</li>
+  <li><span class="badge amber">deferred</span> ledger-insights-ui (renamed v0.6 resolver-ui not yet ported &mdash; v0.7+1)</li>
+  <li><span class="badge amber">deferred</span> VNET + private endpoints (v0.7+1 &mdash; v0.6 has the proven recipe)</li>
+  <li><span class="badge amber">deferred</span> True per-call cost attribution (App Insights SDK not yet wired in providers)</li>
+  <li><span class="badge red">limitation</span> GHE.com Data Residency does not yet support Coding Agent (gh.com/community/discussions/167952). EU/data-sovereignty customers limited to orchestrator pipeline lane.</li>
+  <li><span class="badge red">limitation</span> Copilot SDK is technical preview (Jan 2026). Pinned in <code class="inline">package.json</code>; expect API drift.</li>
+</ul>
+</div>
+
+<h2>Live URLs (post-deploy)</h2>
+<p>Filled in by <code class="inline">deploy/scripts/03-deploy-apps.sh</code>:</p>
+<pre><code>Orchestrator:  https://&lt;orch-fqdn&gt;
+Ledger MCP:    https://&lt;mcp-fqdn&gt;
+Cosmos:        https://cosmos-agentic-&lt;suffix&gt;.documents.azure.com
+ACR:           acragenticsdlc&lt;suffix&gt;.azurecr.io
+Resource group: rg-agentic-sdlc-v07-eastus2</code></pre>
+
+<footer>
+  <strong>Reference architecture by Idan Shimon</strong> &middot; MIT License<br>
+  <a href="https://github.com/idanshimon/agentic-sdlc" style="color: var(--accent);">github.com/idanshimon/agentic-sdlc</a> &middot;
+  Successor to <a href="https://github.com/idanshimon/agentic-sdlc-reference" style="color: var(--accent);">agentic-sdlc-reference</a> (v0.6)
+</footer>
+
+</div>
+</body>
+</html>
