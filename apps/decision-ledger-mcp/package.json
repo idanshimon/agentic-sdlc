@@ -1,0 +1,37 @@
+{
+  "name": "decision-ledger-mcp",
+  "version": "0.7.0",
+  "description": "Decision Ledger MCP server — exposes the ledger to any GitHub runtime via Model Context Protocol",
+  "type": "module",
+  "main": "dist/server.js",
+  "bin": {
+    "decision-ledger-mcp": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "start:http": "node dist/server.js --transport http --port 3001",
+    "dev": "tsx src/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.2.0",
+    "@azure/identity": "^4.5.0",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "express": "^4.21.1",
+    "yaml": "^2.9.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
