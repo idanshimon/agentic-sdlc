@@ -1,0 +1,60 @@
+metadata:
+  bundle: privacy
+  version: 0.1.0
+  authors: ["@privacy-office"]
+  date: 2026-06-05
+  description: HIPAA minimum-necessary, retention windows, consent surfaces
+
+rules:
+  - id: HIPAA-MIN-NEC-001
+    title: HIPAA minimum-necessary scope on all PHI queries
+    phi: true
+    enforcement:
+      pipeline_stages: [architect, codegen, review-scan]
+    severity: BLOCK
+    rationale: 45 CFR 164.502(b) — uses must be limited to minimum necessary.
+    test_cases:
+      - input: "SELECT * FROM patients WHERE active = true"
+        expect: BLOCK
+      - input: "SELECT patient_id, last_visit FROM patients WHERE active = true"
+        expect: PASS
+
+  - id: RETENTION-CLINICAL-001
+    title: Clinical record retention 7 years (or per state law, whichever longer)
+    phi: true
+    enforcement:
+      pipeline_stages: [architect]
+    severity: BLOCK
+    rationale: Federal floor; many states (TN, CA, etc.) require longer retention.
+
+  - id: RETENTION-OPS-001
+    title: Operational logs 3 years; pruned after
+    phi: false
+    enforcement:
+      pipeline_stages: [architect]
+    severity: BLOCK
+    rationale: Privacy-by-default; retain only what is necessary.
+
+  - id: CONSENT-DISPLAY-001
+    title: Patient consent surface must be presented before non-treatment data use
+    phi: true
+    enforcement:
+      pipeline_stages: [architect, codegen]
+    severity: BLOCK
+    rationale: 45 CFR 164.508 — required for non-TPO uses.
+
+  - id: BREACH-NOTIFY-001
+    title: Breach notification path documented for any new PHI store
+    phi: true
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    severity: BLOCK
+    rationale: HITECH 13402 — notification within 60 days of discovery.
+
+  - id: DEIDENT-EXPERT-001
+    title: Expert-determination de-identification (when used) must cite the expert and method
+    phi: true
+    enforcement:
+      pipeline_stages: [architect]
+    severity: WARN
+    rationale: 45 CFR 164.514(b)(1) — auditable rationale required.

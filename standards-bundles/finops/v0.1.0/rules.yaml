@@ -1,0 +1,66 @@
+metadata:
+  bundle: finops
+  version: 0.1.0
+  authors: ["@finops-team"]
+  date: 2026-06-05
+  description: Per-team budgets, autopilot confidence thresholds, model selection rules
+
+rules:
+  - id: BUDGET-MONTHLY-001
+    title: Per-team monthly LLM budget ceiling
+    phi: false
+    enforcement:
+      pipeline_stages: [architect, codegen]
+    severity: WARN
+    rationale: Prevent runaway cost; soft warning at 80%, BLOCK at 100%.
+    defaults:
+      monthly_budget_usd: 5000
+      warn_at_pct: 80
+      block_at_pct: 100
+
+  - id: COST-PER-DECISION-001
+    title: Cost-per-decision ceiling per stage
+    phi: false
+    enforcement:
+      pipeline_stages: [architect]
+    severity: WARN
+    rationale: A single decision should not exceed a reasonable cost cap.
+    defaults:
+      assessor_max_usd: 0.05
+      architect_max_usd: 0.20
+      codegen_max_usd: 0.50
+      review_scan_max_usd: 0.10
+
+  - id: AUTOPILOT-THRESHOLD-AUTH
+    title: Autopilot confidence threshold for auth-policy class
+    phi: false
+    enforcement:
+      pipeline_stages: [resolver]
+    severity: WARN
+    rationale: Below this threshold, the resolver gate must hand to a human.
+    defaults:
+      threshold: 0.85
+
+  - id: AUTOPILOT-THRESHOLD-NAMING
+    title: Autopilot confidence threshold for naming-convention class
+    phi: false
+    enforcement:
+      pipeline_stages: [resolver]
+    severity: WARN
+    rationale: Naming conventions can be auto-resolved at lower confidence.
+    defaults:
+      threshold: 0.75
+
+  - id: MODEL-SELECTION-001
+    title: Approved model selections
+    phi: false
+    enforcement:
+      pipeline_stages: [architect]
+    severity: WARN
+    rationale: Use the cheapest model that meets the quality bar; benchmark suite required.
+    allowed_models:
+      - aoai-gpt5-2-codex
+      - aoai-gpt5-mini
+      - foundry-anthropic-claude-sonnet-4-6
+      - foundry-anthropic-claude-haiku-4-5
+      - databricks-anthropic-claude-opus-4-7

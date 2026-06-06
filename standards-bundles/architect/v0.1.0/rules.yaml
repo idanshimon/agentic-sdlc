@@ -1,0 +1,76 @@
+metadata:
+  bundle: architect
+  version: 0.1.0
+  authors: ["@architecture-leadership"]
+  date: 2026-06-05
+  description: Allowed stacks, service patterns, deployment targets, SLA defaults
+
+rules:
+  - id: ALLOWED-STACKS-001
+    title: Approved language runtimes
+    phi: false
+    enforcement:
+      pipeline_stages: [architect, codegen]
+    severity: WARN
+    rationale: Engineering org only supports limited languages for production.
+    allowed_values: ["python>=3.11", "node>=20", "dotnet>=8", "java>=21"]
+
+  - id: ALLOWED-FRAMEWORKS-001
+    title: Approved web frameworks
+    phi: false
+    enforcement:
+      pipeline_stages: [architect, codegen]
+    severity: WARN
+    rationale: Standardize on supported frameworks for security patching velocity.
+    allowed_values: ["FastAPI", "Express", "NestJS", "ASP.NET Core", "Spring Boot"]
+
+  - id: SERVICE-CONTAINERIZED-001
+    title: All services must be containerized (no VM-direct deployment)
+    phi: false
+    enforcement:
+      pipeline_stages: [architect]
+    severity: BLOCK
+    rationale: Reproducibility, immutable infra, required for the deployment platform.
+
+  - id: SERVICE-AUTH-MI-001
+    title: All Azure data-plane auth uses Managed Identity (no account keys)
+    phi: false
+    enforcement:
+      pipeline_stages: [architect, codegen, review-scan]
+    severity: BLOCK
+    rationale: Account keys are rotation-prone; MI rotation is automatic.
+
+  - id: SLA-DEFAULTS-001
+    title: Service SLA defaults
+    phi: false
+    enforcement:
+      pipeline_stages: [architect]
+    severity: WARN
+    rationale: Reasonable defaults; teams may override with rationale.
+    defaults:
+      availability: 99.9
+      latency_p99_ms: 500
+
+  - id: PROVIDER-ROUTING-001
+    title: Per-stage LLM provider routing
+    phi: false
+    enforcement:
+      pipeline_stages: [architect]
+    severity: WARN
+    rationale: Cost + latency optimization without sacrificing quality.
+    defaults:
+      assessor: aoai-gpt5-2-codex
+      architect: foundry-anthropic-claude-sonnet-4-6
+      codegen: foundry-anthropic-claude-sonnet-4-6
+      review-scan: aoai-gpt5-2-codex
+
+  - id: RETRY-COUNT-001
+    title: Stage retry count
+    phi: false
+    enforcement:
+      pipeline_stages: [architect]
+    severity: WARN
+    rationale: Bounded retries prevent runaway cost on transient failures.
+    defaults:
+      retry_count: 3
+      retry_max: 5

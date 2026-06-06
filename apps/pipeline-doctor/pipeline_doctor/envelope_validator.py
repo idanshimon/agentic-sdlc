@@ -75,6 +75,32 @@ class EnvelopeValidator:
             return EnvelopeCheck(allowed=False, violations=violations)
 
         # ---- envelope rule_pattern check -----------------------------------
+        # First: check `forbidden:` list — any match short-circuits to deny.
+        forbidden_list = self._envelope.get("forbidden", []) or []
+        for f in forbidden_list:
+            if "rule_id" in f and f["rule_id"] == proposal.rule_id:
+                violations.append(EnvelopeViolation(
+                    reason="rule_not_in_envelope",
+                    detail=(
+                        f"Rule {proposal.rule_id} is explicitly forbidden "
+                        f"in this bundle's envelope.yaml."
+                    ),
+                ))
+                return EnvelopeCheck(allowed=False, violations=violations)
+            if "rule_pattern" in f and fnmatch.fnmatch(proposal.field_path, f["rule_pattern"]):
+                violations.append(EnvelopeViolation(
+                    reason="deny_pattern_forbidden",
+                    detail=f"Field path {proposal.field_path} matches forbidden pattern {f['rule_pattern']}",
+                ))
+                return EnvelopeCheck(allowed=False, violations=violations)
+            if f.get("phi") is True and rule and rule.get("phi") is True:
+                # already covered by hard-rule above, but defense in depth
+                violations.append(EnvelopeViolation(
+                    reason="phi_rule_forbidden",
+                    detail="phi: true matched in forbidden list",
+                ))
+                return EnvelopeCheck(allowed=False, violations=violations)
+
         allowed_fixes = self._envelope.get("allowed_auto_fixes", []) or []
         matched_envelope = self._find_matching_envelope_entry(
             allowed_fixes, proposal.field_path

@@ -1,0 +1,32 @@
+# FinOps envelope — bounded auto-fix for cost-tuning rules
+#
+# Pipeline Doctor MAY auto-fix autopilot thresholds within tight bounds,
+# only after the drift signal has persisted for at least 7 days, and
+# only when the affected rule is NOT phi-class.
+
+allowed_auto_fixes:
+  - rule_pattern: "AUTOPILOT-THRESHOLD-*.defaults.threshold"
+    bounds:
+      min: 0.70
+      max: 0.95
+      max_delta_per_run: 0.05
+    requires:
+      - drift_signal_present_for_days: 7
+      - phi_class_not_high: true
+
+  - rule_pattern: "COST-PER-DECISION-001.defaults.*_max_usd"
+    bounds:
+      min: 0.01
+      max: 1.00
+      max_delta_per_run: 0.05
+    requires:
+      - drift_signal_present_for_days: 14
+
+forbidden:
+  - phi: true
+  - rule_pattern: "deny/*"
+  - rule_id: "BUDGET-MONTHLY-001"   # budget changes always require human approval
+
+rate_limits:
+  max_per_dept_per_window: 5
+  window_days: 7

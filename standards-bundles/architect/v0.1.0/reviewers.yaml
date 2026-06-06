@@ -1,0 +1,24 @@
+blast_classes:
+  HIGH:
+    required_approvers: 3
+    must_include_roles: [architect_lead, security_lead]
+    can_include_roles: [privacy_dpo, finops_lead]
+  MED:
+    required_approvers: 2
+    must_include_roles: [architect_lead]
+    can_include_roles: [security_lead, finops_lead]
+  LOW:
+    required_approvers: 1
+    must_include_roles: [architect_lead]
+  AUTO:
+    required_approvers: 0   # Pipeline Doctor within envelope
+
+people:
+  architect_lead:
+    - "architect-lead@example.com"
+  security_lead:
+    - "security-lead@example.com"
+  privacy_dpo:
+    - "privacy-dpo@example.com"
+  finops_lead:
+    - "finops-lead@example.com"

@@ -1,0 +1,88 @@
+metadata:
+  bundle: security
+  version: 0.1.0
+  authors: ["@security-leadership"]
+  date: 2026-06-05
+  description: PHI handling rules + secret scanning + SBOM requirements
+
+rules:
+  - id: PHI-001
+    title: Patient identifiers may not appear in cleartext logs
+    phi: true
+    enforcement:
+      pipeline_stages: [codegen, review-scan]
+      ide_hooks: [pre-tool-use, post-tool-use]
+    pattern: '(?i)(MRN|patient_id|SSN|DOB[\s_-]*[0-9]{4})'
+    severity: BLOCK
+    rationale: HIPAA Safe Harbor; logs are persistent and accessible to ops.
+    test_cases:
+      - input: "logger.info(f'patient {mrn} updated')"
+        expect: BLOCK
+      - input: "logger.info(f'patient {patient_id_redacted()} updated')"
+        expect: PASS
+
+  - id: PHI-002
+    title: PHI in transit must be TLS 1.2+
+    phi: true
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    severity: BLOCK
+    rationale: HIPAA technical safeguards (45 CFR 164.312).
+
+  - id: PHI-003
+    title: PHI at rest must be encrypted with customer-managed keys
+    phi: true
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    severity: BLOCK
+    rationale: Defense-in-depth; vendor key compromise must not equal PHI exposure.
+
+  - id: PHI-004
+    title: De-identification before analytics export
+    phi: true
+    enforcement:
+      pipeline_stages: [architect, codegen]
+    severity: BLOCK
+    rationale: HIPAA Safe Harbor; analytics workloads do not have minimum-necessary justification.
+
+  - id: PHI-005
+    title: Audit log retention 7 years for PHI access events
+    phi: true
+    enforcement:
+      pipeline_stages: [architect]
+    severity: BLOCK
+    rationale: HIPAA 45 CFR 164.530 (j)(2).
+
+  - id: SECRET-001
+    title: No service-principal secrets in source code
+    phi: false
+    enforcement:
+      pipeline_stages: [review-scan]
+      ide_hooks: [pre-tool-use]
+    pattern: '(?i)(client[\s_-]?secret|api[\s_-]?key|password)\s*[:=]\s*["'']?[A-Za-z0-9+/=_-]{16,}'
+    severity: BLOCK
+    rationale: Secrets in code = leaked on every clone, every backup. Use Key Vault + MI.
+
+  - id: SECRET-002
+    title: Connection strings must use Managed Identity
+    phi: false
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    severity: BLOCK
+    rationale: MI rotation is automatic; account-key rotation is manual and frequently skipped.
+
+  - id: SBOM-001
+    title: All container images must produce an SBOM at build time
+    phi: false
+    enforcement:
+      pipeline_stages: [review-scan]
+    severity: BLOCK
+    rationale: Supply chain audit trail; required for SOC 2 Type II.
+
+  - id: AUTH-001
+    title: Authentication policy must be explicitly resolved before codegen
+    phi: false
+    enforcement:
+      pipeline_stages: [resolver, codegen]
+    severity: BLOCK
+    rationale: Auth ambiguity is a Resolver-gate invariant class.

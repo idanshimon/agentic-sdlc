@@ -1,0 +1,33 @@
+# Architect envelope — bounded auto-fix for non-binding configuration tuning
+#
+# Pipeline Doctor MAY auto-fix:
+#   - retry counts (within [1, 5])
+#   - per-stage provider routing (between approved providers)
+# Pipeline Doctor MAY NOT auto-fix:
+#   - allowed-stacks list (committee decision)
+#   - service-auth-MI rule (security-adjacent)
+#   - SLA defaults (business decision)
+
+allowed_auto_fixes:
+  - rule_pattern: "RETRY-COUNT-001.defaults.retry_count"
+    bounds:
+      min: 1
+      max: 5
+      max_delta_per_run: 1
+    requires:
+      - drift_signal_present_for_days: 7
+
+  - rule_pattern: "PROVIDER-ROUTING-001.defaults.*"
+    bounds: {}   # no numeric bounds; switching between approved providers
+    requires:
+      - drift_signal_present_for_days: 14
+
+forbidden:
+  - phi: true
+  - rule_pattern: "deny/*"
+  - rule_id: "ALLOWED-STACKS-001"
+  - rule_id: "SERVICE-AUTH-MI-001"
+
+rate_limits:
+  max_per_dept_per_window: 5
+  window_days: 7

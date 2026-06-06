@@ -1,0 +1,28 @@
+# PINS.yaml — team → bundle-version pinning
+#
+# Every team has a pinned version per department bundle. If a team is not
+# listed under `teams:`, it inherits `defaults`. Orchestrator refuses to
+# start if any pin doesn't resolve to a real <dept>/v<version>/ directory.
+#
+# Canary rollouts: pin a subset of teams to a `-canary` suffix version
+# for a 7-day period; Pipeline Doctor watches metrics; auto-PR opens
+# either to promote (move all teams to the version) or revert.
+
+defaults:
+  architect: v0.1.0
+  security: v0.1.0
+  privacy: v0.1.0
+  finops: v0.1.0
+
+teams:
+  team-demo:
+    architect: v0.1.0
+    security: v0.1.0
+    privacy: v0.1.0
+    finops: v0.1.0
+  # Add more teams here. Example with a privacy canary:
+  # team-cardiology:
+  #   architect: v0.1.0
+  #   security: v0.1.0
+  #   privacy: v0.2.0-canary
+  #   finops: v0.1.0

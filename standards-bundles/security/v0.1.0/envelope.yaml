@@ -1,0 +1,15 @@
+# Security envelope — intentionally empty.
+#
+# No security rule may be auto-fixed by Pipeline Doctor. Every change goes
+# through committee review. PHI rules are additionally hard-coded as
+# forbidden in the envelope_validator (defense in depth).
+
+allowed_auto_fixes: []
+
+forbidden:
+  - phi: true
+  - rule_pattern: "deny/*"
+
+rate_limits:
+  max_per_dept_per_window: 0   # zero auto-fixes ever
+  window_days: 7

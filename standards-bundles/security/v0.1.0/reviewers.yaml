@@ -1,0 +1,26 @@
+blast_classes:
+  HIGH:
+    required_approvers: 3
+    must_include_roles: [security_lead, privacy_dpo]
+    can_include_roles: [architect_lead, legal]
+  MED:
+    required_approvers: 2
+    must_include_roles: [security_lead]
+    can_include_roles: [architect_lead, finops_lead]
+  LOW:
+    required_approvers: 1
+    must_include_roles: [security_lead]
+  AUTO:
+    required_approvers: 0  # never reached for security bundle (envelope is empty)
+
+people:
+  security_lead:
+    - "security-lead@example.com"
+  privacy_dpo:
+    - "privacy-dpo@example.com"
+  architect_lead:
+    - "architect-lead@example.com"
+  legal:
+    - "legal@example.com"
+  finops_lead:
+    - "finops-lead@example.com"

@@ -1,0 +1,14 @@
+# Privacy envelope — intentionally empty.
+# Privacy rules govern legally-binding obligations (HIPAA, state law, breach
+# notification). They cannot be auto-tuned. Every change goes through
+# committee review with the privacy DPO required.
+
+allowed_auto_fixes: []
+
+forbidden:
+  - phi: true
+  - rule_pattern: "deny/*"
+
+rate_limits:
+  max_per_dept_per_window: 0
+  window_days: 7
