@@ -1,0 +1,9 @@
+{
+  "name": "ledger-user-prompt-submit",
+  "description": "Log the user's prompt (truncated) to ledger as an intent capture.",
+  "events": ["UserPromptSubmit"],
+  "timeout_seconds": 3,
+  "fail_open": true,
+  "bash": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/user-prompt-submit.sh",
+  "powershell": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/user-prompt-submit.ps1"
+}

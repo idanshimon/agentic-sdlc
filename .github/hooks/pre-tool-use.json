@@ -1,0 +1,9 @@
+{
+  "name": "ledger-pre-tool-use-phi-guard",
+  "description": "Run PHI classifier before any tool call. BLOCK on raw MRN/SSN/DOB. Pass on redacted.",
+  "events": ["PreToolUse"],
+  "timeout_seconds": 5,
+  "fail_open": true,
+  "bash": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/pre-tool-use.sh",
+  "powershell": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/pre-tool-use.ps1"
+}

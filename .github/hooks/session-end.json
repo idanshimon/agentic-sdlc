@@ -1,0 +1,9 @@
+{
+  "name": "ledger-session-end",
+  "description": "On session end, write a summary ledger entry with aggregated stats.",
+  "events": ["SessionEnd"],
+  "timeout_seconds": 4,
+  "fail_open": true,
+  "bash": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/session-end.sh",
+  "powershell": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/session-end.ps1"
+}

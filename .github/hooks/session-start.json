@@ -1,0 +1,9 @@
+{
+  "name": "ledger-session-start",
+  "description": "On Copilot session start, inject AGENTS.md guardrails + recent ledger entries on touched files.",
+  "events": ["SessionStart"],
+  "timeout_seconds": 5,
+  "fail_open": true,
+  "bash": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/session-start.sh",
+  "powershell": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/session-start.ps1"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "ledger-post-tool-use",
+  "description": "After every tool call, write a runtime ledger entry summarizing what the agent did.",
+  "events": ["PostToolUse"],
+  "timeout_seconds": 4,
+  "fail_open": true,
+  "bash": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/post-tool-use.sh",
+  "powershell": "${GITHUB_REPOSITORY_DIR:-.}/.github/hooks/scripts/post-tool-use.ps1"
+}
