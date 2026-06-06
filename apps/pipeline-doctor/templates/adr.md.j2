@@ -1,0 +1,79 @@
+# ADR-{{ id }}: {{ summary }}
+
+**Status:** Proposed (Pipeline Doctor authored)
+**Bundle:** `{{ dept }}/{{ rule_id }}`
+**Blast class:** **{{ blast_class }}**
+**Detected at:** {{ drift.detected_at }}
+
+## Context
+
+Pipeline Doctor surfaced a drift signal of kind `{{ drift.kind.value if drift.kind.value is defined else drift.kind }}`
+that does not map to a bounded auto-fix in this bundle's `envelope.yaml`.
+Per Doctor's hard rules, any out-of-envelope change requires a committee
+review.
+
+### Drift evidence
+
+| Field | Value |
+|---|---|
+| Signal kind | `{{ drift.kind.value if drift.kind.value is defined else drift.kind }}` |
+| Bundle ref | `{{ drift.bundle_ref or "(none)" }}` |
+| Stage | `{{ drift.stage or "(any)" }}` |
+| Ambiguity class | `{{ drift.ambiguity_class or "(any)" }}` |
+| Metric value | `{{ drift.metric_value }}` |
+| Baseline | `{{ drift.metric_baseline }}` |
+| Sample size | `{{ drift.sample_size }}` |
+| Evidence entry IDs | `{{ drift.evidence_entry_ids | join(', ') if drift.evidence_entry_ids else '(none)' }}` |
+
+### Description
+
+{{ drift.description }}
+
+## Decision
+
+{{ rationale }}
+
+### Proposed diff
+
+```diff
+{{ proposed_diff }}
+```
+
+## Consequences
+
+After this change merges:
+
+- Future ledger entries citing `{{ rule_id }}` will reflect the new rule semantics.
+- Existing entries are NOT retroactively updated (audit history preserved).
+- A canary rollout is automatic: 5% of teams pinned for 7 days; auto-promote
+  or auto-revert based on Pipeline Doctor's metrics.
+
+## Alternatives considered
+
+- **Status quo (decline this change):** the drift signal continues; expect
+  rejection rate to remain high or cost-per-decision to keep climbing.
+- **Auto-fix within tighter bounds:** rejected — current envelope does not
+  permit this change. A separate proposal could relax the envelope, but
+  that is also a committee decision.
+
+## Bundle ref impact
+
+Existing ledger entries that cite this rule will need re-evaluation under
+the new semantics. Run after merge:
+
+```sql
+SELECT COUNT(1) FROM c
+WHERE ARRAY_CONTAINS(c.bundle_refs, "{{ dept }}/v0.1.0/{{ rule_id }}")
+```
+
+## Suggested reviewers
+
+{% for r in suggested_reviewers %}
+- @{{ r }}
+{% endfor %}
+
+---
+
+*This ADR was machine-authored by Pipeline Doctor. Reviewers: please
+verify the proposed diff and metric interpretation. Doctor cannot
+unilaterally apply this change.*
