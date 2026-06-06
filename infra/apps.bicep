@@ -33,6 +33,15 @@ param orchestratorImageTag string = '0.7.0-rc1'
 param ledgerMcpImageTag string = '0.7.0-rc1'
 param pipelineDoctorImageTag string = '0.7.0-rc1'
 
+@description('Bearer token for the demo team. Mapped to team-demo in LEDGER_MCP_TOKENS. Generated at deploy time.')
+@secure()
+param ledgerMcpDemoToken string
+
+// JSON map consumed by apps/decision-ledger-mcp/src/auth.ts at startup.
+// Maps bearer tokens → team_id. v0.7-rc1 ships with one demo team; production
+// adds per-team tokens or replaces with Entra App auth (see auth.ts header).
+var ledgerMcpTokensJson = '{"${ledgerMcpDemoToken}":"team-demo"}'
+
 // ---------- Container App: orchestrator ----------
 resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-orchestrator'
@@ -45,6 +54,9 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: caeId
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: [
+        { name: 'ledger-mcp-token', value: ledgerMcpDemoToken }
+      ]
       ingress: {
         external: true
         targetPort: 8000
@@ -70,6 +82,8 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_CLIENT_ID',          value: workloadMiClientId }
             { name: 'APPINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'DELIVER_PROVIDER',         value: 'github' }
+            { name: 'LEDGER_MCP_URL',           value: 'http://ca-ledger-mcp/' }
+            { name: 'LEDGER_MCP_TOKEN',         secretRef: 'ledger-mcp-token' }
           ]
         }
       ]
@@ -90,6 +104,9 @@ resource caLedgerMcp 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: caeId
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: [
+        { name: 'ledger-mcp-tokens', value: ledgerMcpTokensJson }
+      ]
       ingress: {
         external: true
         targetPort: 3001
@@ -114,6 +131,7 @@ resource caLedgerMcp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MCP_TRANSPORT',            value: 'http' }
             { name: 'MCP_PORT',                 value: '3001' }
             { name: 'STANDARDS_BUNDLES_ROOT',   value: '/app/standards-bundles' }
+            { name: 'LEDGER_MCP_TOKENS',        secretRef: 'ledger-mcp-tokens' }
           ]
         }
       ]
@@ -136,6 +154,9 @@ resource cjDoctor 'Microsoft.App/jobs@2024-03-01' = {
       triggerType: 'Schedule'
       replicaTimeout: 600
       replicaRetryLimit: 1
+      secrets: [
+        { name: 'ledger-mcp-token', value: ledgerMcpDemoToken }
+      ]
       scheduleTriggerConfig: {
         cronExpression: '0 * * * *'
         parallelism: 1
@@ -158,6 +179,8 @@ resource cjDoctor 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'STANDARDS_BUNDLES_ROOT',   value: '/app/standards-bundles' }
             { name: 'DOCTOR_MODE',              value: 'dry-run' }
             { name: 'LEDGER_TEAM_ID',           value: 'team-demo' }
+            { name: 'LEDGER_MCP_URL',           value: 'http://ca-ledger-mcp/' }
+            { name: 'LEDGER_MCP_TOKEN',         secretRef: 'ledger-mcp-token' }
           ]
           args: [
             '--mode', 'dry-run', '--team-id', 'team-demo'

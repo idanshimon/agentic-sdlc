@@ -37,6 +37,18 @@ done
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 INFRA_DIR="$( cd "$SCRIPT_DIR/../../infra" &> /dev/null && pwd )"
 
+# Generate (or reuse) demo bearer token. Stored mode-600 at /tmp/agentic-v07-token
+# so smoke-test + e2e can read it without re-deploying.
+TOKEN_FILE="/tmp/agentic-v07-token"
+if [[ -s "$TOKEN_FILE" ]]; then
+  echo "Reusing demo token from $TOKEN_FILE"
+  DEMO_TOKEN=$(cat "$TOKEN_FILE")
+else
+  DEMO_TOKEN=$(openssl rand -hex 32)
+  umask 077; printf '%s' "$DEMO_TOKEN" > "$TOKEN_FILE"; chmod 600 "$TOKEN_FILE"
+  echo "Generated new demo token at $TOKEN_FILE (mode 600)"
+fi
+
 echo
 echo "Phase 3: deploying $INFRA_DIR/apps.bicep ..."
 DEPLOY_NAME="agentic-v07-apps-$(date +%Y%m%d-%H%M%S)"
@@ -52,6 +64,7 @@ az deployment group create \
     workloadMiClientId="$MI_CLIENT" \
     caeId="$CAE_ID" \
     appInsightsConnectionString="$APPI_CONN" \
+    ledgerMcpDemoToken="$DEMO_TOKEN" \
   --output json > /tmp/agentic-v07-apps.json
 
 echo

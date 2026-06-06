@@ -1,0 +1,35 @@
+# Dockerfile.repo-root — build orchestrator with repo root as context
+# Required so the build can copy packages/ledger-core/ alongside apps/orchestrator/.
+# v0.7 extracted the Ledger class to a shared package; the orchestrator now
+# imports `ledger_core` (via the apps/orchestrator/ledger.py shim).
+#
+# Usage:
+#   az acr build --file apps/orchestrator/Dockerfile.repo-root \
+#     --image orchestrator:0.7.0-rc1 .
+#
+# syntax=docker/dockerfile:1.7
+FROM python:3.11-slim AS builder
+WORKDIR /build
+
+# Install the shared ledger-core package first
+COPY packages/ledger-core /build/ledger-core
+RUN pip install --no-cache-dir /build/ledger-core
+
+# Then the orchestrator's own deps
+COPY apps/orchestrator/requirements.txt /build/requirements.txt
+RUN pip install --no-cache-dir -r /build/requirements.txt
+
+FROM python:3.11-slim AS runtime
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app
+
+# Bring in installed Python deps from builder (includes ledger_core)
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy orchestrator source as a Python package at /app/orchestrator
+COPY apps/orchestrator /app/orchestrator
+
+EXPOSE 8000
+# Run as a package so the dotted imports (.config, .stages …) resolve.
+CMD ["uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]

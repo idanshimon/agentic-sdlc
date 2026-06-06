@@ -18,6 +18,8 @@ capabilities:
     description: Drift detection, bounded auto-fix, change-proposal authoring
   - name: agent-hq-integration
     description: Hooks, custom agents, IDE/CLI/coding-agent ledger coverage
+  - name: agent-instructions
+    description: AGENTS.md precedence chain, Custom Agent frontmatter schema, path-scoped instructions, SessionStart bundle injection
   - name: telemetry
     description: /telemetry UI, ledger insights, cost-per-decision, class drift
   - name: deployment

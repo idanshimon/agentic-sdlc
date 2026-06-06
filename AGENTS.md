@@ -1,18 +1,42 @@
 # AGENTS.md — repository-wide agent guardrails
 
 This file is read by every Copilot agent (cloud agent, CLI, VS Code) and every
-custom agent invoked from `.github/agents/`. It is the top of the standards
-hierarchy for THIS repository.
+custom agent invoked from `.github/agents/`. It is the entrypoint to the
+standards hierarchy for THIS repository — not the law. Bundles are the law.
 
-The standards hierarchy:
+## Standards hierarchy (precedence)
 
-1. `AGENTS.md` (this file) — repo-wide, always loaded
-2. `.github/copilot-instructions.md` — Copilot-specific, always loaded
-3. `.github/instructions/*.instructions.md` — path-scoped via `applyTo`
-4. `standards-bundles/<dept>/v<n.n.n>/` — versioned per-department policies (the canonical source)
+Earlier layers establish defaults; later layers refine. On direct conflict
+the **lower-numbered** layer wins **except where a bundle is pinned** —
+bundles always win.
 
-Bundle pins are stored in `standards-bundles/PINS.yaml`. When this file conflicts
-with a pinned bundle rule, the bundle wins. This file is the entrypoint, not the law.
+| # | File / Glob | Always loaded? | Loaded by |
+|---|---|---|---|
+| 1 | `AGENTS.md` (this file) | yes | every Copilot runtime; Custom Agents |
+| 2 | `.github/copilot-instructions.md` | yes for Copilot runtimes | VS Code Copilot, Copilot CLI, cloud agent |
+| 3 | `.github/instructions/*.instructions.md` | only when `applyTo:` glob matches the touched file | VS Code Copilot Chat, cloud agent |
+| 4 | `.github/agents/<name>.agent.md` | only when that custom agent is invoked | Custom Agents (VS Code, CLI, cloud) |
+| 5 | `standards-bundles/<dept>/v<n.n.n>/rules.yaml` | injected by SessionStart hook based on the agent's `bundle_subscriptions:` | hook script via `ledger.get_bundle` MCP tool |
+
+Bundle pins live at `standards-bundles/PINS.yaml`. The normative spec for this
+hierarchy is `openspec/changes/add-agent-instructions-hierarchy/`.
+
+### Worked example — Architect agent editing `apps/orchestrator/main.py`
+
+When a contributor opens `apps/orchestrator/main.py` in VS Code and invokes
+the `architect` custom agent, the session loads, in order:
+
+1. `AGENTS.md` (this file) — repo-wide hard rules
+2. `.github/copilot-instructions.md` — commit-message format, Plan Mode trigger
+3. `.github/instructions/python.instructions.md` — Python conventions (matches `**/*.py`)
+4. `.github/agents/architect.agent.md` — persona, allowed tools, declared ledger writes
+5. `standards-bundles/architect/v0.1.0/rules.yaml` + `standards-bundles/security/v0.1.0/rules.yaml` — injected by SessionStart hook from `architect.agent.md`'s `bundle_subscriptions:`
+
+If a bundle rule (layer 5) and a `copilot-instructions` rule (layer 2)
+contradict, the bundle wins. If the architect agent file (layer 4) and
+the python instructions (layer 3) contradict, the python instructions win
+(per precedence) — but if you find yourself fighting the precedence, that
+is a signal to open a standards-change PR rather than work around it.
 
 ## Repository purpose (one sentence)
 
@@ -54,7 +78,10 @@ decision is auditable and every standards change is committee-approved.
 | `pipeline-doctor.agent.md` | Drift detection + bounded auto-fix + change-proposal author | finops, all (read-only) |
 | `standards-change.agent.md` | Triage standards-change PRs, draft ADRs, route reviewers | (all, meta) |
 
-Each agent file declares the bundles it reads and the ledger entry types it can write.
+Each agent file declares the bundles it reads and the ledger entry types it
+can write. Frontmatter MUST validate against
+`.github/agents/agent-frontmatter.schema.json`; CI rejects PRs that introduce
+malformed agent files.
 
 ## Plan Mode by default for non-trivial changes
 

@@ -47,8 +47,9 @@ build() {
   fi
 }
 
-# 1. orchestrator (Python 3.11 FastAPI). Build context: apps/orchestrator/.
-build orchestrator "$REPO_ROOT/apps/orchestrator" "$REPO_ROOT/apps/orchestrator/Dockerfile"
+# 1. orchestrator (Python 3.11 FastAPI). Needs packages/ledger-core, so build
+# from repo root context using Dockerfile.repo-root (parallels pipeline-doctor).
+build orchestrator "$REPO_ROOT" "$REPO_ROOT/apps/orchestrator/Dockerfile.repo-root"
 
 # 2. decision-ledger-mcp (Node TS). Build context: apps/decision-ledger-mcp/.
 # The Dockerfile expects standards-bundles to be copied in at /app/standards-bundles
