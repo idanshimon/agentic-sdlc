@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ledger-core"
+version = "0.7.0"
+description = "Decision Ledger shared library for the agentic-sdlc reference design"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Idan Shimon" }]
+
+dependencies = [
+    "pydantic>=2.5,<3.0",
+    "azure-cosmos>=4.5,<5.0",
+    "azure-identity>=1.15,<2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.1",
+    "freezegun>=1.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["ledger_core*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

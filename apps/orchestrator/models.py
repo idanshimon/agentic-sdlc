@@ -1,0 +1,164 @@
+"""Pydantic models — run state, ambiguity cards, ledger entries, stage events.
+See design.md §2 (pipeline graph), §3 (ambiguity card shape), §4 (ledger schema)."""
+from __future__ import annotations
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Literal, Optional
+from uuid import uuid4
+
+from pydantic import BaseModel, Field
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _uuid() -> str:
+    return str(uuid4())
+
+
+# --- pipeline graph (design.md §2) --------------------------------------------
+class Stage(str, Enum):
+    INGEST = "ingest"
+    ASSESSOR = "assessor"
+    RESOLVER = "resolver"  # Gate 1 — HITL
+    ARCHITECT = "architect"
+    DESIGN_REVIEW = "design_review"  # Gate 2 — auto+escalate (human in v1)
+    TEST_PLAN = "test_plan"
+    CODEGEN = "codegen"
+    REVIEW_SCAN = "review_scan"  # Gate 3 — policy, fail-hard
+    DELIVER = "deliver"
+
+
+class RunStatus(str, Enum):
+    RUNNING = "running"
+    AWAITING_GATE = "awaiting_gate"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class RunMode(str, Enum):
+    """Per-run autopilot opt-in. See design.md §3 (Resolver gate)."""
+    MANUAL = "manual"
+    AUTOPILOT = "autopilot"
+    HYBRID = "hybrid"
+
+
+# --- ambiguity / ledger (design.md §3, §4) ------------------------------------
+# Closed vocabulary lives in the Assessor; here we capture the shape only.
+AmbiguityClass = Literal[
+    "phi-classification", "scope-resolution", "sla-binding", "identifier-format",
+    "auth-policy", "data-retention", "naming-convention", "other",
+]
+DecisionKind = Literal["accept", "swap", "reject", "auto-deferred"]
+LedgerStatus = Literal["suggest", "shadow", "silent_apply", "demoted"]
+# design.md §4: invariant-class entries are non-overridable (write-block).
+INVARIANT_CLASSES: set[str] = {
+    "phi-classification", "auth-policy",  # PHI + auth treated as invariant in v1
+}
+
+
+class ResolutionOption(BaseModel):
+    """One concrete way to resolve an ambiguity. Cards carry 2 — recommended + 1 alternative.
+
+    The Resolver UI surfaces these so Accept actually means "use this specific resolution"
+    rather than "I accept that an ambiguity exists." See design.md §3.
+    """
+    label: str                # short headline, e.g. "HIPAA 7-year retention with audit"
+    resolution: str           # 1-2 sentence concrete resolution text
+    rationale: str            # one sentence — cites regulation/policy/precedent
+    downstream_impact: str    # what Architect/CodeGen will change if this option wins
+    recommended: bool = False # exactly one option per card carries this flag
+
+
+class AmbiguityCard(BaseModel):
+    """One Assessor finding. See design.md §3 (Resolver gate)."""
+    card_id: str = Field(default_factory=_uuid)
+    ambiguity_class: AmbiguityClass = "other"
+    slot_value_hash: str = ""
+    title: str
+    detail: str
+    prd_quote: str = ""           # verbatim text from the PRD (≤200 chars)
+    prd_section: str = ""         # section heading the quote came from
+    gap_description: str = ""     # one-sentence "what is missing"
+    options: list[ResolutionOption] = Field(default_factory=list)
+    team_occurrence_count: int = 0  # ledger lookups: how many times this team has seen this class
+    blast_radius_cost_usd: float = 0.0
+    re_run_cost_usd: float = 0.0
+    is_gating: bool = True  # False = Bootstrap-Mode auto-deferred (design.md §3)
+    is_eligible_for_promotion: bool = False  # True = anti-nudge UX: hide per-card cost
+
+
+class LedgerEntry(BaseModel):
+    """Decision Ledger row. See design.md §4 typed schema."""
+    id: str = Field(default_factory=_uuid)
+    team_id: str  # partition key
+    run_id: str
+    card_id: str
+    ambiguity_class: AmbiguityClass
+    slot_value_hash: str = ""
+    resolution_text: str = ""
+    decision_kind: DecisionKind
+    status: LedgerStatus = "suggest"  # v1: writes only ever land as `suggest` (no promotion)
+    sample_count: int = 1
+    accuracy_score: float = 0.0
+    created_at: str = Field(default_factory=_now)
+    created_by: str = "unknown"
+    precedent_id: Optional[str] = None  # for back-trace index (design.md §4 demote)
+    confidence_source: Literal["human", "autopilot"] = "human"
+
+
+# --- stage events / run state -------------------------------------------------
+class StageEvent(BaseModel):
+    """SSE payload — one event per stage transition or progress tick."""
+    run_id: str
+    stage: Stage
+    status: Literal["started", "progress", "completed", "gate_open", "failed"]
+    message: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+    ts: str = Field(default_factory=_now)
+
+
+class GateDecision(BaseModel):
+    """Approve / reject / demote action on an open gate.
+
+    For card approvals, the client may either:
+    - pass `option_index` (0-based into card.options) to accept that specific option
+      verbatim — server fills resolution_text from card.options[option_index].resolution
+    - pass `resolution_text` directly (for swap with user-authored text)
+    - pass neither (server defaults to the recommended option)
+    """
+    card_id: Optional[str] = None  # None = whole-stage approve
+    decision_kind: DecisionKind
+    resolution_text: str = ""
+    option_index: Optional[int] = None
+    gate: Optional[str] = None
+    actor: str = "demo-user@hca"
+    confidence_source: Literal["human", "autopilot"] = "human"
+
+
+class RunState(BaseModel):
+    """Persisted to Cosmos pipeline-runs container, partitioned by run_id."""
+    run_id: str = Field(default_factory=_uuid)
+    team_id: str = "team-demo"
+    prd_blob_url: str = ""
+    status: RunStatus = RunStatus.RUNNING
+    current_stage: Stage = Stage.INGEST
+    cards: list[AmbiguityCard] = Field(default_factory=list)
+    decisions: list[GateDecision] = Field(default_factory=list)
+    events: list[StageEvent] = Field(default_factory=list)
+    created_at: str = Field(default_factory=_now)
+    updated_at: str = Field(default_factory=_now)
+    # cost telemetry rollups (design.md §7)
+    total_tokens: int = 0
+    total_cost_usd: float = 0.0
+    gate_wall_clock_seconds: float = 0.0
+    # autopilot (design.md §3)
+    mode: RunMode = RunMode.MANUAL
+    previous_mode: Optional[RunMode] = None  # set on /pause, consumed by /resume
+    autopilot_overrides: list[str] = Field(default_factory=list)  # card_ids forced to human review
+    autopilot_decisions: list[str] = Field(default_factory=list)  # card_ids auto-resolved
+    # Per-run stage→provider override. Beats config. Shape:
+    #   {"architect": {"provider": "foundry-anthropic", "model": "claude-sonnet-4-6", "via_apim": false}}
+    stage_provider_overrides: dict[str, dict] = Field(default_factory=dict)
