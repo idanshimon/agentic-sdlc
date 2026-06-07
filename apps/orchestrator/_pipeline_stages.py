@@ -332,17 +332,87 @@ async def stage_architect(run: RunState) -> AsyncIterator[StageEvent]:
 
 
 # --- 4. TEST PLAN -------------------------------------------------------------
-async def stage_test_plan(run: RunState) -> AsyncIterator[StageEvent]:
-    """Tests-as-contracts, written against the resolved spec before CodeGen (§2)."""
+async def stage_test_plan(
+    run: RunState,
+    prd_text: str | None = None,
+) -> AsyncIterator[StageEvent]:
+    """Tests-as-contracts, written against the resolved spec before CodeGen (§2).
+
+    Consumes three context sources to keep tests grounded in real
+    architectural assertions rather than pattern-matching to generic
+    REST-CRUD scaffolding:
+
+      1. The most recent ``architecture`` payload from prior stage events.
+      2. The Resolver-resolved decisions (each one is a contract the tests
+         MUST verify).
+      3. The PRD text (transport, scope, SLA, compliance language).
+
+    Without any of these the stage previously emitted generics — see
+    `experiments/COMPARISON.md` for the empirical write-up.
+    """
     yield _ev(run, Stage.TEST_PLAN, "started", "Writing test plan")
+
+    arch_text = ""
+    for ev in run.events:
+        p = ev.payload or {}
+        if "architecture" in p:
+            arch_text = str(p["architecture"])
+
+    decisions_block = "\n".join(
+        f"- [{d.decision_kind}] {d.resolution_text}" for d in run.decisions
+    ) or "(no decisions resolved — Resolver gate skipped)"
+
+    prd_excerpt = (prd_text or "")[:3000]
+
+    sys_prompt = (
+        "You are the Test Planner. Your tests MUST verify the SPECIFIC "
+        "architectural assertions in the input — not generic REST/CRUD "
+        "behaviour. The pipeline already had a failure mode where you "
+        "produced 'POST returns 201, GET returns 200, DELETE returns 204' "
+        "for a streaming WebSocket API. Don't do that.\n\n"
+        "OUTPUT FORMAT — markdown only, no code fences. For each test:\n\n"
+        "## Test N: <Title naming the assertion under test>\n\n"
+        "**Verifies decision:** <quote the resolved decision OR the "
+        "architectural component / invariant being tested — verbatim if "
+        "you can>\n\n"
+        "**Given** <preconditions referencing real architectural elements "
+        "from the input>\n"
+        "**When** <a concrete action involving the named transport, auth, "
+        "or data shape>\n"
+        "**Then** <an observable outcome that would be falsifiable in a "
+        "real test, citing specific status codes / metrics / log entries "
+        "/ data shapes>\n\n"
+        "RULES:\n"
+        "1. Produce 5-8 tests, one per resolved decision plus 1-2 "
+        "cross-cutting tests (e.g. observability, failure-mode).\n"
+        "2. EVERY test MUST cite at least one named element from the "
+        "decisions or architecture (component name, protocol, claim, "
+        "metric, decision keyword). Generic 'the API' references are "
+        "REJECTED.\n"
+        "3. If the architecture mentions WebSocket, mTLS, JWT, FHIR, "
+        "PHI redaction, OAuth, latency SLO, or vendor connectors, AT "
+        "LEAST one test MUST exercise each named primitive that has a "
+        "matching decision.\n"
+        "4. Do not ship plain HTTP-status contract tests (POST 201, "
+        "DELETE 204, GET 404) UNLESS the decisions or PRD explicitly "
+        "specify those status codes."
+    )
+
+    user_prompt = (
+        f"PRD excerpt:\n{prd_excerpt}\n\n"
+        f"Resolved decisions:\n{decisions_block}\n\n"
+        f"Architecture:\n{arch_text[:3000]}\n\n"
+        "Produce the test plan now. Markdown only."
+    )
+
     res = await _call(
         run=run, stage_key="test_plan", agent_name="test-planner",
-        system_prompt="You are the Test Planner. Produce 5 contract tests (Given/When/Then).",
-        user_prompt="Architecture:\n" + str(run.events[-2].payload.get("architecture", ""))[:2000],
+        system_prompt=sys_prompt, user_prompt=user_prompt,
     )
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
-    yield _ev(run, Stage.TEST_PLAN, "completed", "Test plan ready", test_plan=res.text[:1500])
+    yield _ev(run, Stage.TEST_PLAN, "completed", "Test plan ready",
+              test_plan=res.text[:6000])
 
 
 # --- 5. CODEGEN ---------------------------------------------------------------

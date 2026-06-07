@@ -199,7 +199,7 @@ async def _drive(run_id: str, prd_text: str) -> None:
                 await _open_gate(run, ev.stage)
 
         for gen in (
-            stage_test_plan(run), stage_codegen(run),
+            stage_test_plan(run, prd_text=prd_text), stage_codegen(run),
             stage_review_scan(run), stage_deliver(run),
         ):
             async for ev in gen:

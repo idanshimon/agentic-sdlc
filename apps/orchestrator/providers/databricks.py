@@ -44,7 +44,7 @@ class DatabricksAnthropicProvider(Provider):
         self,
         messages: list[dict[str, str]],
         model: str,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
         temperature: float = 0.2,
         headers: Optional[dict[str, str]] = None,
     ) -> ChatResponse:
