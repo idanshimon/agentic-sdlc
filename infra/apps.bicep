@@ -190,11 +190,19 @@ resource caLedgerUi 'Microsoft.App/containerApps@2024-03-01' = {
             // Browser uses the NEXT_PUBLIC_* for /healthz + /tools (CORS-allowed,
             // unauthenticated). All authenticated MCP calls go through same-origin
             // Next.js API routes; those read LEDGER_MCP_TOKEN server-side only.
+            //
+            // NOTE: NEXT_PUBLIC_* are inlined into the JS bundle at `next build`
+            // time. The values below ONLY help server-side code; the browser
+            // bundle uses the values passed as --build-arg to az acr build.
+            // See scripts/build-ledger-insights-ui.sh + Dockerfile.
+            // Spec: openspec/changes/add-ledger-insights-ui-deploy/specs/ledger-insights-ui-deploy/spec.md REQ-1
+            { name: 'NEXT_PUBLIC_DEMO_MODE',        value: '1' }
             { name: 'NEXT_PUBLIC_ORCHESTRATOR_URL', value: 'https://${caOrchestrator.properties.configuration.ingress.fqdn}' }
             { name: 'NEXT_PUBLIC_LEDGER_MCP_URL',   value: 'https://${caLedgerMcp.properties.configuration.ingress.fqdn}' }
             { name: 'ORCHESTRATOR_URL',             value: 'https://${caOrchestrator.properties.configuration.ingress.fqdn}' }
             { name: 'LEDGER_MCP_URL',               value: 'https://${caLedgerMcp.properties.configuration.ingress.fqdn}' }
             { name: 'LEDGER_MCP_TOKEN',             secretRef: 'ledger-mcp-token' }
+            { name: 'APPINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
           ]
         }
       ]

@@ -1,0 +1,34 @@
+# Root .dockerignore — minimizes ACR build context for the
+# apps/ledger-insights-ui Dockerfile (build context = monorepo root so
+# `COPY openspec/` works for the /changes route).
+#
+# Keep tiny: anything not whitelisted here ends up in the build context
+# tarball. Goal: < 50 MB context, vs ~700 MB for an unfiltered repo.
+
+# Ignore everything by default
+*
+
+# Whitelist what the Dockerfile actually needs.
+!apps/ledger-insights-ui
+!openspec
+
+# Re-ignore noise inside the whitelisted paths.
+apps/ledger-insights-ui/node_modules
+apps/ledger-insights-ui/.next
+apps/ledger-insights-ui/.turbo
+apps/ledger-insights-ui/.cache
+apps/ledger-insights-ui/coverage
+apps/ledger-insights-ui/dist
+apps/ledger-insights-ui/out
+apps/ledger-insights-ui/.env*.local
+apps/ledger-insights-ui/.DS_Store
+apps/ledger-insights-ui/tsconfig.tsbuildinfo
+
+# openspec is small (~1 MB); no further filters needed beyond the
+# top-level ignore-everything default that already excludes archive/.
+# Re-ignore anything that crept in via misconfig:
+openspec/changes/archive/.DS_Store
+
+# Git metadata (we explicitly do not want this in the image).
+.git
+.github
