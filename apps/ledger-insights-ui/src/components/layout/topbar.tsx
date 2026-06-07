@@ -35,7 +35,7 @@ export function TopBar() {
           <Search className="h-3.5 w-3.5" />
           <span className="flex-1 text-left">Search runs, decisions, bundles…</span>
           <span className="flex items-center gap-0.5 rounded border border-[var(--border-default)] px-1.5 py-0.5 text-[10px] font-mono">
-            <CommandIcon className="h-2.5 w-2.5" />K
+            <CommandIcon className="h-2.5 w-2.5" />/
           </span>
         </button>
         <div className="flex items-center gap-2">

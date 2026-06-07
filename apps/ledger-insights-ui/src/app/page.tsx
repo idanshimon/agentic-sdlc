@@ -12,12 +12,14 @@ import { RunCard } from "@/components/domain/run-card";
 import { ArchitectureMini } from "@/components/domain/architecture-mini";
 import { EmptyState } from "@/components/domain/empty-state";
 import { useRuns, useTelemetryCost, useHealth } from "@/lib/hooks/use-runs";
+import { useAssistantContext } from "@/lib/assist/context";
 import { fmtUsd } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { data: runs, isLoading: runsLoading } = useRuns();
   const { data: cost } = useTelemetryCost();
   const { data: health } = useHealth();
+  useAssistantContext({ kind: "dashboard", label: "Dashboard" });
 
   const runsList = runs?.items ?? [];
   const activeRuns = runsList.filter((r) =>
@@ -144,7 +146,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-base font-semibold">Architecture</h2>
             <p className="text-xs text-[var(--text-tertiary)]">
-              The four planes you're operating against.
+              The four planes you&apos;re operating against.
             </p>
           </div>
           <Button variant="ghost" size="sm" asChild>
@@ -204,13 +206,13 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Plane shortcuts */}
+      {/* Plane shortcuts — Reports is the management surface */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
+          { href: "/reports", title: "Reports", desc: "Exec-readable governance posture, cost, drift.", icon: Sparkles, plane: "ledger" },
           { href: "/decisions", title: "Decisions", desc: "Read the audit trail of every agent decision.", icon: Scale, plane: "ledger" },
           { href: "/bundles", title: "Bundles", desc: "Inspect the rules and pinned versions.", icon: Library, plane: "standards" },
           { href: "/agents", title: "Custom agents", desc: "Personas, bundle subscriptions, ledger writes.", icon: Bot, plane: "agenthq" },
-          { href: "/phi", title: "PHI Classifier", desc: "Try the local PHI guard against your own text.", icon: ShieldCheck, plane: "agenthq" },
         ].map((t) => {
           const Icon = t.icon;
           return (

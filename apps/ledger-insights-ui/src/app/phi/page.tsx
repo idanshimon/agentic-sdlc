@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ShieldCheck, ShieldAlert, Loader2, Play } from "lucide-react";
 import { ledgerMcp } from "@/lib/api/ledger-mcp";
+import { useAssistantContext } from "@/lib/assist/context";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -29,6 +30,7 @@ const examples = [
 
 export default function PhiPage() {
   const [text, setText] = useState(examples[0].text);
+  useAssistantContext({ kind: "phi-classifier", label: "PHI classifier" });
 
   const m = useMutation({
     mutationFn: (t: string) => ledgerMcp.classifyPhi(t),

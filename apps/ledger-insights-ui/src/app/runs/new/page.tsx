@@ -61,7 +61,7 @@ const SAMPLES: Sample[] = [
   {
     id: "pci-clean",
     title: "PCI Clean — Real PRD",
-    subtitle: "63KB Manthan-authored PRD from HCA. Realistic enterprise workload.",
+    subtitle: "63KB enterprise-scale PRD with deep compliance surface. Realistic enterprise workload.",
     url: "/samples/pci-clean.md",
     filename: "pci-clean.md",
     size_kb: 63,

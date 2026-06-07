@@ -1,6 +1,7 @@
 "use client";
 import { GitBranch, ExternalLink } from "lucide-react";
 import { useRuns } from "@/lib/hooks/use-runs";
+import { useAssistantContext } from "@/lib/assist/context";
 import { RunCard } from "@/components/domain/run-card";
 import { EmptyState } from "@/components/domain/empty-state";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,11 @@ import { PageHeader } from "@/components/layout/page-header";
 export default function RunsPage() {
   const { data, isLoading } = useRuns();
   const runs = data?.items ?? [];
+  useAssistantContext({
+    kind: "runs-list",
+    label: "Runs",
+    payload: { count: runs.length },
+  });
 
   return (
     <div className="space-y-6">

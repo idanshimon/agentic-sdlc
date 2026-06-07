@@ -47,7 +47,7 @@ Optional Tab D for Q&A: standards-bundles directory in GitHub (`https://github.c
 
 **Verbal:**
 
-> This is a Manthan-style PRD asking for a Patient Vitals Streaming API.
+> This is a vitals-streaming PRD asking for a Patient Vitals Streaming API.
 > It mentions PHI without classification, and mentions third-party SaaS
 > bedside-monitoring vendors with TBD egress policy. Two specific traps.
 

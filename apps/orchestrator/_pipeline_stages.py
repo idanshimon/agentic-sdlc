@@ -162,7 +162,7 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
         "naming/scope, propose a single normative convention. Blast cost: 50-150 for naming/scope, "
         "200-500 for PHI/auth/retention, 100-300 for SLA. Be concrete and PRD-grounded."
     )
-    # Manthan's PCI PRD is ~250KB / 5,924 lines; gpt-4.1 has 128K-token context via APIM.
+    # The largest sample PRD shipped (~250KB / 5,924 lines) needs the 128K-token APIM context window via gpt-4.1.
     # 60k chars ≈ 15k tokens — comfortably fits + leaves room for ~4k tokens of structured output.
     res = await _call(
         run=run, stage_key="assessor", agent_name="assessor",

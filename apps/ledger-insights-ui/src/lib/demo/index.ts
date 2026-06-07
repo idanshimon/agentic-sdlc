@@ -123,6 +123,8 @@ interface StoredDemoRun {
   updated_at: string;
   cost_usd: number;
   decisions_count: number;
+  /** Ledger entries written for this run (post-resolver-gate). */
+  ledger_entries: Record<string, unknown>[];
 }
 
 function loadStore(): Record<string, StoredDemoRun> {
@@ -155,6 +157,85 @@ export function listDemoRuns(): RunState[] {
 export function getDemoRun(runId: string): RunState | undefined {
   const stored = loadStore()[runId];
   return stored ? toRunState(stored) : undefined;
+}
+
+/**
+ * Return all ledger entries across all demo runs, optionally filtered.
+ * Mirrors the shape of the live `ledgerMcp.query()` response.
+ */
+export function listDemoLedgerEntries(filter?: {
+  team_id?: string;
+  run_id?: string;
+  entry_type?: string;
+  limit?: number;
+}): Record<string, unknown>[] {
+  const store = loadStore();
+  let all: Record<string, unknown>[] = [];
+  for (const r of Object.values(store)) {
+    all = all.concat(r.ledger_entries ?? []);
+  }
+  if (filter?.team_id) {
+    all = all.filter((e) => e.team_id === filter.team_id);
+  }
+  if (filter?.run_id) {
+    all = all.filter((e) => e.run_id === filter.run_id);
+  }
+  if (filter?.entry_type) {
+    all = all.filter((e) => e.entry_type === filter.entry_type);
+  }
+  // Newest first.
+  all.sort((a, b) => {
+    const at = String(a.created_at ?? "");
+    const bt = String(b.created_at ?? "");
+    return bt.localeCompare(at);
+  });
+  if (filter?.limit) all = all.slice(0, filter.limit);
+  return all;
+}
+
+/**
+ * Return the artifact bundle (architecture / test_plan / code / decisions_md)
+ * for a specific demo run, sourced from its scenario fixture.
+ * Returns null if the run is not a demo run, the scenario is unknown, or
+ * the run hasn't yet hit the post-resolver stages.
+ */
+export interface DemoArtifacts {
+  architecture: string;
+  test_plan: string;
+  code: string;
+  decisions_md: string;
+  summary: Record<string, unknown>;
+  pr_url?: string;
+}
+
+export function getDemoArtifacts(runId: string): DemoArtifacts | null {
+  const stored = loadStore()[runId];
+  if (!stored) return null;
+  const scenario = getScenario(stored.scenario_id);
+  if (!scenario) return null;
+
+  // Only expose artifacts once the relevant stage has completed.
+  const has = (stage: string) =>
+    stored.events.some(
+      (e) => e.stage === stage && e.status === "completed",
+    );
+
+  // Find PR url from deliver event payload.
+  const deliverDone = stored.events.find(
+    (e) => e.stage === "deliver" && e.status === "completed",
+  );
+  const prUrl =
+    (deliverDone?.payload as { pr_url?: string } | undefined)?.pr_url ??
+    undefined;
+
+  return {
+    architecture: has("architect") ? scenario.architecture : "",
+    test_plan: has("test_plan") ? scenario.test_plan : "",
+    code: has("codegen") ? scenario.code : "",
+    decisions_md: has("deliver") ? scenario.decisions_md : "",
+    summary: scenario.summary,
+    pr_url: prUrl,
+  };
 }
 
 function toRunState(s: StoredDemoRun): RunState {
@@ -249,6 +330,7 @@ export function startDemoRun(scenarioId: string): string {
     updated_at: startedAt,
     cost_usd: 0,
     decisions_count: 0,
+    ledger_entries: [],
   };
   saveStore(store);
 
@@ -333,6 +415,12 @@ export function approveDemoRun(runId: string) {
     status: "running",
     current_stage: "architect",
     decisions_count: scenario.decisions.length,
+    ledger_entries: scenario.ledger.map((e) => ({
+      ...e,
+      run_id: runId,
+      team_id: scenario.team_id,
+      created_at: nowIso(),
+    })),
   });
 
   setTimeout(() => {

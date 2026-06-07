@@ -7,7 +7,9 @@
  *
  * Exits 0 if free, 1 with a readable message if taken.
  */
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { execSync } = require("node:child_process");
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 const port = process.env.PORT || "3005";
 

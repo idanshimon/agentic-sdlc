@@ -1,6 +1,7 @@
 "use client";
 import { Scale } from "lucide-react";
 import { useDecisions } from "@/lib/hooks/use-runs";
+import { useAssistantContext } from "@/lib/assist/context";
 import { DecisionCard } from "@/components/domain/decision-card";
 import { EmptyState } from "@/components/domain/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -8,6 +9,11 @@ import { PageHeader } from "@/components/layout/page-header";
 export default function DecisionsPage() {
   const { data, isLoading } = useDecisions();
   const entries = data?.entries ?? [];
+  useAssistantContext({
+    kind: "decisions",
+    label: "Decisions",
+    payload: { count: entries.length },
+  });
   return (
     <div className="space-y-6">
       <PageHeader

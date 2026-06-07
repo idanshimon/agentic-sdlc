@@ -11,6 +11,8 @@ import {
   BookOpen,
   Workflow,
   ShieldCheck,
+  GitMerge,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,7 @@ const nav = [
     section: "Overview",
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard, plane: null },
+      { href: "/reports", label: "Reports", icon: Sparkles, plane: "ledger" },
     ],
   },
   {
@@ -40,6 +43,7 @@ const nav = [
     section: "Standards Plane",
     plane: "standards" as const,
     items: [
+      { href: "/changes", label: "OpenSpec Changes", icon: GitMerge, plane: "standards" },
       { href: "/bundles", label: "Bundles", icon: Library, plane: "standards" },
       { href: "/prompts", label: "Prompt Library", icon: BookOpen, plane: "standards" },
     ],

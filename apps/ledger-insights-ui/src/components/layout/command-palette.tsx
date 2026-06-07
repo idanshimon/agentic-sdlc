@@ -10,6 +10,9 @@ import {
   Activity,
   ShieldCheck,
   ExternalLink,
+  Sparkles,
+  GitMerge,
+  BookOpen,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -29,9 +32,11 @@ export function CommandPalette({
 }) {
   const router = useRouter();
 
+  // Note: the global ⌘K shortcut is owned by the AssistantPanel.
+  // Open the palette via the topbar search button instead, or via ⌘/ below.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+      if (e.key === "/" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         onOpenChange(!open);
       }
@@ -58,14 +63,23 @@ export function CommandPalette({
           <CommandItem onSelect={() => go("/")}>
             <LayoutDashboard className="h-4 w-4 text-[var(--text-tertiary)]" /> Dashboard
           </CommandItem>
+          <CommandItem onSelect={() => go("/reports")}>
+            <Sparkles className="h-4 w-4 text-[var(--plane-ledger)]" /> Reports
+          </CommandItem>
           <CommandItem onSelect={() => go("/runs")}>
             <GitBranch className="h-4 w-4 text-[var(--plane-pipeline)]" /> Runs
           </CommandItem>
           <CommandItem onSelect={() => go("/decisions")}>
             <Scale className="h-4 w-4 text-[var(--plane-ledger)]" /> Decisions
           </CommandItem>
+          <CommandItem onSelect={() => go("/changes")}>
+            <GitMerge className="h-4 w-4 text-[var(--plane-standards)]" /> OpenSpec Changes
+          </CommandItem>
           <CommandItem onSelect={() => go("/bundles")}>
             <Library className="h-4 w-4 text-[var(--plane-standards)]" /> Bundles
+          </CommandItem>
+          <CommandItem onSelect={() => go("/prompts")}>
+            <BookOpen className="h-4 w-4 text-[var(--plane-standards)]" /> Prompt Library
           </CommandItem>
           <CommandItem onSelect={() => go("/agents")}>
             <Bot className="h-4 w-4 text-[var(--plane-agenthq)]" /> Custom Agents

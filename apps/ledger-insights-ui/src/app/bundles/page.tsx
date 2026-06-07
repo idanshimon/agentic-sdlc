@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Library, ExternalLink, Shield, Lock, Activity, DollarSign } from "lucide-react";
 import { ledgerMcp } from "@/lib/api/ledger-mcp";
+import { useAssistantContext } from "@/lib/assist/context";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
@@ -72,6 +73,7 @@ function BundleCard({ dept, version, icon: Icon, label, desc }: typeof bundles[n
 }
 
 export default function BundlesPage() {
+  useAssistantContext({ kind: "bundles", label: "Standards bundles" });
   return (
     <div className="space-y-6">
       <PageHeader

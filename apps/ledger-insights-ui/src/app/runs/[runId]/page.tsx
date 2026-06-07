@@ -1,11 +1,18 @@
 "use client";
 import { use } from "react";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRun } from "@/lib/hooks/use-runs";
 import { useRunStream } from "@/lib/hooks/use-run-stream";
+import { useAssistantContext } from "@/lib/assist/context";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StagePill } from "@/components/domain/stage-pill";
 import { StatusDot } from "@/components/domain/status-dot";
+import { ResolverGate } from "@/components/domain/resolver-gate";
+import { RunArtifactsPanel } from "@/components/domain/run-artifacts-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { relativeTime, shortId, fmtUsd } from "@/lib/utils";
 import type { Stage, StageEvent } from "@/lib/types";
@@ -19,11 +26,42 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
   const { runId } = use(params);
   const { data: run, isLoading } = useRun(runId);
   const { events: liveEvents, connected } = useRunStream(runId);
+  const queryClient = useQueryClient();
 
   const allEvents = [...(run?.events ?? []), ...liveEvents];
+  const awaitingGate = run?.status === "awaiting_gate";
+
+  useAssistantContext({
+    kind: awaitingGate ? "run-resolver-gate" : "run-detail",
+    id: runId,
+    label: run ? `Run ${shortId(runId, 8)}` : "Run",
+    payload: { status: run?.status, stage: run?.current_stage },
+  });
+
+  const onApproved = () => {
+    // Force-refetch run state immediately after approval so the gate panel
+    // disappears and the post-resolver stages render without a 3s polling lag.
+    queryClient.invalidateQueries({ queryKey: ["run", runId] });
+    queryClient.invalidateQueries({ queryKey: ["runs"] });
+  };
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/runs">
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back to all runs
+          </Link>
+        </Button>
+        <span className="text-[var(--text-tertiary)] text-xs">/</span>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/runs/new">
+            Start a new run
+          </Link>
+        </Button>
+      </div>
+
       <PageHeader
         plane="pipeline"
         title={
@@ -63,6 +101,14 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
         <Card className="p-6 text-center text-sm text-[var(--text-tertiary)]">Run not found.</Card>
       ) : (
         <>
+          {awaitingGate && (
+            <ResolverGate
+              runId={runId}
+              events={allEvents}
+              onApproved={onApproved}
+            />
+          )}
+
           <Card className="p-4">
             <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)] mb-3">
               Stage progress
@@ -152,6 +198,8 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
               )}
             </div>
           </Card>
+
+          <RunArtifactsPanel runId={runId} status={run.status} />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Card className="p-4">

@@ -1,5 +1,6 @@
 "use client";
 import { useTelemetryCost, useTelemetryClasses } from "@/lib/hooks/use-runs";
+import { useAssistantContext } from "@/lib/assist/context";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { fmtUsd, fmtNumber } from "@/lib/utils";
@@ -12,6 +13,7 @@ import {
 export default function TelemetryPage() {
   const { data: cost, isLoading: costLoading } = useTelemetryCost();
   const { data: classes, isLoading: classesLoading } = useTelemetryClasses();
+  useAssistantContext({ kind: "telemetry", label: "Telemetry" });
 
   const classPoints = classes?.classes ?? [];
   const costByStage = cost?.cost_by_stage ?? {};

@@ -19,7 +19,7 @@ PYTHONPATH=. pytest apps/orchestrator/tests/ -v
 
 ## What's NOT tested here (call-out)
 
-- Stages (`stages.py`) — depends on live APIM + Databricks calls. Tested via end-to-end Manthan PRD runs in production.
+- Stages (`stages.py`) — depends on live APIM + Databricks calls. Tested via end-to-end production runs against real PRDs.
 - Ledger write-block invariants — depends on live Cosmos. Smoke-tested via the live demo.
 - SSE streaming — depends on real run state machine.
 
