@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload, FileText, Loader2, Sparkles, Settings2, ChevronDown, ChevronRight,
-  AlertCircle, Play, Zap, Bot, Hand,
+  AlertCircle, Play, Bot, Hand,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { orchestrator, fetchSample } from "@/lib/api/orchestrator";
+import { isDemoMode, getScenario, startDemoRun } from "@/lib/demo";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -119,6 +120,7 @@ type StageOverride = { provider: string; model: string };
 
 export default function NewRunPage() {
   const router = useRouter();
+  const demo = isDemoMode();
 
   const [prdText, setPrdText] = useState("");
   const [filename, setFilename] = useState("untitled.md");
@@ -183,6 +185,33 @@ export default function NewRunPage() {
 
   const onSample = useCallback(
     async (s: Sample) => {
+      // Demo Mode short-circuit: replay pre-canned fixtures, no LLM call.
+      if (demo) {
+        const scenario = getScenario(s.id);
+        if (!scenario) {
+          toast.error("No demo fixture for this sample", {
+            description: `Demo Mode currently ships fixtures for: ${
+              ["vitals"].join(", ")
+            }. Try "Patient Vitals Streaming".`,
+          });
+          return;
+        }
+        setBusy(s.id);
+        setError(null);
+        try {
+          const runId = startDemoRun(s.id);
+          toast.success("Demo run started", {
+            description: `${s.title} · replaying audit-grade pipeline`,
+          });
+          router.push(`/runs/${runId}`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Failed to start demo run";
+          setError(msg);
+          setBusy(null);
+        }
+        return;
+      }
+
       setBusy(s.id);
       setError(null);
       try {
@@ -196,7 +225,7 @@ export default function NewRunPage() {
         setBusy(null);
       }
     },
-    [submit],
+    [demo, router, submit],
   );
 
   const onTextSubmit = useCallback(() => {
@@ -219,7 +248,9 @@ export default function NewRunPage() {
         .replace(/[^a-z0-9-]+/g, "-")
         .replace(/^-+|-+$/g, "")
         .slice(0, 48);
-      if (slug) setFilename(`${slug}.md`);
+      // Defer setState to next microtask to avoid the
+      // react-hooks/set-state-in-effect cascade warning.
+      if (slug) queueMicrotask(() => setFilename(`${slug}.md`));
     }
   }, [prdText, filename]);
 
@@ -227,8 +258,12 @@ export default function NewRunPage() {
     <div className="space-y-6">
       <PageHeader
         plane="pipeline"
-        title="Start a new run"
-        description="Drop in a PRD or pick a sample. The pipeline classifies ambiguities, resolves them (with you in the loop), generates code, runs the policy gates, and opens a PR."
+        title={demo ? "Start a new demo run" : "Start a new run"}
+        description={
+          demo
+            ? "Demo Mode — runs replay pre-canned audit-grade output from a real Phase-A-fixed pipeline run. Zero LLM calls, zero network. Click any sample tagged DEMO to begin."
+            : "Drop in a PRD or pick a sample. The pipeline classifies ambiguities, resolves them (with you in the loop), generates code, runs the policy gates, and opens a PR."
+        }
       />
 
       {error && (
@@ -244,38 +279,55 @@ export default function NewRunPage() {
           <div>
             <h2 className="text-sm font-semibold">Sample PRDs</h2>
             <p className="text-xs text-[var(--text-tertiary)]">
-              Click any sample to load + start a run immediately with your current mode/team.
+              {demo
+                ? "Click a DEMO-tagged sample to replay a pre-canned audit-grade pipeline run."
+                : "Click any sample to load + start a run immediately with your current mode/team."}
             </p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {SAMPLES.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => onSample(s)}
-              disabled={busy !== null}
-              className={cn(
-                "group text-left rounded-lg border border-[var(--border-default)] bg-[var(--bg)] p-4 hover:border-[var(--text-tertiary)] hover:bg-[var(--overlay)]/40 transition-colors relative overflow-hidden",
-                busy === s.id && "border-[var(--primary)] bg-[var(--primary)]/5",
-                busy && busy !== s.id && "opacity-50 cursor-not-allowed",
-              )}
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <FileText className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />
-                  <h3 className="text-sm font-semibold truncate">{s.title}</h3>
+          {SAMPLES.map((s) => {
+            const hasDemoFixture = !!getScenario(s.id);
+            const disabledInDemo = demo && !hasDemoFixture;
+            return (
+              <button
+                key={s.id}
+                onClick={() => onSample(s)}
+                disabled={busy !== null || disabledInDemo}
+                title={disabledInDemo ? "No demo fixture for this sample yet" : undefined}
+                className={cn(
+                  "group text-left rounded-lg border border-[var(--border-default)] bg-[var(--bg)] p-4 hover:border-[var(--text-tertiary)] hover:bg-[var(--overlay)]/40 transition-colors relative overflow-hidden",
+                  busy === s.id && "border-[var(--primary)] bg-[var(--primary)]/5",
+                  busy && busy !== s.id && "opacity-50 cursor-not-allowed",
+                  disabledInDemo && "opacity-40 cursor-not-allowed",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />
+                    <h3 className="text-sm font-semibold truncate">{s.title}</h3>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {demo && hasDemoFixture && (
+                      <Badge variant="warning" className="text-[10px]">
+                        DEMO
+                      </Badge>
+                    )}
+                    <Badge variant={s.badge_tone === "ok" ? "success" : s.badge_tone === "primary" ? "info" : s.badge_tone === "secondary" ? "secondary" : "warning"} className="text-[10px]">
+                      {busy === s.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : s.badge}
+                    </Badge>
+                  </div>
                 </div>
-                <Badge variant={s.badge_tone === "ok" ? "success" : s.badge_tone === "primary" ? "info" : s.badge_tone === "secondary" ? "secondary" : "warning"} className="text-[10px] shrink-0">
-                  {busy === s.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : s.badge}
-                </Badge>
-              </div>
-              <p className="text-xs text-[var(--text-secondary)] leading-relaxed mb-2">{s.subtitle}</p>
-              <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)]">
-                <span className="mono">{s.filename}</span>
-                <span className="tabular">{s.size_kb >= 1 ? `~${s.size_kb} KB` : "<1 KB"}</span>
-              </div>
-            </button>
-          ))}
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed mb-2">{s.subtitle}</p>
+                <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)]">
+                  <span className="mono">{s.filename}</span>
+                  <span className="tabular">
+                    {disabledInDemo ? "no demo fixture" : s.size_kb >= 1 ? `~${s.size_kb} KB` : "<1 KB"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </Card>
 
@@ -456,6 +508,11 @@ export default function NewRunPage() {
 
       {/* Submit */}
       <div className="flex items-center justify-end gap-2 pb-4">
+        {demo && (
+          <span className="text-[11px] text-[var(--text-tertiary)] mr-auto">
+            Demo Mode is active — paste/upload submission disabled. Use a DEMO-tagged sample above.
+          </span>
+        )}
         <Button variant="ghost" onClick={() => { setPrdText(""); setFilename("untitled.md"); }}>
           Clear
         </Button>
@@ -463,7 +520,8 @@ export default function NewRunPage() {
           variant="primary"
           size="lg"
           onClick={onTextSubmit}
-          disabled={!prdText.trim() || busy !== null}
+          disabled={!prdText.trim() || busy !== null || demo}
+          title={demo ? "Disabled in Demo Mode — use a sample" : undefined}
         >
           {busy === "text" ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Starting run…</>

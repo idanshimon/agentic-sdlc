@@ -1,16 +1,19 @@
 "use client";
 import { useState } from "react";
-import { Menu, Search, Command as CommandIcon, Sun, Moon } from "lucide-react";
+import { Menu, Search, Command as CommandIcon, Sun, Moon, Sparkles } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "./sidebar";
 import { CommandPalette } from "./command-palette";
 import { HealthIndicator } from "@/components/domain/health-indicator";
+import { isDemoMode } from "@/lib/demo";
+import Link from "next/link";
 
 export function TopBar() {
   const [openCmd, setOpenCmd] = useState(false);
   const { theme, setTheme } = useTheme();
+  const demo = isDemoMode();
 
   return (
     <>
@@ -36,6 +39,16 @@ export function TopBar() {
           </span>
         </button>
         <div className="flex items-center gap-2">
+          {demo && (
+            <Link
+              href="/runs/new"
+              className="hidden md:inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-400 text-xs font-medium hover:border-amber-400 hover:bg-amber-500/15 transition-colors"
+              title="Demo Mode active — pre-canned pipeline replays, no LLM calls"
+            >
+              <Sparkles className="h-3 w-3" />
+              <span>DEMO MODE</span>
+            </Link>
+          )}
           <HealthIndicator />
           <Button
             variant="ghost"

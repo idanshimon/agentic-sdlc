@@ -1,4 +1,11 @@
 import { apiConfig } from "./config";
+import {
+  isDemoMode,
+  isDemoRun,
+  listDemoRuns,
+  getDemoRun,
+  approveDemoRun,
+} from "@/lib/demo";
 import type { RunState, RunMode, Stage } from "../types";
 
 class ApiError extends Error {
@@ -94,10 +101,29 @@ export const orchestrator = {
   health() {
     return req<{ status: string; runs_in_memory: number }>("/healthz");
   },
-  listRuns() {
+  async listRuns() {
+    if (isDemoMode()) {
+      // Merge live runs with demo runs from localStorage. If the live API
+      // is unreachable in demo mode (offline demos), return demo runs only.
+      const demoRuns = listDemoRuns();
+      try {
+        const live = await req<RunsListResponse>("/api/runs");
+        return {
+          items: [...demoRuns, ...live.items],
+          count: demoRuns.length + live.count,
+        };
+      } catch {
+        return { items: demoRuns, count: demoRuns.length };
+      }
+    }
     return req<RunsListResponse>("/api/runs");
   },
-  getRun(runId: string) {
+  async getRun(runId: string) {
+    if (isDemoMode() && isDemoRun(runId)) {
+      const r = getDemoRun(runId);
+      if (!r) throw new ApiError(404, `Demo run ${runId} not found`);
+      return r;
+    }
     return req<RunState>(`/api/runs/${runId}`);
   },
   /** Submit a PRD as multipart/form-data. Real orchestrator accepts UploadFile. */
@@ -131,18 +157,44 @@ export const orchestrator = {
     });
   },
   pause(runId: string) {
+    if (isDemoRun(runId)) {
+      // Demo runs cannot be paused — replay is deterministic.
+      const r = getDemoRun(runId);
+      if (!r) throw new ApiError(404, `Demo run ${runId} not found`);
+      return Promise.resolve(r);
+    }
     return req<RunState>(`/api/runs/${runId}/pause`, { method: "POST" });
   },
   resume(runId: string) {
+    if (isDemoRun(runId)) {
+      const r = getDemoRun(runId);
+      if (!r) throw new ApiError(404, `Demo run ${runId} not found`);
+      return Promise.resolve(r);
+    }
     return req<RunState>(`/api/runs/${runId}/resume`, { method: "POST" });
   },
   approve(runId: string, body: { decision: string; rationale: string }) {
+    if (isDemoRun(runId)) {
+      // Demo gate approval triggers the local replay engine to fire the
+      // architect → deliver chain. The body is accepted for API parity but
+      // ignored — the demo replays a fixed pre-canned decision set.
+      approveDemoRun(runId);
+      const r = getDemoRun(runId);
+      if (!r) throw new ApiError(404, `Demo run ${runId} not found`);
+      return Promise.resolve(r);
+    }
     return req<RunState>(`/api/runs/${runId}/approve`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   },
   reject(runId: string, body: { reason: string }) {
+    if (isDemoRun(runId)) {
+      // Reject is a no-op for demo runs — they always run to completion.
+      const r = getDemoRun(runId);
+      if (!r) throw new ApiError(404, `Demo run ${runId} not found`);
+      return Promise.resolve(r);
+    }
     return req<RunState>(`/api/runs/${runId}/reject`, {
       method: "POST",
       body: JSON.stringify(body),
