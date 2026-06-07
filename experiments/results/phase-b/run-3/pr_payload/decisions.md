@@ -1,0 +1,8 @@
+# Decisions for run b299f24e-7449-4444-962b-31e964ed7c1d
+Team: experiment-phase-b-run-3
+
+- **874e3555** accept: At egress, replace FHIR Observation.subject (patient reference) and Observation.encounter with a deterministic HMAC-SHA256 token keyed by a rotating secret. All 18 HIPAA Safe Harbor identifiers (§164.514(b)(2)) present in the payload must be suppressed or tokenized before forwarding to the clinical event bus.
+- **31a265d7** accept: Each vendor connector must authenticate via mutual TLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to 'vitals:ingest'. Certificates rotate every 90 days; revocation via OCSP is mandatory.
+- **985ed8cd** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **3f59750f** accept: WebSocket connections must present a short-lived (15-minute TTL) OAuth 2.0 Bearer token in the HTTP Upgrade request Authorization header. The gateway validates the token via introspection before upgrading the connection. Token refresh must occur before expiry using a refresh_token grant; expired sessions are closed with WS close code 4401.
+- **530ad826** accept: The <100ms SLA is defined as the p99 latency from WebSocket frame receipt at the API gateway to confirmed publish acknowledgment from the clinical event bus, measured continuously via distributed tracing (OpenTelemetry spans). Breaches trigger PagerDuty P2 alert.

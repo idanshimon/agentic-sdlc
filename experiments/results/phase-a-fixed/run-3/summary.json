@@ -1,0 +1,30 @@
+{
+  "phase": "A",
+  "run_idx": 3,
+  "run_id": "794a1818-a11d-40f5-b59a-24bf8ad3d9d1",
+  "team_id": "experiment-phase-a-run-3",
+  "started_at": "2026-06-07T06:07:09.494709+00:00",
+  "wall_clock_seconds": 208.04,
+  "stage_durations_seconds": {
+    "ingest": 0.1,
+    "assessor": 67.47,
+    "architect": 23.44,
+    "test_plan": 35.31,
+    "codegen": 81.47,
+    "review_scan": 0.2,
+    "deliver": 0.01
+  },
+  "total_tokens": 18409,
+  "total_cost_usd": 0.2399,
+  "card_count": 8,
+  "gating_card_count": 5,
+  "decisions_applied": 5,
+  "model_routing": {
+    "ingest": "databricks-claude-sonnet-4-6",
+    "assessor": "databricks-claude-sonnet-4-6",
+    "architect": "databricks-claude-sonnet-4-6",
+    "test_plan": "databricks-claude-sonnet-4-6",
+    "codegen": "databricks-claude-sonnet-4-6",
+    "review_scan": "databricks-claude-sonnet-4-6"
+  }
+}

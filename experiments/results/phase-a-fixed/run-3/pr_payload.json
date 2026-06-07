@@ -1,0 +1,8 @@
+{
+  "files": [
+    "src/main.py",
+    "tests/test_main.py",
+    "docs/architecture.md",
+    "decisions.md"
+  ]
+}

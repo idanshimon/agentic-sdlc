@@ -1,0 +1,250 @@
+[
+  {
+    "card_id": "0be92de1-6240-4090-a890-107287670f4f",
+    "ambiguity_class": "phi-classification",
+    "slot_value_hash": "af0a0b66bb6f",
+    "title": "Egress PHI Redaction Scope Ambiguous",
+    "detail": "The PRD states 'PII redaction at egress' but does not specify which FHIR Observation fields constitute PHI/PII requiring redaction, nor whether patient identifiers (subject reference, encounter ID) are stripped or pseudonymized before reaching the clinical event bus.",
+    "prd_quote": "PII redaction at egress.",
+    "prd_section": "Compliance",
+    "gap_description": "The PRD states 'PII redaction at egress' but does not specify which FHIR Observation fields constitute PHI/PII requiring redaction, nor whether patient identifiers (subject reference, encounter ID) are stripped or pseudonymized before reaching the clinical event bus.",
+    "options": [
+      {
+        "label": "Pseudonymize Subject Reference via Deterministic Token",
+        "resolution": "At egress, replace FHIR Observation.subject.reference (patient ID) and Observation.encounter.reference with a deterministic HMAC-SHA256 token keyed per-deployment. All other 18 HIPAA Safe Harbor identifiers (\u00a7164.514(b)(2)) present in the resource must be removed. A mapping table is retained in a PHI-classified store accessible only to authorized re-identification workflows.",
+        "rationale": "HIPAA \u00a7164.514(b) Safe Harbor de-identification requires removal of all 18 identifiers; pseudonymization preserves downstream correlation capability while satisfying minimum-necessary under \u00a7164.502(b).",
+        "downstream_impact": "Architect will add a redaction/tokenization sidecar in the egress pipeline; CodeGen will implement HMAC token generation, mapping-table write, and a field-scrubbing transform against the 18-identifier checklist.",
+        "recommended": true
+      },
+      {
+        "label": "Full De-identification via Safe Harbor Removal",
+        "resolution": "Strip all 18 HIPAA Safe Harbor identifiers from every Observation resource at egress with no retained mapping, producing fully de-identified events per \u00a7164.514(b).",
+        "rationale": "Eliminates re-identification risk entirely and removes the need for a PHI-classified mapping store; preferred if the Cardiology consumer has confirmed it does not need patient-level correlation.",
+        "downstream_impact": "Architect omits mapping-table design; CodeGen implements a simpler field-removal transform, but downstream consumers lose the ability to correlate events to individual patients without a separate lookup.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 500.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "8035279b-293a-4e9c-80da-e13069e4c7e7",
+    "ambiguity_class": "auth-policy",
+    "slot_value_hash": "61f002960993",
+    "title": "Vendor Connector Authorization Model Undefined",
+    "detail": "No concrete authentication/authorization mechanism is specified for Philips IntelliVue and GE CARESCAPE connectors, leaving the trust boundary and credential management approach undefined.",
+    "prd_quote": "Authorization model and egress policy for vendor connectors are TBD \u2014 some teams have been connecting to unapproved external tools without formal review.",
+    "prd_section": "External integrations",
+    "gap_description": "No concrete authentication/authorization mechanism is specified for Philips IntelliVue and GE CARESCAPE connectors, leaving the trust boundary and credential management approach undefined.",
+    "options": [
+      {
+        "label": "Mutual TLS + OAuth 2.0 Client Credentials per Vendor",
+        "resolution": "Each vendor connector must authenticate via mutual TLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to read:vitals only. Certificates rotate every 90 days. No connector may be activated without a signed BAA and vendor management approval ticket.",
+        "rationale": "HIPAA \u00a7164.312(d) requires entity authentication; mTLS + OAuth 2.0 satisfies both transport-layer and application-layer identity, and the 90-day rotation aligns with NIST SP 800-57 key management guidance.",
+        "downstream_impact": "Architect will design a vendor-connector gateway service with certificate store and OAuth token introspection endpoint; CodeGen will scaffold mTLS handshake and token validation middleware for each vendor adapter.",
+        "recommended": true
+      },
+      {
+        "label": "API Key per Vendor with IP Allowlisting",
+        "resolution": "Each vendor connector is issued a long-lived API key stored in a secrets manager, combined with IP allowlisting for vendor-declared egress CIDRs. Keys are rotated annually or upon suspected compromise.",
+        "rationale": "Lower implementation complexity and compatible with vendor SDKs that do not support OAuth; acceptable if network perimeter controls are already mature.",
+        "downstream_impact": "Architect will design secrets-manager integration and firewall rule automation; CodeGen will add API key header validation and IP-check middleware, but mTLS scaffolding is omitted.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 450.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "c48f7fbe-bbee-4e66-810e-884d0a75bb93",
+    "ambiguity_class": "data-retention",
+    "slot_value_hash": "b8875fd5f6d8",
+    "title": "Data Retention Period for Ingested Vitals Not Defined",
+    "detail": "No retention period is specified for PHI stored in the ingest pipeline (e.g., WebSocket buffers, event bus dead-letter queues, or replay logs), leaving the system without a compliant data lifecycle policy.",
+    "prd_quote": "PHI in transit. HIPAA minimum-necessary.",
+    "prd_section": "Compliance",
+    "gap_description": "No retention period is specified for PHI stored in the ingest pipeline (e.g., WebSocket buffers, event bus dead-letter queues, or replay logs), leaving the system without a compliant data lifecycle policy.",
+    "options": [
+      {
+        "label": "6-Year Retention with Encrypted Archive and Audit Log",
+        "resolution": "All PHI persisted in the ingest pipeline (dead-letter queues, replay buffers, audit logs) must be retained for a minimum of 6 years from creation date, stored in AES-256 encrypted storage with access logging. Automated deletion jobs run at the 6-year mark. Retention policy documented in the system's HIPAA policies-and-procedures record.",
+        "rationale": "HIPAA \u00a7164.530(j) requires covered entities to retain policies and documentation for 6 years; applying the same period to PHI-containing pipeline artifacts is the conservative, audit-safe default recommended by HHS guidance.",
+        "downstream_impact": "Architect will design encrypted archive storage with TTL-based deletion automation; CodeGen will implement retention tagging on all PHI write paths and a scheduled purge job with audit trail.",
+        "recommended": true
+      },
+      {
+        "label": "Transient Pipeline Storage Only \u2014 No PHI Persistence",
+        "resolution": "The ingest pipeline is designated as transit-only: no PHI is written to durable storage. Dead-letter queues hold failed events for a maximum of 72 hours in encrypted ephemeral storage before automatic deletion. Replay capability is explicitly out of scope.",
+        "rationale": "Minimizes PHI exposure surface and retention compliance burden; appropriate if the Cardiology event bus is the system of record and the ingest layer is purely a transport mechanism.",
+        "downstream_impact": "Architect omits long-term archive design; CodeGen implements 72-hour TTL on DLQ storage and adds a hard block on any PHI write to durable storage, but replay/backfill features cannot be built.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 400.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "36cffec4-453c-4992-b9be-517cec642a79",
+    "ambiguity_class": "auth-policy",
+    "slot_value_hash": "037386af7e3e",
+    "title": "WebSocket Session Inactivity and Re-authentication Policy Missing",
+    "detail": "No session lifetime, inactivity timeout, or re-authentication requirement is defined for persistent WebSocket connections carrying PHI, leaving the system non-compliant with automatic logoff requirements.",
+    "prd_quote": "WebSocket transport.",
+    "prd_section": "In-scope",
+    "gap_description": "No session lifetime, inactivity timeout, or re-authentication requirement is defined for persistent WebSocket connections carrying PHI, leaving the system non-compliant with automatic logoff requirements.",
+    "options": [
+      {
+        "label": "15-Minute Inactivity Timeout with Token Refresh Challenge",
+        "resolution": "WebSocket sessions carrying PHI must terminate after 15 minutes of no data frames. Clients must re-authenticate via a short-lived JWT (max 15-minute expiry) refresh before reconnecting. Session tokens are bound to the originating TLS session ID.",
+        "rationale": "HIPAA \u00a7164.312(a)(2)(iii) requires automatic logoff; 15 minutes is the CMS-recommended threshold for clinical application sessions and aligns with existing EHR session policy precedent.",
+        "downstream_impact": "Architect will design a WebSocket session manager with inactivity timer and token-refresh handshake protocol; CodeGen will implement server-side ping/pong tracking and forced disconnect logic.",
+        "recommended": true
+      },
+      {
+        "label": "24-Hour Session Lifetime with Continuous Heartbeat",
+        "resolution": "WebSocket sessions remain open for up to 24 hours provided a heartbeat frame is received every 30 seconds; re-authentication is required only on reconnect after a dropped connection.",
+        "rationale": "Reduces reconnection overhead for high-frequency bedside monitor streams where 15-minute interruptions could cause data gaps in continuous vitals capture.",
+        "downstream_impact": "Architect designs a simpler heartbeat watchdog; CodeGen omits token-refresh logic but must implement gap-detection and backfill on reconnect to avoid data loss.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 350.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "68b81a47-1614-4e0d-967a-30a9a7b3890f",
+    "ambiguity_class": "sla-binding",
+    "slot_value_hash": "8db2253a4f83",
+    "title": "Ingest Latency SLA Measurement Point Undefined",
+    "detail": "The PRD does not define where the 100ms latency is measured (bedside monitor \u2192 API gateway, API gateway \u2192 event bus, or end-to-end), making the SLA unenforceable and untestable.",
+    "prd_quote": "<100ms ingest latency, 99.95% uptime.",
+    "prd_section": "SLA",
+    "gap_description": "The PRD does not define where the 100ms latency is measured (bedside monitor \u2192 API gateway, API gateway \u2192 event bus, or end-to-end), making the SLA unenforceable and untestable.",
+    "options": [
+      {
+        "label": "Measure End-to-End: Monitor NIC to Event Bus Acknowledgment",
+        "resolution": "The <100ms SLA is defined as the p99 latency from the timestamp of the first TCP/WebSocket data frame received at the API gateway's network interface to the event bus publish acknowledgment, measured continuously via distributed tracing. Vendor network transit time is excluded and tracked separately as a vendor SLA.",
+        "rationale": "P99 end-to-end measurement is the industry-standard SLA definition for streaming ingest pipelines (per AWS and Azure streaming SLA documentation) and gives the clearest signal of system health to the Cardiology consumer.",
+        "downstream_impact": "Architect will instrument OpenTelemetry spans from WebSocket frame receipt to event bus ack; CodeGen will add trace context propagation and a latency histogram metric exported to the observability platform.",
+        "recommended": true
+      },
+      {
+        "label": "Measure API Gateway Internal Processing Only",
+        "resolution": "The <100ms SLA covers only internal processing time from WebSocket frame deserialization to event bus publish call initiation, excluding network I/O. Measured at p95.",
+        "rationale": "Isolates the team's controllable latency from external network variability, making the SLA achievable regardless of vendor network conditions.",
+        "downstream_impact": "Architect designs narrower instrumentation scoped to application processing; CodeGen adds internal timer spans only, and network latency monitoring is deferred to infrastructure team.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 200.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "7d1e5563-97b5-4e9f-96b0-c67f84a6efff",
+    "ambiguity_class": "sla-binding",
+    "slot_value_hash": "b2e4c00c44e3",
+    "title": "99.95% Uptime Measurement Window and Exclusion Policy Unspecified",
+    "detail": "The PRD does not define the measurement window (monthly vs. annual), planned maintenance exclusion policy, or the consequence/remedy for SLA breach, making the 99.95% uptime commitment unenforceable.",
+    "prd_quote": "99.95% uptime.",
+    "prd_section": "SLA",
+    "gap_description": "The PRD does not define the measurement window (monthly vs. annual), planned maintenance exclusion policy, or the consequence/remedy for SLA breach, making the 99.95% uptime commitment unenforceable.",
+    "options": [
+      {
+        "label": "Rolling 30-Day Window, Planned Maintenance Excluded, Breach Triggers Incident Review",
+        "resolution": "Uptime is calculated over a rolling 30-day window as (total minutes \u2212 downtime minutes) / total minutes. Planned maintenance windows (max 4 hours/month, announced 72 hours in advance) are excluded. Breach of 99.95% triggers a mandatory post-incident review within 5 business days and a remediation plan submitted to the Cardiology engineering team.",
+        "rationale": "Rolling 30-day windows are the standard SLA measurement period for cloud streaming services (AWS, Azure) and provide faster feedback than annual windows; 99.95% over 30 days permits ~21.9 minutes of unplanned downtime.",
+        "downstream_impact": "Architect will design uptime monitoring dashboards with 30-day rolling calculation; CodeGen will instrument health-check endpoints and integrate with the incident management system for automated SLA breach alerting.",
+        "recommended": true
+      },
+      {
+        "label": "Annual Calendar-Year Window with Full Maintenance Exclusion",
+        "resolution": "Uptime is calculated over the calendar year. All maintenance windows are excluded regardless of notice period. No formal breach remedy is defined beyond best-effort remediation.",
+        "rationale": "Simpler to administer and more forgiving during the initial launch period in Q3 FY26 when deployment stability is uncertain.",
+        "downstream_impact": "Architect designs annual SLA reporting only; CodeGen omits automated breach alerting, reducing observability tooling scope but increasing risk of undetected degradation.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 175.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": false,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "97dca688-dadf-4c16-adab-415351deecbc",
+    "ambiguity_class": "identifier-format",
+    "slot_value_hash": "fc561e39b732",
+    "title": "FHIR Observation Resource Version Not Specified",
+    "detail": "The PRD does not specify which FHIR version (R4, R4B, or R5) or which FHIR profile (e.g., US Core Vital Signs) governs the Observation resource schema, creating integration risk with the Cardiology consumer.",
+    "prd_quote": "HL7 FHIR Observation resources for heart rate, SpO2, blood pressure, temperature.",
+    "prd_section": "In-scope",
+    "gap_description": "The PRD does not specify which FHIR version (R4, R4B, or R5) or which FHIR profile (e.g., US Core Vital Signs) governs the Observation resource schema, creating integration risk with the Cardiology consumer.",
+    "options": [
+      {
+        "label": "FHIR R4 with US Core Vital Signs Profile v6.1",
+        "resolution": "All Observation resources must conform to FHIR R4 (4.0.1) and the US Core Vital Signs Profile v6.1.0. Mandatory fields: status, category (vital-signs), code (LOINC), subject, effectiveDateTime, valueQuantity. Validation enforced at ingest via a FHIR validator sidecar.",
+        "rationale": "FHIR R4 is the current ONC \u00a7170.315(g)(10) certification baseline and US Core Vital Signs is the dominant interoperability profile in US clinical systems, maximizing compatibility with the Cardiology consumer's existing stack.",
+        "downstream_impact": "Architect will include a FHIR R4 validator in the ingest pipeline; CodeGen will generate Observation schema classes from the US Core StructureDefinition and add profile-conformance unit tests.",
+        "recommended": true
+      },
+      {
+        "label": "Vendor-Native Format with Internal Normalization to FHIR R4",
+        "resolution": "Accept vendor-native HL7 v2.x or proprietary JSON from Philips/GE at ingest and normalize to FHIR R4 Observation internally before publishing to the event bus. No profile constraint enforced at the wire boundary.",
+        "rationale": "Reduces vendor integration friction since Philips IntelliVue and GE CARESCAPE primarily emit HL7 v2 ORU messages natively, avoiding the need for vendor-side FHIR translation.",
+        "downstream_impact": "Architect must design a normalization/mapping layer per vendor; CodeGen will implement HL7 v2-to-FHIR transform logic, increasing scope and adding mapping maintenance burden.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 150.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": false,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "0fa100d6-8c48-4949-b10d-96b59131a99d",
+    "ambiguity_class": "naming-convention",
+    "slot_value_hash": "0ae91fcdaf20",
+    "title": "Clinical Event Bus Topic Naming Convention Not Defined",
+    "detail": "No topic/channel naming convention is specified for the clinical event bus, risking inconsistent topic names across environments and consumers that will be difficult to govern as additional teams onboard.",
+    "prd_quote": "forward normalized events to a clinical event bus. Cardiology team owns the consumer.",
+    "prd_section": "Goal",
+    "gap_description": "No topic/channel naming convention is specified for the clinical event bus, risking inconsistent topic names across environments and consumers that will be difficult to govern as additional teams onboard.",
+    "options": [
+      {
+        "label": "Hierarchical Dot-Notation: {env}.{domain}.{resource}.{version}",
+        "resolution": "Event bus topics must follow the pattern {env}.{domain}.{resource}.{version}, e.g., prod.cardiology.vitals-observation.v1. Env values: prod, staging, dev. Domain is the owning clinical team slug. Resource is the FHIR resource type in kebab-case. Version is a monotonic integer prefixed with 'v'.",
+        "rationale": "Hierarchical dot-notation is the de facto standard for Kafka and Pulsar topic naming in healthcare event-driven architectures, enabling wildcard subscriptions (e.g., prod.cardiology.*) and clear ownership attribution.",
+        "downstream_impact": "Architect will document the naming standard in the event bus governance registry; CodeGen will hardcode topic names using this pattern in producer and consumer configuration, and CI will lint topic names against the regex.",
+        "recommended": true
+      },
+      {
+        "label": "Free-Form Topic Names Registered in a Central Catalog",
+        "resolution": "Teams may choose any topic name provided it is registered in the central event catalog before use. No structural format is enforced programmatically.",
+        "rationale": "Maximizes flexibility for teams with existing naming conventions and avoids a migration burden for the Cardiology consumer if they already have established topic names.",
+        "downstream_impact": "Architect designs a catalog registration workflow instead of a linter; CodeGen has no naming constraint, increasing risk of ad-hoc names that are hard to discover and govern at scale.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 75.0,
+    "re_run_cost_usd": 0.0672,
+    "is_gating": false,
+    "is_eligible_for_promotion": true
+  }
+]

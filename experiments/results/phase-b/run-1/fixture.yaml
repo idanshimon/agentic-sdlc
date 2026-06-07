@@ -1,0 +1,17 @@
+decisions:
+- decision_kind: accept
+  option_index: 0
+  actor: experiment@local
+- decision_kind: accept
+  option_index: 0
+  actor: experiment@local
+- decision_kind: swap
+  resolution_text: 99.95% monthly uptime; <100ms p95 ingest latency measured at the
+    WebSocket boundary, excluding upstream vendor latency.
+  actor: experiment@local
+- decision_kind: accept
+  option_index: 0
+  actor: experiment@local
+- decision_kind: accept
+  option_index: 0
+  actor: experiment@local

@@ -1,0 +1,8 @@
+# Decisions for run f6880b34-ad6b-47a8-80df-5769d84bda19
+Team: experiment-phase-a-run-1
+
+- **3e38807e** accept: Each vendor connector must authenticate via mutual TLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to read:vitals only. Credentials must be rotated every 90 days and reviewed by Security Architecture before activation.
+- **01e02d86** accept: At egress, strip or tokenize all 18 HIPAA Safe Harbor identifiers present in FHIR Observation resources, including subject.reference (replace with internal pseudonym token), performer, and any contained Patient resource. A field-level redaction manifest must be approved by the Privacy Office before launch.
+- **5952e4fa** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **7961407e** accept: Before Q3 FY26 launch, the Privacy Office must produce and sign off on a field-level allowlist specifying exactly which FHIR Observation elements (e.g., valueQuantity, effectiveDateTime, code) the Cardiology event bus consumer may receive. The API enforces this allowlist as a projection filter at egress.
+- **77fb03a9** accept: WebSocket connections (both inbound from monitors and outbound to Cardiology consumer) must present a signed JWT (RS256) in the HTTP Upgrade request Authorization header. Tokens have a 15-minute TTL and are issued by the internal identity provider. Connections are terminated on token expiry and must re-authenticate.

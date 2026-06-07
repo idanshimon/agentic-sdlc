@@ -1,0 +1,2 @@
+X = phase-b-openspec
+Y = phase-a-prose

@@ -1,0 +1,250 @@
+{
+  "phase_a": {
+    "phase": "A",
+    "runs": [
+      {
+        "run_dir": "run-1",
+        "wall_clock_seconds": 182.51,
+        "tokens": 16037,
+        "cost_usd": 0.2167,
+        "scores": {
+          "traceability": {
+            "score": 2,
+            "cite_count": 3,
+            "n_decisions": 5,
+            "coverage_ratio": 0.6,
+            "kind": "paraphrase"
+          },
+          "test_spec_coverage": {
+            "score": 1,
+            "domain_terms_in_arch": [
+              "websocket",
+              "jwt",
+              "rs256",
+              "mtls",
+              "oauth",
+              "client_credentials",
+              "phi",
+              "hmac",
+              "observation",
+              "vendor",
+              "tokenization"
+            ],
+            "domain_terms_in_test": [],
+            "overlap": [],
+            "coverage_ratio": 0.0,
+            "kind": "domain-vocabulary-overlap"
+          },
+          "validator_grade": {
+            "score": 1,
+            "reason": "Phase A free-form prose; not OpenSpec-shaped"
+          }
+        }
+      },
+      {
+        "run_dir": "run-2",
+        "wall_clock_seconds": 166.59,
+        "tokens": 15065,
+        "cost_usd": 0.2019,
+        "scores": {
+          "traceability": {
+            "score": 1,
+            "cite_count": 2,
+            "n_decisions": 5,
+            "coverage_ratio": 0.4,
+            "kind": "paraphrase"
+          },
+          "test_spec_coverage": {
+            "score": 1,
+            "domain_terms_in_arch": [
+              "websocket",
+              "mtls",
+              "oauth",
+              "client_credentials",
+              "phi",
+              "fhir",
+              "observation",
+              "p95",
+              "latency",
+              "vendor"
+            ],
+            "domain_terms_in_test": [],
+            "overlap": [],
+            "coverage_ratio": 0.0,
+            "kind": "domain-vocabulary-overlap"
+          },
+          "validator_grade": {
+            "score": 1,
+            "reason": "Phase A free-form prose; not OpenSpec-shaped"
+          }
+        }
+      },
+      {
+        "run_dir": "run-3",
+        "wall_clock_seconds": 185.9,
+        "tokens": 15506,
+        "cost_usd": 0.2114,
+        "scores": {
+          "traceability": {
+            "score": 1,
+            "cite_count": 2,
+            "n_decisions": 5,
+            "coverage_ratio": 0.4,
+            "kind": "paraphrase"
+          },
+          "test_spec_coverage": {
+            "score": 1,
+            "domain_terms_in_arch": [
+              "websocket",
+              "mtls",
+              "oauth",
+              "phi",
+              "fhir",
+              "observation",
+              "p95",
+              "latency",
+              "uptime",
+              "vendor",
+              "tokenization"
+            ],
+            "domain_terms_in_test": [],
+            "overlap": [],
+            "coverage_ratio": 0.0,
+            "kind": "domain-vocabulary-overlap"
+          },
+          "validator_grade": {
+            "score": 1,
+            "reason": "Phase A free-form prose; not OpenSpec-shaped"
+          }
+        }
+      }
+    ],
+    "regen_stability": {
+      "score": 1,
+      "pairwise_normalized_distances": [
+        0.858,
+        0.758,
+        0.842
+      ],
+      "mean_distance_pct": 81.9,
+      "kind": "pairwise-levenshtein-mean"
+    },
+    "mean_wall_seconds": 178.3,
+    "total_tokens": 46608,
+    "total_cost_usd": 0.63,
+    "mean_traceability_score": 1.33,
+    "mean_test_spec_coverage_score": 1.0,
+    "mean_validator_grade_score": 1.0
+  },
+  "phase_b": {
+    "phase": "B",
+    "runs": [
+      {
+        "run_dir": "run-1",
+        "wall_clock_seconds": 166.15,
+        "tokens": 16419,
+        "cost_usd": 0.1877,
+        "scores": {
+          "traceability": {
+            "score": 5,
+            "tag_count": 5,
+            "n_decisions": 5,
+            "matched_decisions": 5,
+            "coverage_ratio": 1.0,
+            "kind": "mechanical-id"
+          },
+          "test_spec_coverage": {
+            "score": 5,
+            "scenario_count": 12,
+            "test_fn_count": 12,
+            "when_count": 12,
+            "then_count": 12,
+            "coverage_ratio": 1.0,
+            "kind": "scenario-to-test-mechanical"
+          },
+          "validator_grade": {
+            "score": 5,
+            "summary": "PASS, no warnings detected",
+            "exit_code": 0
+          }
+        }
+      },
+      {
+        "run_dir": "run-2",
+        "wall_clock_seconds": 184.99,
+        "tokens": 18785,
+        "cost_usd": 0.2195,
+        "scores": {
+          "traceability": {
+            "score": 5,
+            "tag_count": 5,
+            "n_decisions": 5,
+            "matched_decisions": 5,
+            "coverage_ratio": 1.0,
+            "kind": "mechanical-id"
+          },
+          "test_spec_coverage": {
+            "score": 5,
+            "scenario_count": 18,
+            "test_fn_count": 18,
+            "when_count": 18,
+            "then_count": 18,
+            "coverage_ratio": 1.0,
+            "kind": "scenario-to-test-mechanical"
+          },
+          "validator_grade": {
+            "score": 5,
+            "summary": "PASS, no warnings detected",
+            "exit_code": 0
+          }
+        }
+      },
+      {
+        "run_dir": "run-3",
+        "wall_clock_seconds": 200.22,
+        "tokens": 19409,
+        "cost_usd": 0.2311,
+        "scores": {
+          "traceability": {
+            "score": 5,
+            "tag_count": 5,
+            "n_decisions": 5,
+            "matched_decisions": 5,
+            "coverage_ratio": 1.0,
+            "kind": "mechanical-id"
+          },
+          "test_spec_coverage": {
+            "score": 5,
+            "scenario_count": 14,
+            "test_fn_count": 14,
+            "when_count": 14,
+            "then_count": 14,
+            "coverage_ratio": 1.0,
+            "kind": "scenario-to-test-mechanical"
+          },
+          "validator_grade": {
+            "score": 5,
+            "summary": "PASS, no warnings detected",
+            "exit_code": 0
+          }
+        }
+      }
+    ],
+    "regen_stability": {
+      "score": 1,
+      "pairwise_normalized_distances": [
+        0.862,
+        0.939,
+        0.936
+      ],
+      "mean_distance_pct": 91.2,
+      "kind": "pairwise-levenshtein-mean"
+    },
+    "mean_wall_seconds": 183.8,
+    "total_tokens": 54613,
+    "total_cost_usd": 0.6383,
+    "mean_traceability_score": 5.0,
+    "mean_test_spec_coverage_score": 5.0,
+    "mean_validator_grade_score": 5.0
+  }
+}

@@ -1,0 +1,47 @@
+[
+  {
+    "card_id": "bfb13536-4a31-45e1-9054-99b19a664c44",
+    "decision_kind": "accept",
+    "resolution_text": "At egress, replace FHIR Observation.subject.reference and Observation.encounter.reference with a deterministic HMAC-SHA256 pseudonym keyed by a Privacy-office-managed secret. All 18 HIPAA Safe Harbor identifiers (\u00a7164.514(b)(2)) present in the resource MUST be removed or pseudonymized; a field inventory must be approved by the Privacy Office before launch.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "16709c4d-530b-4298-8972-ea6cdbc57761",
+    "decision_kind": "accept",
+    "resolution_text": "All third-party vendor connectors (Philips IntelliVue, GE CARESCAPE) MUST authenticate via mutual TLS (mTLS) for transport-layer identity and present a short-lived OAuth 2.0 client_credentials token scoped to 'vitals:ingest'. Onboarding requires a signed BAA and Vendor Management approval ticket before credentials are issued.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "c46cef1f-0fc2-4a4e-93d4-bd421d1be406",
+    "decision_kind": "swap",
+    "resolution_text": "99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.",
+    "option_index": null,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "b438868f-14da-40ba-aa2a-0ea5fd60e78f",
+    "decision_kind": "accept",
+    "resolution_text": "The Cardiology consumer is granted read access only to a dedicated event bus topic containing the minimum-necessary field set (vital-sign code, value, unit, effectiveDateTime, pseudonymized subject ID). Access is enforced via topic-level ACL. A Data Use Agreement signed by Cardiology engineering and the Privacy Office enumerates the permitted fields before launch. Future consumers require a separate DUA and Privacy Office review.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "3c0d577b-2127-4a2e-ab67-5f059d90bd57",
+    "decision_kind": "accept",
+    "resolution_text": "The <100ms SLA is measured as p99 latency from WebSocket frame receipt at the API gateway to confirmed publish acknowledgment from the clinical event bus broker, excluding vendor-side network transit. This measurement point and percentile MUST be captured in the observability dashboard and included in monthly SLA reports.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  }
+]

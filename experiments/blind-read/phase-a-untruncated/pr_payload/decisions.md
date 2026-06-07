@@ -1,0 +1,8 @@
+# Decisions for run f7509b7b-9582-41b0-a41a-976f8332212d
+Team: experiment-phase-a-run-99
+
+- **2b1f796d** accept: Each approved vendor connector must authenticate via mTLS with a vendor-issued certificate AND present a short-lived OAuth 2.0 client-credentials token scoped to 'vitals:ingest'. Certificates must be rotated every 90 days and registered in the internal service catalog before activation.
+- **ec189964** accept: Define a canonical redaction manifest: subject.reference (patient ID), performer, encounter.reference, and device.identifier must be tokenized using a HMAC-SHA256 pseudonym before egress. All 18 HIPAA Safe Harbor identifiers per §164.514(b)(2) must be evaluated against every FHIR Observation field and documented in the data dictionary.
+- **6a0c6f59** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **7b929805** accept: WebSocket connections must present a signed JWT (RS256, 15-minute expiry) in the HTTP Upgrade request Authorization header. Clients must refresh tokens via a dedicated WebSocket sub-protocol message before expiry; the server must terminate connections where the token has been expired for >30 seconds without refresh.
+- **b186f0b3** accept: 99.95% uptime is measured over a rolling 30-day calendar window (~21.9 minutes allowable downtime/month). Planned maintenance windows pre-announced ≥72 hours in advance and not exceeding 60 minutes/month are excluded from the calculation. Breaches trigger an automated PagerDuty P1 incident.

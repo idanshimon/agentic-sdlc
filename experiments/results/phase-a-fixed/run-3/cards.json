@@ -1,0 +1,250 @@
+[
+  {
+    "card_id": "50bea3ba-64fc-494e-998c-fed3320934a9",
+    "ambiguity_class": "phi-classification",
+    "slot_value_hash": "0bb11778fc1a",
+    "title": "Egress PHI Redaction Scope Unspecified",
+    "detail": "The PRD states PII redaction at egress but does not enumerate which FHIR Observation fields constitute PHI/PII requiring redaction, nor whether 'egress' means the event bus, vendor connectors, or both.",
+    "prd_quote": "PII redaction at egress.",
+    "prd_section": "Compliance",
+    "gap_description": "The PRD states PII redaction at egress but does not enumerate which FHIR Observation fields constitute PHI/PII requiring redaction, nor whether 'egress' means the event bus, vendor connectors, or both.",
+    "options": [
+      {
+        "label": "Enumerate PHI Fields and Apply Redaction at Event Bus Publish",
+        "resolution": "Define a canonical redaction manifest: patient MRN, name, DOB, and device serial number are masked before publishing to the clinical event bus. Cardiology consumers receive a pseudonymous encounter token instead. Redaction applies to ALL egress points including vendor connectors.",
+        "rationale": "HIPAA \u00a7164.514(b) Safe Harbor requires removal of 18 identifiers; applying redaction at the event bus boundary enforces minimum-necessary (\u00a7164.502(b)) for all downstream consumers uniformly.",
+        "downstream_impact": "Architect will design a redaction filter stage in the ingestion pipeline; CodeGen will implement a FHIR field masking library and pseudonymization token mapping service.",
+        "recommended": true
+      },
+      {
+        "label": "Consumer-Specific Redaction Profiles",
+        "resolution": "Each registered consumer (e.g., Cardiology, analytics) is assigned a redaction profile specifying which PHI fields are stripped before delivery; vendor connectors receive maximum redaction by default.",
+        "rationale": "Allows clinical consumers with a legitimate need (e.g., treating clinicians) to receive fuller data while still enforcing minimum-necessary for non-clinical consumers.",
+        "downstream_impact": "Architect must design a per-consumer policy engine; CodeGen complexity increases significantly with profile evaluation logic per message delivery.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 500.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "720d3204-125d-49a8-ae4e-a813c8f1809a",
+    "ambiguity_class": "auth-policy",
+    "slot_value_hash": "e22f3ed7e320",
+    "title": "Vendor Connector Authorization Model Undefined",
+    "detail": "No concrete authentication/authorization mechanism is specified for Philips IntelliVue and GE CARESCAPE connectors, leaving the trust boundary and credential lifecycle undefined.",
+    "prd_quote": "Authorization model and egress policy for vendor connectors are TBD \u2014 some teams have been connecting to unapproved external tools without formal review.",
+    "prd_section": "External integrations",
+    "gap_description": "No concrete authentication/authorization mechanism is specified for Philips IntelliVue and GE CARESCAPE connectors, leaving the trust boundary and credential lifecycle undefined.",
+    "options": [
+      {
+        "label": "Mutual TLS + OAuth 2.0 Client Credentials per Vendor",
+        "resolution": "Each vendor connector must authenticate via mutual TLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to 'vitals:ingest'. Certificates rotate every 90 days; revocation via OCSP is mandatory.",
+        "rationale": "HIPAA \u00a7164.312(d) requires entity authentication; mTLS + OAuth satisfies both transport-layer and application-layer identity, consistent with NIST SP 800-204B for API security.",
+        "downstream_impact": "Architect will design a certificate issuance workflow and OAuth authorization server integration; CodeGen will implement mTLS handshake and token validation middleware for each vendor adapter.",
+        "recommended": true
+      },
+      {
+        "label": "API Key per Vendor with IP Allowlisting",
+        "resolution": "Each vendor is issued a long-lived API key transmitted in the Authorization header; access is further restricted to a pre-approved CIDR range per vendor.",
+        "rationale": "Lower operational overhead for vendors with static network egress; acceptable for some healthcare integrations where PKI management is impractical.",
+        "downstream_impact": "Architect will design an API key store and IP allowlist enforcement layer; CodeGen will implement key validation and IP-check middleware, but rotation and revocation logic is simpler.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 450.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "0b988942-9333-419d-a061-00192ff8b8ae",
+    "ambiguity_class": "data-retention",
+    "slot_value_hash": "4fdec3e16178",
+    "title": "Data Retention Period for Streamed Vitals Not Defined",
+    "detail": "The PRD addresses PHI in transit but does not specify how long raw or normalized vitals events are retained on the event bus or any intermediate store, leaving HIPAA retention and disposal obligations unaddressed.",
+    "prd_quote": "PHI in transit. HIPAA minimum-necessary.",
+    "prd_section": "Compliance",
+    "gap_description": "The PRD addresses PHI in transit but does not specify how long raw or normalized vitals events are retained on the event bus or any intermediate store, leaving HIPAA retention and disposal obligations unaddressed.",
+    "options": [
+      {
+        "label": "Retain Event Bus Messages for 7 Years with Encrypted Cold Archival",
+        "resolution": "Vitals events on the clinical event bus are retained in hot storage for 72 hours for reprocessing, then archived to encrypted cold storage for 7 years, after which they are cryptographically erased. Retention policy is enforced via automated lifecycle rules.",
+        "rationale": "HIPAA \u00a7164.530(j) requires retention of PHI-related policies for 6 years; CMS Conditions of Participation require medical records for 5 years minimum; 7 years provides a conservative compliant buffer.",
+        "downstream_impact": "Architect will design tiered storage with lifecycle policies; CodeGen will implement automated archival triggers and cryptographic erasure on schedule.",
+        "recommended": true
+      },
+      {
+        "label": "Retain Only 72 Hours on Event Bus; Delegate Long-Term Retention to EHR",
+        "resolution": "The streaming API retains events for 72 hours only; long-term retention responsibility is explicitly delegated to the downstream EHR system. A data flow agreement documents this handoff.",
+        "rationale": "If the EHR is the system of record, duplicating retention in the streaming layer may create unnecessary PHI exposure surface and storage cost.",
+        "downstream_impact": "Architect must document the retention handoff contract with the EHR team; CodeGen implements 72-hour TTL on event bus topics; audit trail must confirm EHR receipt before deletion.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 400.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "76b48106-f41c-44ca-862a-b23ed0b86500",
+    "ambiguity_class": "phi-classification",
+    "slot_value_hash": "f50bf8692bff",
+    "title": "Minimum-Necessary Access Scope for Cardiology Consumer Undefined",
+    "detail": "The PRD invokes HIPAA minimum-necessary but does not define which vital sign fields or patient identifiers the Cardiology consumer is authorized to receive, leaving the access scope unreviewed by the Privacy Office.",
+    "prd_quote": "HIPAA minimum-necessary. PII redaction at egress. Cardiology team owns the consumer.",
+    "prd_section": "Compliance / Goal",
+    "gap_description": "The PRD invokes HIPAA minimum-necessary but does not define which vital sign fields or patient identifiers the Cardiology consumer is authorized to receive, leaving the access scope unreviewed by the Privacy Office.",
+    "options": [
+      {
+        "label": "Privacy Office Approves a Formal Cardiology Data Access Matrix Before Launch",
+        "resolution": "Prior to Q3 FY26 launch, the Privacy Office must approve a documented Data Access Matrix specifying exactly which FHIR Observation fields, patient identifiers, and vital sign types the Cardiology consumer may receive. This matrix is enforced as a filter in the event bus subscription configuration.",
+        "rationale": "HIPAA \u00a7164.502(b) minimum-necessary requires covered entities to limit PHI disclosure to the amount reasonably necessary; a formal matrix satisfies this and provides an auditable record per \u00a7164.530(j).",
+        "downstream_impact": "Architect will design a subscription filter layer driven by the approved matrix; CodeGen will implement field-level filtering on event delivery to the Cardiology consumer topic.",
+        "recommended": true
+      },
+      {
+        "label": "Cardiology Team Self-Attests Minimum-Necessary Compliance",
+        "resolution": "The Cardiology engineering team lead signs a self-attestation that their consumer only accesses PHI fields necessary for clinical use; Privacy Office reviews attestation annually.",
+        "rationale": "Lower process overhead for a clinical team with clear patient-care justification; acceptable in organizations with mature data governance cultures.",
+        "downstream_impact": "No technical filter layer is required at launch; audit risk increases as enforcement relies on attestation rather than technical controls.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 350.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "f19d3997-62b5-4ce7-be10-ab6c222e2c24",
+    "ambiguity_class": "sla-binding",
+    "slot_value_hash": "3e501b2dcbb3",
+    "title": "Ingest Latency SLA Measurement Point Undefined",
+    "detail": "The PRD does not define where the 100ms latency is measured (bedside monitor \u2192 API gateway, API gateway \u2192 event bus publish, or end-to-end to Cardiology consumer), making the SLA unenforceable.",
+    "prd_quote": "<100ms ingest latency, 99.95% uptime.",
+    "prd_section": "SLA",
+    "gap_description": "The PRD does not define where the 100ms latency is measured (bedside monitor \u2192 API gateway, API gateway \u2192 event bus publish, or end-to-end to Cardiology consumer), making the SLA unenforceable.",
+    "options": [
+      {
+        "label": "Measure Latency from WebSocket Frame Receipt to Event Bus Acknowledge",
+        "resolution": "The <100ms SLA is defined as the p99 latency from the timestamp of WebSocket frame receipt at the API gateway to the event bus publish acknowledgment. Measured via distributed tracing (OpenTelemetry) and reported in 1-minute rolling windows.",
+        "rationale": "This boundary is fully within the system's control, making it actionable for engineering; p99 rather than mean prevents tail-latency masking, consistent with SRE best practices.",
+        "downstream_impact": "Architect will instrument the ingestion pipeline with OpenTelemetry spans at gateway ingress and event bus publish; CodeGen will add trace context propagation and a latency alerting rule.",
+        "recommended": true
+      },
+      {
+        "label": "Measure End-to-End Latency to Cardiology Consumer Receipt",
+        "resolution": "The <100ms SLA is measured from WebSocket frame receipt to confirmed delivery to the Cardiology event bus consumer, at p95.",
+        "rationale": "Cardiology team as the named consumer may require a clinically meaningful end-to-end guarantee rather than an internal pipeline metric.",
+        "downstream_impact": "Architect must coordinate with Cardiology engineering to instrument their consumer; SLA becomes harder to enforce unilaterally and may require contractual alignment.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 250.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "02a449fa-f833-4229-a569-1b1c419d8e10",
+    "ambiguity_class": "sla-binding",
+    "slot_value_hash": "adf553c99376",
+    "title": "Uptime SLA Maintenance Window and Measurement Method Undefined",
+    "detail": "The PRD does not define whether 99.95% uptime excludes planned maintenance windows, how downtime is measured (synthetic probes, error rate threshold, or health endpoint), or the measurement period (monthly vs. rolling 30-day).",
+    "prd_quote": "99.95% uptime.",
+    "prd_section": "SLA",
+    "gap_description": "The PRD does not define whether 99.95% uptime excludes planned maintenance windows, how downtime is measured (synthetic probes, error rate threshold, or health endpoint), or the measurement period (monthly vs. rolling 30-day).",
+    "options": [
+      {
+        "label": "99.95% Monthly Uptime Excluding Pre-Approved Maintenance Windows",
+        "resolution": "Uptime is measured as the percentage of 1-minute synthetic WebSocket probe intervals returning success over a calendar month. Planned maintenance windows up to 4 hours/month, pre-approved by Security Architecture and communicated 72 hours in advance, are excluded from SLA calculation.",
+        "rationale": "Monthly measurement periods are standard in healthcare SLAs (cf. AWS, Azure healthcare tiers); excluding pre-approved maintenance is industry norm and prevents perverse incentives to avoid necessary patching.",
+        "downstream_impact": "Architect will design synthetic monitoring infrastructure and a maintenance window registry; CodeGen will implement a health probe endpoint and SLA reporting dashboard.",
+        "recommended": true
+      },
+      {
+        "label": "99.95% Rolling 30-Day Uptime with No Maintenance Exclusions",
+        "resolution": "Uptime is measured as a rolling 30-day window with no exclusions for maintenance; all downtime counts regardless of cause.",
+        "rationale": "Bedside monitoring is safety-adjacent; clinical stakeholders may require zero-exclusion SLAs to ensure continuous availability for patient care.",
+        "downstream_impact": "Architect must design zero-downtime deployment patterns (blue/green, canary); CodeGen must implement live migration and hot-patching capabilities, significantly increasing complexity.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 200.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": false,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "7693e511-0878-4a9e-9ca3-35a6a5991124",
+    "ambiguity_class": "identifier-format",
+    "slot_value_hash": "14fdb5dc1317",
+    "title": "FHIR Observation Resource Version Not Specified",
+    "detail": "The PRD does not specify which FHIR version (R4, R4B, R5) governs the Observation resource schema, creating ambiguity in field names, cardinality, and coding system requirements.",
+    "prd_quote": "HL7 FHIR Observation resources for heart rate, SpO2, blood pressure, temperature.",
+    "prd_section": "In-scope",
+    "gap_description": "The PRD does not specify which FHIR version (R4, R4B, R5) governs the Observation resource schema, creating ambiguity in field names, cardinality, and coding system requirements.",
+    "options": [
+      {
+        "label": "Mandate FHIR R4 (4.0.1) with US Core Observation Profile",
+        "resolution": "All Observation resources must conform to FHIR R4 (4.0.1) and the US Core Vital Signs profile (http://hl7.org/fhir/us/core/StructureDefinition/us-core-vital-signs). LOINC codes are required for all vital sign types.",
+        "rationale": "FHIR R4 is the current ONC-mandated baseline under 21st Century Cures Act interoperability rules; US Core Vital Signs profile ensures LOINC-coded observations compatible with most EHR systems.",
+        "downstream_impact": "Architect will reference R4 schemas in API contracts; CodeGen will generate R4-compliant FHIR serializers and validators using the US Core profile constraints.",
+        "recommended": true
+      },
+      {
+        "label": "Mandate FHIR R5 for Forward Compatibility",
+        "resolution": "All Observation resources must conform to FHIR R5 (5.0.0), allowing use of newer subscription and transport features native to R5.",
+        "rationale": "R5 offers improved subscription mechanisms aligned with WebSocket transport; appropriate if the organization is planning a long-term FHIR R5 migration.",
+        "downstream_impact": "CodeGen must use R5 libraries which have less mature tooling; Cardiology consumer team must also adopt R5, requiring coordination and potentially delaying Q3 FY26 launch.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 150.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": false,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "0cc9da89-c2d2-4b2d-8f58-659b1856cc1f",
+    "ambiguity_class": "naming-convention",
+    "slot_value_hash": "15ed9790d795",
+    "title": "Naming Convention for Normalized Event Schema Fields Unspecified",
+    "detail": "The PRD references 'normalized events' without defining the field naming convention (camelCase, snake_case, FHIR JSON native) for the event bus payload schema, risking inconsistency across producer and consumer implementations.",
+    "prd_quote": "forward normalized events to a clinical event bus.",
+    "prd_section": "Goal",
+    "gap_description": "The PRD references 'normalized events' without defining the field naming convention (camelCase, snake_case, FHIR JSON native) for the event bus payload schema, risking inconsistency across producer and consumer implementations.",
+    "options": [
+      {
+        "label": "Use FHIR R4 JSON Native Field Names (camelCase) as Canonical Schema",
+        "resolution": "All normalized event bus payloads must use FHIR R4 JSON field names verbatim (e.g., 'valueQuantity', 'effectiveDateTime', 'subject'). No field aliasing or transformation is applied between ingestion and event bus publish.",
+        "rationale": "Preserving FHIR-native naming eliminates a translation layer, reduces deserialization bugs, and ensures Cardiology consumers can use standard FHIR client libraries without custom mapping.",
+        "downstream_impact": "Architect will publish a schema registry entry using FHIR R4 Observation JSON schema; CodeGen will serialize directly to FHIR JSON without an intermediate DTO transformation step.",
+        "recommended": true
+      },
+      {
+        "label": "Define a Custom snake_case Internal Event Schema",
+        "resolution": "A custom internal event schema using snake_case (e.g., 'value_quantity', 'effective_datetime', 'patient_id') is defined and versioned independently of FHIR; a mapping layer translates from FHIR ingest to internal schema.",
+        "rationale": "Decouples the internal event contract from FHIR version upgrades, allowing the event bus schema to evolve independently of the FHIR spec.",
+        "downstream_impact": "Architect must design and maintain a FHIR-to-internal mapping layer and schema versioning strategy; CodeGen generates both FHIR deserializers and internal schema serializers, increasing surface area.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 100.0,
+    "re_run_cost_usd": 0.0629,
+    "is_gating": false,
+    "is_eligible_for_promotion": true
+  }
+]

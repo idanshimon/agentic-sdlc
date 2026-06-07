@@ -1,0 +1,47 @@
+[
+  {
+    "card_id": "6adb5ab2-b567-4f5e-9a89-fc2d4db56756",
+    "decision_kind": "accept",
+    "resolution_text": "All third-party vendor connectors (Philips IntelliVue, GE CARESCAPE) MUST authenticate via mutual TLS (client certificate issued by internal CA) combined with OAuth2 client_credentials grant. Each connector requires a signed Business Associate Agreement (BAA) and Vendor Management approval before provisioning.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "3beb1c12-a85d-489c-ac6c-6b8c4f6b1343",
+    "decision_kind": "accept",
+    "resolution_text": "At egress, all 18 HIPAA Safe Harbor identifiers (\u00a7164.514(b)(2)) present in FHIR Observation resources \u2014 including patient name, MRN, device identifiers, and dates beyond year \u2014 MUST be replaced with a deterministic, reversible token managed by the Privacy office's tokenization service. The mapping is retained only within the trust boundary.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "0955bdf0-9271-4d7c-bbaa-e3e06b1d9f6a",
+    "decision_kind": "swap",
+    "resolution_text": "99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.",
+    "option_index": null,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "9d4ea17e-caca-4b16-9974-8757ee2ef618",
+    "decision_kind": "accept",
+    "resolution_text": "Raw and normalized FHIR Observation events containing PHI MUST be retained for 6 years from creation date per HIPAA \u00a7164.530(j), stored in encrypted cold storage after 30 days. The active clinical event bus retains events for a maximum of 30 days (hot window). Dead-letter queues containing PHI are purged after 7 days with audit log preserved.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "56fe30f5-00b7-46a2-bf5b-4efde258ed02",
+    "decision_kind": "accept",
+    "resolution_text": "Uptime of 99.95% is measured on a rolling calendar month (~21.9 minutes allowable downtime/month). Planned maintenance windows excluded if announced \u226572 hours in advance via the ops runbook channel. SLA breach triggers a mandatory incident review within 48 hours and is tracked in the quarterly reliability scorecard.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  }
+]

@@ -1,0 +1,31 @@
+# Fixed resolver decisions used by ALL runs in BOTH phases.
+#
+# Each entry below maps to one of the gating cards the Assessor surfaces from
+# the Patient Vitals Streaming PRD. The harness applies decisions positionally:
+# i-th gating card receives the i-th entry below. If the Assessor surfaces
+# fewer cards than entries, surplus entries are ignored. If MORE gating cards
+# than entries, surplus cards default to "accept-recommended" (option 0).
+#
+# This fixture isolates Phase A vs Phase B at the architecture/test/deliver
+# layer — the resolver-resolved decisions are byte-identical across runs.
+
+decisions:
+  - decision_kind: accept   # First card: typically auth-policy / vendor egress
+    option_index: 0
+    actor: experiment@local
+
+  - decision_kind: accept   # Second: typically PHI redaction policy
+    option_index: 0
+    actor: experiment@local
+
+  - decision_kind: swap     # Third: SLA — author a specific resolution
+    resolution_text: "99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency."
+    actor: experiment@local
+
+  - decision_kind: accept   # Fourth: typically scope / FHIR profile
+    option_index: 0
+    actor: experiment@local
+
+  - decision_kind: accept   # Fifth: typically retention / observability
+    option_index: 0
+    actor: experiment@local

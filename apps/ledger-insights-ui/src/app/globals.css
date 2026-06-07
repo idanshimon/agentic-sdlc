@@ -1,0 +1,185 @@
+/* Ledger Insights — global styles + design tokens.
+   Tokens are derived from DESIGN.md and wired as CSS variables so the
+   entire UI can be re-themed by swapping this :root block.
+   shadcn variables (--background, --foreground, etc.) are mapped to
+   the same tokens — shadcn primitives Just Work without modification. */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@plugin "tailwindcss-animate";
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-overlay: var(--overlay);
+  --color-border-default: var(--border-default);
+  --color-border-muted: var(--border-muted);
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-tertiary: var(--tertiary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-plane-standards: var(--plane-standards);
+  --color-plane-pipeline: var(--plane-pipeline);
+  --color-plane-ledger: var(--plane-ledger);
+  --color-plane-agenthq: var(--plane-agenthq);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  /* Surfaces */
+  --bg: #0B0F14;
+  --surface: #11161D;
+  --elevated: #161D26;
+  --overlay: #1E2632;
+  --border-default: #243042;
+  --border-muted: #1B232E;
+
+  /* Text */
+  --text: #E6EDF3;
+  --text-secondary: #9FB0C3;
+  --text-tertiary: #697789;
+
+  /* Brand + semantic */
+  --primary: #0EA5E9;
+  --secondary: #A78BFA;
+  --tertiary: #10B981;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --info: #0EA5E9;
+
+  /* Plane palette */
+  --plane-standards: #A78BFA;
+  --plane-pipeline: #0EA5E9;
+  --plane-ledger: #22C55E;
+  --plane-agenthq: #F472B6;
+
+  /* shadcn shims — map to our tokens so all shadcn primitives inherit */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--elevated);
+  --popover-foreground: var(--text);
+  --muted: var(--overlay);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--overlay);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--border-default);
+  --input: var(--overlay);
+  --ring: var(--primary);
+  --radius: 0.5rem;
+}
+
+/* Light theme — derived. */
+.light {
+  --bg: #FAFAFA;
+  --surface: #FFFFFF;
+  --elevated: #FFFFFF;
+  --overlay: #F3F4F6;
+  --border-default: #E5E7EB;
+  --border-muted: #F3F4F6;
+  --text: #0B0F14;
+  --text-secondary: #4B5563;
+  --text-tertiary: #9CA3AF;
+}
+
+* {
+  border-color: var(--border-default);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numbers for every metric — mandatory for dashboards. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Monospace for identifiers. */
+.mono {
+  font-family: var(--font-mono), ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
+  font-size: 0.8125rem;
+}
+
+/* Subtle scrollbars to match the calm aesthetic. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--overlay);
+  border-radius: 8px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-default);
+}
+
+/* Focus ring — only on keyboard nav. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Reduce motion when the user has asked for it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Animated pulse for "in flight" indicators. */
+@keyframes ledger-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+.pulse-dot {
+  animation: ledger-pulse 1.6s ease-in-out infinite;
+}
+
+/* Marquee shimmer for skeleton loaders. */
+@keyframes skeleton {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--overlay) 0%, var(--elevated) 50%, var(--overlay) 100%);
+  background-size: 200% 100%;
+  animation: skeleton 1.6s ease-in-out infinite;
+  border-radius: 6px;
+}

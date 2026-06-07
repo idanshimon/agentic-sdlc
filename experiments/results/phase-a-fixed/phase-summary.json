@@ -1,0 +1,100 @@
+{
+  "phase": "A",
+  "ran_at": "2026-06-07T06:07:09.495328+00:00",
+  "n_runs": 3,
+  "total_seconds": 647.99,
+  "total_tokens": 56111,
+  "total_cost_usd": 0.7295,
+  "runs": [
+    {
+      "phase": "A",
+      "run_idx": 1,
+      "run_id": "f6880b34-ad6b-47a8-80df-5769d84bda19",
+      "team_id": "experiment-phase-a-run-1",
+      "started_at": "2026-06-07T05:59:54.308586+00:00",
+      "wall_clock_seconds": 212.82,
+      "stage_durations_seconds": {
+        "ingest": 0.1,
+        "assessor": 72.54,
+        "architect": 23.55,
+        "test_plan": 38.94,
+        "codegen": 76.83,
+        "review_scan": 0.2,
+        "deliver": 0.01
+      },
+      "total_tokens": 18957,
+      "total_cost_usd": 0.246,
+      "card_count": 8,
+      "gating_card_count": 5,
+      "decisions_applied": 5,
+      "model_routing": {
+        "ingest": "databricks-claude-sonnet-4-6",
+        "assessor": "databricks-claude-sonnet-4-6",
+        "architect": "databricks-claude-sonnet-4-6",
+        "test_plan": "databricks-claude-sonnet-4-6",
+        "codegen": "databricks-claude-sonnet-4-6",
+        "review_scan": "databricks-claude-sonnet-4-6"
+      }
+    },
+    {
+      "phase": "A",
+      "run_idx": 2,
+      "run_id": "81b67b06-20ac-4f8e-a4aa-53af34e16272",
+      "team_id": "experiment-phase-a-run-2",
+      "started_at": "2026-06-07T06:03:41.447151+00:00",
+      "wall_clock_seconds": 227.13,
+      "stage_durations_seconds": {
+        "ingest": 0.1,
+        "assessor": 76.9,
+        "architect": 32.33,
+        "test_plan": 38.28,
+        "codegen": 79.25,
+        "review_scan": 0.2,
+        "deliver": 0.01
+      },
+      "total_tokens": 18745,
+      "total_cost_usd": 0.2436,
+      "card_count": 8,
+      "gating_card_count": 5,
+      "decisions_applied": 5,
+      "model_routing": {
+        "ingest": "databricks-claude-sonnet-4-6",
+        "assessor": "databricks-claude-sonnet-4-6",
+        "architect": "databricks-claude-sonnet-4-6",
+        "test_plan": "databricks-claude-sonnet-4-6",
+        "codegen": "databricks-claude-sonnet-4-6",
+        "review_scan": "databricks-claude-sonnet-4-6"
+      }
+    },
+    {
+      "phase": "A",
+      "run_idx": 3,
+      "run_id": "794a1818-a11d-40f5-b59a-24bf8ad3d9d1",
+      "team_id": "experiment-phase-a-run-3",
+      "started_at": "2026-06-07T06:07:09.494709+00:00",
+      "wall_clock_seconds": 208.04,
+      "stage_durations_seconds": {
+        "ingest": 0.1,
+        "assessor": 67.47,
+        "architect": 23.44,
+        "test_plan": 35.31,
+        "codegen": 81.47,
+        "review_scan": 0.2,
+        "deliver": 0.01
+      },
+      "total_tokens": 18409,
+      "total_cost_usd": 0.2399,
+      "card_count": 8,
+      "gating_card_count": 5,
+      "decisions_applied": 5,
+      "model_routing": {
+        "ingest": "databricks-claude-sonnet-4-6",
+        "assessor": "databricks-claude-sonnet-4-6",
+        "architect": "databricks-claude-sonnet-4-6",
+        "test_plan": "databricks-claude-sonnet-4-6",
+        "codegen": "databricks-claude-sonnet-4-6",
+        "review_scan": "databricks-claude-sonnet-4-6"
+      }
+    }
+  ]
+}

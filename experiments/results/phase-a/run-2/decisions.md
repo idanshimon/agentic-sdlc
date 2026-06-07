@@ -1,0 +1,8 @@
+# Decisions for run 87392fd4-6488-4dbb-984a-ba053dcf7b24
+Team: experiment-phase-a-run-2
+
+- **6adb5ab2** accept: All third-party vendor connectors (Philips IntelliVue, GE CARESCAPE) MUST authenticate via mutual TLS (client certificate issued by internal CA) combined with OAuth2 client_credentials grant. Each connector requires a signed Business Associate Agreement (BAA) and Vendor Management approval before provisioning.
+- **3beb1c12** accept: At egress, all 18 HIPAA Safe Harbor identifiers (§164.514(b)(2)) present in FHIR Observation resources — including patient name, MRN, device identifiers, and dates beyond year — MUST be replaced with a deterministic, reversible token managed by the Privacy office's tokenization service. The mapping is retained only within the trust boundary.
+- **0955bdf0** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **9d4ea17e** accept: Raw and normalized FHIR Observation events containing PHI MUST be retained for 6 years from creation date per HIPAA §164.530(j), stored in encrypted cold storage after 30 days. The active clinical event bus retains events for a maximum of 30 days (hot window). Dead-letter queues containing PHI are purged after 7 days with audit log preserved.
+- **56fe30f5** accept: Uptime of 99.95% is measured on a rolling calendar month (~21.9 minutes allowable downtime/month). Planned maintenance windows excluded if announced ≥72 hours in advance via the ops runbook channel. SLA breach triggers a mandatory incident review within 48 hours and is tracked in the quarterly reliability scorecard.

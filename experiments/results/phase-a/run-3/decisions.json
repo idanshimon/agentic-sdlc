@@ -1,0 +1,47 @@
+[
+  {
+    "card_id": "b26c7ce4-b09c-4ea0-87f7-86031576791c",
+    "decision_kind": "accept",
+    "resolution_text": "All 18 HIPAA Safe Harbor identifiers (\u00a7164.514(b)(2)) present in outbound FHIR Observation resources \u2014 including patient name, MRN, dates beyond year, device identifiers, and geographic data \u2014 must be replaced with a deterministic, reversible token managed by the internal tokenization service before publication to the clinical event bus.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "8ca5c5e5-a312-4d55-929c-e1e9e452d116",
+    "decision_kind": "accept",
+    "resolution_text": "Each approved vendor connector must authenticate via mTLS with a vendor-issued certificate AND present a short-lived OAuth 2.0 client-credentials token (scope: vitals:ingest) issued by the internal authorization server. Both factors required before any PHI is transmitted.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "2bc7e7f1-432b-4388-a3a8-2aabbfc8a2f0",
+    "decision_kind": "swap",
+    "resolution_text": "99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.",
+    "option_index": null,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "b5d10c1b-7a14-4691-a385-ee4106ff3845",
+    "decision_kind": "accept",
+    "resolution_text": "Vitals events on the clinical event bus are retained for 24 hours (sufficient for consumer replay on failure). Events are simultaneously written to encrypted cold storage (AES-256) with a 6-year retention period and automated deletion, with access restricted to the Privacy Office and Security Architecture.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "4d49d1a2-9f35-4ff3-b309-3bef97200b9b",
+    "decision_kind": "accept",
+    "resolution_text": "Each WebSocket session must emit audit log entries for: connection established (with authenticated vendor identity and source IP), connection terminated (with reason code), and per-message metadata (timestamp, patient token, vital type, byte size \u2014 no raw PHI values). Logs must be written to an append-only, tamper-evident audit store with 6-year retention, accessible only to Security Architecture and Privacy Office.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  }
+]

@@ -1,0 +1,33 @@
+{
+  "phase": "B",
+  "run_idx": 2,
+  "run_id": "46d6d9e9-87b7-4a3f-a8ff-577fd71c711e",
+  "team_id": "experiment-phase-b-run-2",
+  "started_at": "2026-06-07T04:30:05.301563+00:00",
+  "wall_clock_seconds": 184.99,
+  "stage_durations_seconds": {
+    "ingest": 0.1,
+    "assessor": 76.5,
+    "architect": 50.29,
+    "test_plan": 19.71,
+    "codegen": 35.81,
+    "review_scan": 0.2,
+    "deliver": 0.08
+  },
+  "total_tokens": 18785,
+  "total_cost_usd": 0.2195,
+  "card_count": 8,
+  "gating_card_count": 5,
+  "decisions_applied": 5,
+  "spec_capability": "phi-safe-vitals-ingestion",
+  "spec_requirement_count": 9,
+  "spec_scenario_total": 18,
+  "spec_must_on_line_1_count": 9,
+  "spec_decision_ref_count": 9,
+  "validator": {
+    "exit_code": 0,
+    "stdout": "Change 'add-phi-safe-vitals-ingestion' is valid\n",
+    "stderr": "",
+    "summary": "PASS"
+  }
+}

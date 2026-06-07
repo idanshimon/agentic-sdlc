@@ -1,0 +1,47 @@
+[
+  {
+    "card_id": "8ad18492-3a0a-464a-b492-caecd4376a24",
+    "decision_kind": "accept",
+    "resolution_text": "Egress redaction must remove or tokenize all 18 identifiers defined in HIPAA \u00a7164.514(b)(2), including patient name, MRN, device serial number, and geographic data finer than state, before events are published to the clinical event bus consumer.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "4e47eb57-07de-403e-9826-206f0d41ff3b",
+    "decision_kind": "accept",
+    "resolution_text": "Each approved vendor connector must authenticate via mTLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to the specific device fleet. Unapproved connectors are rejected at the gateway with HTTP 403 and logged to SIEM.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "569b925f-296a-4660-8cd9-6a10a236fdaa",
+    "decision_kind": "swap",
+    "resolution_text": "99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.",
+    "option_index": null,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "7231ed66-8be0-4ad1-9329-9b26caac2d13",
+    "decision_kind": "accept",
+    "resolution_text": "The event bus subscription for Cardiology must be filtered to FHIR Observations linked to patients with an active Cardiology encounter (Encounter.serviceType = cardiology). Delivered fields are limited to: Observation.code, Observation.value, Observation.effectiveDateTime, and a pseudonymized subject token. Subject demographics are excluded.",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  },
+  {
+    "card_id": "f627f354-9488-46f2-9cc8-d6e7afa4fdc6",
+    "decision_kind": "accept",
+    "resolution_text": "WebSocket connections must present a signed JWT (RS256, issued by the internal IdP) in the HTTP Upgrade request Authorization header. Sessions exceeding 15 minutes must re-authenticate using a short-lived refresh token; failure to re-authenticate within 30 seconds of expiry results in connection termination and event 1008 (Policy Violation).",
+    "option_index": 0,
+    "gate": null,
+    "actor": "experiment@local",
+    "confidence_source": "human"
+  }
+]

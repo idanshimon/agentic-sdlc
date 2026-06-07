@@ -32,6 +32,7 @@ param appInsightsConnectionString string
 param orchestratorImageTag string = '0.7.0-rc1'
 param ledgerMcpImageTag string = '0.7.0-rc1'
 param pipelineDoctorImageTag string = '0.7.0-rc1'
+param ledgerUiImageTag string = '0.7.0-rc1'
 
 @description('Bearer token for the demo team. Mapped to team-demo in LEDGER_MCP_TOKENS. Generated at deploy time.')
 @secure()
@@ -62,6 +63,13 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 8000
         transport: 'auto'
         allowInsecure: false
+        corsPolicy: {
+          allowedOrigins: ['*']
+          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+          allowedHeaders: ['*']
+          allowCredentials: false
+          maxAge: 3600
+        }
       }
       registries: [
         { server: acrLoginServer, identity: workloadMiId }
@@ -112,6 +120,13 @@ resource caLedgerMcp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 3001
         transport: 'auto'
         allowInsecure: false
+        corsPolicy: {
+          allowedOrigins: ['*']
+          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+          allowedHeaders: ['*']
+          allowCredentials: false
+          maxAge: 3600
+        }
       }
       registries: [
         { server: acrLoginServer, identity: workloadMiId }
@@ -132,6 +147,54 @@ resource caLedgerMcp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MCP_PORT',                 value: '3001' }
             { name: 'STANDARDS_BUNDLES_ROOT',   value: '/app/standards-bundles' }
             { name: 'LEDGER_MCP_TOKENS',        secretRef: 'ledger-mcp-tokens' }
+          ]
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: 3 }
+    }
+  }
+}
+
+// ---------- Container App: ledger-insights-ui (Next.js dashboard) ----------
+resource caLedgerUi 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-ledger-ui'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${workloadMiId}': {} }
+  }
+  properties: {
+    managedEnvironmentId: caeId
+    configuration: {
+      activeRevisionsMode: 'Single'
+      secrets: [
+        { name: 'ledger-mcp-token', value: ledgerMcpDemoToken }
+      ]
+      ingress: {
+        external: true
+        targetPort: 3000
+        transport: 'auto'
+        allowInsecure: false
+      }
+      registries: [
+        { server: acrLoginServer, identity: workloadMiId }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'ledger-ui'
+          image: '${acrLoginServer}/ledger-insights-ui:${ledgerUiImageTag}'
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+          env: [
+            // Browser uses the NEXT_PUBLIC_* for /healthz + /tools (CORS-allowed,
+            // unauthenticated). All authenticated MCP calls go through same-origin
+            // Next.js API routes; those read LEDGER_MCP_TOKEN server-side only.
+            { name: 'NEXT_PUBLIC_ORCHESTRATOR_URL', value: 'https://${caOrchestrator.properties.configuration.ingress.fqdn}' }
+            { name: 'NEXT_PUBLIC_LEDGER_MCP_URL',   value: 'https://${caLedgerMcp.properties.configuration.ingress.fqdn}' }
+            { name: 'ORCHESTRATOR_URL',             value: 'https://${caOrchestrator.properties.configuration.ingress.fqdn}' }
+            { name: 'LEDGER_MCP_URL',               value: 'https://${caLedgerMcp.properties.configuration.ingress.fqdn}' }
+            { name: 'LEDGER_MCP_TOKEN',             secretRef: 'ledger-mcp-token' }
           ]
         }
       ]
@@ -194,3 +257,4 @@ resource cjDoctor 'Microsoft.App/jobs@2024-03-01' = {
 // ---------- Outputs ----------
 output orchestratorFqdn string = caOrchestrator.properties.configuration.ingress.fqdn
 output ledgerMcpFqdn string = caLedgerMcp.properties.configuration.ingress.fqdn
+output ledgerUiFqdn string = caLedgerUi.properties.configuration.ingress.fqdn

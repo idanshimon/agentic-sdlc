@@ -1,0 +1,250 @@
+[
+  {
+    "card_id": "874e3555-ff62-4f53-869f-c6d54337af42",
+    "ambiguity_class": "phi-classification",
+    "slot_value_hash": "6671ec2e13e1",
+    "title": "Egress PHI Redaction Scope Ambiguous",
+    "detail": "The PRD states 'PII redaction at egress' but does not enumerate which FHIR Observation fields constitute PHI/PII requiring redaction, nor whether patient identifiers (subject reference, encounter ID) are stripped or pseudonymized.",
+    "prd_quote": "PII redaction at egress.",
+    "prd_section": "Compliance",
+    "gap_description": "The PRD states 'PII redaction at egress' but does not enumerate which FHIR Observation fields constitute PHI/PII requiring redaction, nor whether patient identifiers (subject reference, encounter ID) are stripped or pseudonymized.",
+    "options": [
+      {
+        "label": "Pseudonymize Direct Identifiers per HIPAA Safe Harbor",
+        "resolution": "At egress, replace FHIR Observation.subject (patient reference) and Observation.encounter with a deterministic HMAC-SHA256 token keyed by a rotating secret. All 18 HIPAA Safe Harbor identifiers (\u00a7164.514(b)(2)) present in the payload must be suppressed or tokenized before forwarding to the clinical event bus.",
+        "rationale": "HIPAA \u00a7164.514(b) Safe Harbor de-identification requires removal of all 18 identifier categories; pseudonymization preserves referential integrity for the Cardiology consumer while satisfying minimum-necessary (\u00a7164.502(b)).",
+        "downstream_impact": "Architect will design a tokenization service with key-rotation schedule; CodeGen will implement a FHIR payload transformer that maps each of the 18 identifier fields before publishing to the event bus.",
+        "recommended": true
+      },
+      {
+        "label": "Full Removal of Patient Reference Fields",
+        "resolution": "Strip Observation.subject, Observation.encounter, and any contained Patient resource entirely from egress payloads; downstream consumers receive only device ID, timestamp, and measurement values.",
+        "rationale": "Simplest path to HIPAA compliance; eliminates re-identification risk at the cost of consumer ability to correlate vitals to a patient record.",
+        "downstream_impact": "CodeGen implements a simpler field-drop transformer, but Cardiology engineering team loses patient-correlation capability and may require a separate lookup service, increasing overall system complexity.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 500.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "31a265d7-3bc7-4fe5-b6cf-c9651e0038c6",
+    "ambiguity_class": "auth-policy",
+    "slot_value_hash": "e22f3ed7e320",
+    "title": "Vendor Connector Authorization Model Undefined",
+    "detail": "No concrete authentication/authorization mechanism is specified for Philips IntelliVue and GE CARESCAPE connectors, leaving the trust boundary and credential lifecycle undefined.",
+    "prd_quote": "Authorization model and egress policy for vendor connectors are TBD \u2014 some teams have been connecting to unapproved external tools without formal review.",
+    "prd_section": "External integrations",
+    "gap_description": "No concrete authentication/authorization mechanism is specified for Philips IntelliVue and GE CARESCAPE connectors, leaving the trust boundary and credential lifecycle undefined.",
+    "options": [
+      {
+        "label": "Mutual TLS + OAuth 2.0 Client Credentials per Vendor",
+        "resolution": "Each vendor connector must authenticate via mutual TLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to 'vitals:ingest'. Certificates rotate every 90 days; revocation via OCSP is mandatory.",
+        "rationale": "HIPAA \u00a7164.312(d) requires entity authentication; mTLS + OAuth satisfies both transport-layer and application-layer identity, and is consistent with HL7 SMART on FHIR connector patterns.",
+        "downstream_impact": "Architect will design a vendor-gateway service with certificate provisioning workflow; CodeGen will implement mTLS termination and token introspection middleware for each connector.",
+        "recommended": true
+      },
+      {
+        "label": "API Key per Vendor with IP Allowlist",
+        "resolution": "Each vendor is issued a long-lived API key transmitted in the Authorization header; access is further restricted to a static IP allowlist maintained by Security Architecture.",
+        "rationale": "Lower implementation complexity and compatible with vendor SDKs that do not support OAuth; acceptable if network perimeter controls are already strong.",
+        "downstream_impact": "Architect will design API gateway key management; CodeGen will implement IP-filter middleware, but key rotation and revocation workflows must be manually managed, increasing operational risk.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 450.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "985ed8cd-6a5e-4e79-92cf-77d7bb6e106b",
+    "ambiguity_class": "data-retention",
+    "slot_value_hash": "0a668efae324",
+    "title": "Data Retention Period for Ingested Vitals Not Defined",
+    "detail": "The PRD references HIPAA minimum-necessary but does not specify how long raw ingested vital sign events (which contain PHI) are retained in the ingestion layer before deletion or archival.",
+    "prd_quote": "PHI in transit. HIPAA minimum-necessary.",
+    "prd_section": "Compliance",
+    "gap_description": "The PRD references HIPAA minimum-necessary but does not specify how long raw ingested vital sign events (which contain PHI) are retained in the ingestion layer before deletion or archival.",
+    "options": [
+      {
+        "label": "6-Year Retention with Encrypted Archival per HIPAA",
+        "resolution": "Raw PHI-containing Observation events in the ingestion layer are retained for 6 years from creation date per HIPAA \u00a7164.530(j), stored in AES-256 encrypted cold storage after 30 days. Deletion is automated via lifecycle policy; a deletion audit log is maintained for 6 years.",
+        "rationale": "HIPAA \u00a7164.530(j) requires covered entities to retain documentation for 6 years; applying the same period to the underlying PHI records is the conservative, audit-safe default.",
+        "downstream_impact": "Architect will specify S3/blob storage lifecycle rules and KMS key policy; CodeGen will implement automated archival job and deletion audit trail logging.",
+        "recommended": true
+      },
+      {
+        "label": "30-Day Hot Retention, No Long-Term Archive",
+        "resolution": "Raw ingested events are purged after 30 days on the basis that the authoritative clinical record is maintained by the downstream EHR system; the ingestion layer is treated as a transient pipeline, not a system of record.",
+        "rationale": "Minimizes PHI exposure surface and storage cost if the EHR is confirmed as the system of record; requires formal sign-off from Privacy Office that the ingestion layer is not a covered system of record.",
+        "downstream_impact": "Architect must document the system-of-record designation; CodeGen implements a simpler 30-day TTL policy, but Privacy Office approval gate must be added to the launch checklist.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 350.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "3f59750f-a617-4694-bc6e-3308a99e9c17",
+    "ambiguity_class": "auth-policy",
+    "slot_value_hash": "5d96a5fae81f",
+    "title": "WebSocket Session Authentication Mechanism Not Specified",
+    "detail": "The PRD specifies WebSocket as the transport but does not define how WebSocket sessions are authenticated (token in handshake header, subprotocol negotiation, or connection-level certificate), leaving the session security model undefined.",
+    "prd_quote": "WebSocket transport.",
+    "prd_section": "In-scope",
+    "gap_description": "The PRD specifies WebSocket as the transport but does not define how WebSocket sessions are authenticated (token in handshake header, subprotocol negotiation, or connection-level certificate), leaving the session security model undefined.",
+    "options": [
+      {
+        "label": "Bearer Token in HTTP Upgrade Handshake Header",
+        "resolution": "WebSocket connections must present a short-lived (15-minute TTL) OAuth 2.0 Bearer token in the HTTP Upgrade request Authorization header. The gateway validates the token via introspection before upgrading the connection. Token refresh must occur before expiry using a refresh_token grant; expired sessions are closed with WS close code 4401.",
+        "rationale": "HIPAA \u00a7164.312(d) requires unique user/entity authentication; bearer tokens in the Upgrade handshake are the IETF-recommended pattern (RFC 6455 \u00a710.5) and are compatible with standard API gateway WebSocket support.",
+        "downstream_impact": "Architect will specify token introspection endpoint and session lifecycle; CodeGen will implement handshake authentication middleware, token refresh logic on the client connector side, and WS close-code handling.",
+        "recommended": true
+      },
+      {
+        "label": "Subprotocol-Level Token Exchange Post-Handshake",
+        "resolution": "WebSocket connections are established without authentication at the HTTP layer; a proprietary subprotocol requires the client to send a signed JWT as the first WebSocket message within 5 seconds of connection, after which the server validates and either continues or closes the connection.",
+        "rationale": "Some WebSocket client libraries cannot set custom HTTP headers during the Upgrade request; post-handshake authentication avoids this compatibility issue.",
+        "downstream_impact": "CodeGen must implement a post-handshake authentication state machine and connection timeout; unauthenticated connections briefly consume server resources before rejection, requiring rate limiting to prevent abuse.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 300.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "530ad826-fe0a-457e-89c7-2c59326eef39",
+    "ambiguity_class": "sla-binding",
+    "slot_value_hash": "995fb84cc5db",
+    "title": "SLA Latency Measurement Point Undefined",
+    "detail": "The PRD does not define where the 100ms latency budget is measured (device-to-API gateway, API gateway-to-event-bus publish acknowledgment, or end-to-end device-to-consumer), making the SLA unenforceable.",
+    "prd_quote": "<100ms ingest latency, 99.95% uptime.",
+    "prd_section": "SLA",
+    "gap_description": "The PRD does not define where the 100ms latency budget is measured (device-to-API gateway, API gateway-to-event-bus publish acknowledgment, or end-to-end device-to-consumer), making the SLA unenforceable.",
+    "options": [
+      {
+        "label": "Measure Gateway Receipt to Event Bus Publish ACK",
+        "resolution": "The <100ms SLA is defined as the p99 latency from WebSocket frame receipt at the API gateway to confirmed publish acknowledgment from the clinical event bus, measured continuously via distributed tracing (OpenTelemetry spans). Breaches trigger PagerDuty P2 alert.",
+        "rationale": "This boundary is fully within the team's control, aligns with standard API SLA definitions, and is instrumentable without dependency on third-party device telemetry.",
+        "downstream_impact": "Architect will specify OpenTelemetry instrumentation points at gateway ingress and event bus producer; CodeGen will add span creation and a latency histogram metric exported to the observability platform.",
+        "recommended": true
+      },
+      {
+        "label": "Measure End-to-End Device to Event Bus",
+        "resolution": "The <100ms SLA is defined as p99 latency from the device-side WebSocket send timestamp (embedded in the FHIR Observation.effectiveDateTime) to event bus publish ACK, requiring clock synchronization (NTP/PTP) between bedside monitors and the ingestion service.",
+        "rationale": "Provides a true patient-safety-oriented latency guarantee but introduces dependency on vendor device clock accuracy and network conditions outside the team's control.",
+        "downstream_impact": "Architect must specify clock-sync requirements for Philips/GE connectors; CodeGen must implement clock-skew detection and alerting, significantly increasing scope.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 250.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": true,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "43fe87b3-6be9-4ab1-9559-6407d188463e",
+    "ambiguity_class": "sla-binding",
+    "slot_value_hash": "1d95bb928b06",
+    "title": "99.95% Uptime Measurement Window and Exclusions Undefined",
+    "detail": "The PRD does not define the uptime measurement window (monthly vs. annual), what constitutes 'downtime' (full outage vs. degraded throughput), or whether planned maintenance windows are excluded.",
+    "prd_quote": "99.95% uptime.",
+    "prd_section": "SLA",
+    "gap_description": "The PRD does not define the uptime measurement window (monthly vs. annual), what constitutes 'downtime' (full outage vs. degraded throughput), or whether planned maintenance windows are excluded.",
+    "options": [
+      {
+        "label": "Monthly Rolling Window, No Maintenance Exclusions",
+        "resolution": "99.95% uptime is measured as a rolling 30-day window. Downtime is defined as any period where >1% of WebSocket connections fail to establish or >5% of ingest requests return non-2xx responses for >30 consecutive seconds. Planned maintenance counts against the SLA.",
+        "rationale": "Rolling monthly windows are standard in cloud SLA contracts (AWS, Azure precedent); excluding maintenance would incentivize scheduling outages, which is unacceptable for a clinical system.",
+        "downstream_impact": "Architect will design zero-downtime deployment strategy (blue/green or canary); CodeGen will implement health-check endpoints and circuit breakers to enable automated failover.",
+        "recommended": true
+      },
+      {
+        "label": "Annual Window with 4-Hour Maintenance Exclusion",
+        "resolution": "99.95% uptime is measured annually (calendar year). Up to 4 hours of pre-announced planned maintenance per quarter is excluded from downtime calculation, provided 72-hour advance notice is given to Cardiology engineering.",
+        "rationale": "Annual windows smooth out short-term incidents and maintenance exclusions are common in enterprise healthcare IT contracts; acceptable if Cardiology team agrees in writing.",
+        "downstream_impact": "Architect may defer zero-downtime deployment complexity; CodeGen implements a maintenance-mode flag, but Cardiology must build tolerance for scheduled outages into their consumer logic.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 200.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": false,
+    "is_eligible_for_promotion": false
+  },
+  {
+    "card_id": "de9eb528-e231-4392-89c9-3c1276f2e26f",
+    "ambiguity_class": "scope-resolution",
+    "slot_value_hash": "a974afc55e1c",
+    "title": "Unapproved External Tool Connections \u2014 Remediation Scope Undefined",
+    "detail": "The PRD acknowledges existing unauthorized connections but does not specify whether this API must enforce a hard block on unapproved connectors at launch, or whether a discovery/remediation period precedes enforcement.",
+    "prd_quote": "some teams have been connecting to unapproved external tools without formal review.",
+    "prd_section": "External integrations",
+    "gap_description": "The PRD acknowledges existing unauthorized connections but does not specify whether this API must enforce a hard block on unapproved connectors at launch, or whether a discovery/remediation period precedes enforcement.",
+    "options": [
+      {
+        "label": "Hard Block at Launch with Allowlist Enforcement",
+        "resolution": "At launch, the ingestion API will reject all connections not present on a Security Architecture-approved connector allowlist. Existing unapproved connections must complete a formal vendor review (per Vendor Management) before launch date or be terminated. Allowlist changes require Security Architecture sign-off.",
+        "rationale": "HIPAA \u00a7164.308(a)(1) requires a risk management program; permitting known-unapproved connections post-launch would constitute an unmitigated risk finding in an audit.",
+        "downstream_impact": "Architect will design an allowlist enforcement layer at the API gateway; CodeGen will implement connection-rejection logic with a structured error response directing teams to the vendor review process.",
+        "recommended": true
+      },
+      {
+        "label": "90-Day Discovery Period with Logging Before Block",
+        "resolution": "For 90 days post-launch, unapproved connections are permitted but logged with full metadata (source IP, vendor identity, data volume). After 90 days, connections not on the approved allowlist are automatically terminated. Privacy Office receives weekly reports during the discovery period.",
+        "rationale": "Avoids disrupting clinical workflows that may depend on unapproved connections while building an evidence base for the formal vendor review; reduces launch risk.",
+        "downstream_impact": "Architect must design a connection-audit logging pipeline; CodeGen implements a 'warn-mode' enforcement flag and automated cutover scheduler, adding scope to the initial release.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 150.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": false,
+    "is_eligible_for_promotion": true
+  },
+  {
+    "card_id": "d6c311c7-0531-4551-a6f8-6195072607a3",
+    "ambiguity_class": "identifier-format",
+    "slot_value_hash": "f22988f5c463",
+    "title": "FHIR Observation Identifier Format Not Specified",
+    "detail": "The PRD does not specify the FHIR Observation.identifier system URI, versioning (FHIR R4 vs R5), or required LOINC codes for each vital sign, leaving the canonical event schema undefined.",
+    "prd_quote": "HL7 FHIR Observation resources for heart rate, SpO2, blood pressure, temperature.",
+    "prd_section": "In-scope",
+    "gap_description": "The PRD does not specify the FHIR Observation.identifier system URI, versioning (FHIR R4 vs R5), or required LOINC codes for each vital sign, leaving the canonical event schema undefined.",
+    "options": [
+      {
+        "label": "FHIR R4 with Mandatory LOINC Codes per Vital",
+        "resolution": "All Observation resources must conform to FHIR R4 (4.0.1). Observation.code must include the following LOINC codes: heart rate 8867-4, SpO2 59408-5, systolic BP 8480-6, diastolic BP 8462-4, body temperature 8310-5. Observation.identifier.system must be 'urn:oid:<org-oid>:vitals'.",
+        "rationale": "FHIR R4 is the current US Core baseline required by CMS Interoperability Rule (45 CFR \u00a7170.315); LOINC codes are the ONC-mandated terminology for vital signs.",
+        "downstream_impact": "Architect will define the canonical Avro/JSON schema for the event bus using these LOINC codes; CodeGen will implement FHIR R4 validation middleware rejecting non-conformant payloads.",
+        "recommended": true
+      },
+      {
+        "label": "Vendor-Native Format with Normalization Layer",
+        "resolution": "Accept vendor-native data formats from Philips and GE connectors and perform FHIR R4 normalization within the ingestion service, mapping vendor proprietary codes to LOINC at ingest time.",
+        "rationale": "Reduces integration burden on vendor connectors that may not natively emit FHIR, at the cost of maintaining vendor-specific mapping tables.",
+        "downstream_impact": "CodeGen must implement per-vendor mapping dictionaries and a normalization pipeline stage; schema drift in vendor APIs will require ongoing maintenance effort.",
+        "recommended": false
+      }
+    ],
+    "team_occurrence_count": 0,
+    "blast_radius_cost_usd": 120.0,
+    "re_run_cost_usd": 0.0652,
+    "is_gating": false,
+    "is_eligible_for_promotion": false
+  }
+]

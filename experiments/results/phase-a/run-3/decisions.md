@@ -1,0 +1,8 @@
+# Decisions for run 3d09420b-59fa-4b8c-943a-3aeec1b5d1e1
+Team: experiment-phase-a-run-3
+
+- **b26c7ce4** accept: All 18 HIPAA Safe Harbor identifiers (§164.514(b)(2)) present in outbound FHIR Observation resources — including patient name, MRN, dates beyond year, device identifiers, and geographic data — must be replaced with a deterministic, reversible token managed by the internal tokenization service before publication to the clinical event bus.
+- **8ca5c5e5** accept: Each approved vendor connector must authenticate via mTLS with a vendor-issued certificate AND present a short-lived OAuth 2.0 client-credentials token (scope: vitals:ingest) issued by the internal authorization server. Both factors required before any PHI is transmitted.
+- **2bc7e7f1** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **b5d10c1b** accept: Vitals events on the clinical event bus are retained for 24 hours (sufficient for consumer replay on failure). Events are simultaneously written to encrypted cold storage (AES-256) with a 6-year retention period and automated deletion, with access restricted to the Privacy Office and Security Architecture.
+- **4d49d1a2** accept: Each WebSocket session must emit audit log entries for: connection established (with authenticated vendor identity and source IP), connection terminated (with reason code), and per-message metadata (timestamp, patient token, vital type, byte size — no raw PHI values). Logs must be written to an append-only, tamper-evident audit store with 6-year retention, accessible only to Security Architecture and Privacy Office.

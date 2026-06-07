@@ -1,0 +1,8 @@
+# Decisions for run 46d6d9e9-87b7-4a3f-a8ff-577fd71c711e
+Team: experiment-phase-b-run-2
+
+- **0be92de1** accept: At egress, replace FHIR Observation.subject.reference (patient ID) and Observation.encounter.reference with a deterministic HMAC-SHA256 token keyed per-deployment. All other 18 HIPAA Safe Harbor identifiers (§164.514(b)(2)) present in the resource must be removed. A mapping table is retained in a PHI-classified store accessible only to authorized re-identification workflows.
+- **8035279b** accept: Each vendor connector must authenticate via mutual TLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to read:vitals only. Certificates rotate every 90 days. No connector may be activated without a signed BAA and vendor management approval ticket.
+- **c48f7fbe** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **36cffec4** accept: WebSocket sessions carrying PHI must terminate after 15 minutes of no data frames. Clients must re-authenticate via a short-lived JWT (max 15-minute expiry) refresh before reconnecting. Session tokens are bound to the originating TLS session ID.
+- **68b81a47** accept: The <100ms SLA is defined as the p99 latency from the timestamp of the first TCP/WebSocket data frame received at the API gateway's network interface to the event bus publish acknowledgment, measured continuously via distributed tracing. Vendor network transit time is excluded and tracked separately as a vendor SLA.

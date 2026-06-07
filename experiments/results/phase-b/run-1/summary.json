@@ -1,0 +1,33 @@
+{
+  "phase": "B",
+  "run_idx": 1,
+  "run_id": "0347440a-969f-45aa-b448-a80597a7d58a",
+  "team_id": "experiment-phase-b-run-1",
+  "started_at": "2026-06-07T04:27:00.287681+00:00",
+  "wall_clock_seconds": 166.15,
+  "stage_durations_seconds": {
+    "ingest": 0.1,
+    "assessor": 75.31,
+    "architect": 48.41,
+    "test_plan": 13.61,
+    "codegen": 26.21,
+    "review_scan": 0.2,
+    "deliver": 0.01
+  },
+  "total_tokens": 16419,
+  "total_cost_usd": 0.1877,
+  "card_count": 7,
+  "gating_card_count": 5,
+  "decisions_applied": 5,
+  "spec_capability": "hipaa-safe-harbor-pseudonymization",
+  "spec_requirement_count": 5,
+  "spec_scenario_total": 12,
+  "spec_must_on_line_1_count": 5,
+  "spec_decision_ref_count": 5,
+  "validator": {
+    "exit_code": 0,
+    "stdout": "Change 'add-hipaa-safe-harbor-pseudonymization' is valid\n",
+    "stderr": "",
+    "summary": "PASS"
+  }
+}

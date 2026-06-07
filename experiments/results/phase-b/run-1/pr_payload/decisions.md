@@ -1,0 +1,8 @@
+# Decisions for run 0347440a-969f-45aa-b448-a80597a7d58a
+Team: experiment-phase-b-run-1
+
+- **bfb13536** accept: At egress, replace FHIR Observation.subject.reference and Observation.encounter.reference with a deterministic HMAC-SHA256 pseudonym keyed by a Privacy-office-managed secret. All 18 HIPAA Safe Harbor identifiers (§164.514(b)(2)) present in the resource MUST be removed or pseudonymized; a field inventory must be approved by the Privacy Office before launch.
+- **16709c4d** accept: All third-party vendor connectors (Philips IntelliVue, GE CARESCAPE) MUST authenticate via mutual TLS (mTLS) for transport-layer identity and present a short-lived OAuth 2.0 client_credentials token scoped to 'vitals:ingest'. Onboarding requires a signed BAA and Vendor Management approval ticket before credentials are issued.
+- **c46cef1f** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **b438868f** accept: The Cardiology consumer is granted read access only to a dedicated event bus topic containing the minimum-necessary field set (vital-sign code, value, unit, effectiveDateTime, pseudonymized subject ID). Access is enforced via topic-level ACL. A Data Use Agreement signed by Cardiology engineering and the Privacy Office enumerates the permitted fields before launch. Future consumers require a separate DUA and Privacy Office review.
+- **3c0d577b** accept: The <100ms SLA is measured as p99 latency from WebSocket frame receipt at the API gateway to confirmed publish acknowledgment from the clinical event bus broker, excluding vendor-side network transit. This measurement point and percentile MUST be captured in the observability dashboard and included in monthly SLA reports.

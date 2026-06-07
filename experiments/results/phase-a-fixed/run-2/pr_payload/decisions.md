@@ -1,0 +1,8 @@
+# Decisions for run 81b67b06-20ac-4f8e-a4aa-53af34e16272
+Team: experiment-phase-a-run-2
+
+- **8ad18492** accept: Egress redaction must remove or tokenize all 18 identifiers defined in HIPAA §164.514(b)(2), including patient name, MRN, device serial number, and geographic data finer than state, before events are published to the clinical event bus consumer.
+- **4e47eb57** accept: Each approved vendor connector must authenticate via mTLS (client certificate issued by internal PKI) combined with OAuth 2.0 client_credentials grant scoped to the specific device fleet. Unapproved connectors are rejected at the gateway with HTTP 403 and logged to SIEM.
+- **569b925f** swap: 99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.
+- **7231ed66** accept: The event bus subscription for Cardiology must be filtered to FHIR Observations linked to patients with an active Cardiology encounter (Encounter.serviceType = cardiology). Delivered fields are limited to: Observation.code, Observation.value, Observation.effectiveDateTime, and a pseudonymized subject token. Subject demographics are excluded.
+- **f627f354** accept: WebSocket connections must present a signed JWT (RS256, issued by the internal IdP) in the HTTP Upgrade request Authorization header. Sessions exceeding 15 minutes must re-authenticate using a short-lived refresh token; failure to re-authenticate within 30 seconds of expiry results in connection termination and event 1008 (Policy Violation).
