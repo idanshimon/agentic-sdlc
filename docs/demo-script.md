@@ -1,5 +1,6 @@
 # v0.7 demo script — pipeline-centric walkthrough
 
+> **Assistant:** customer-visible reading layer over the ledger, available on every tab via the floating Sparkles button or ⌘K.
 > **Audience:** architects + engineering leaders evaluating governed agentic SDLC.
 > **Time:** 10 minutes click-by-click + 5 minutes Q&A.
 > **Pre-req:** all four planes deployed; URLs filled in at the bottom of this doc.
@@ -17,6 +18,8 @@ Three tabs, in this order:
 3. **Tab C — explainer** (offline backup, dark theme, 4-plane diagram): open `docs/explainer.html` locally as a file:// URL
 
 Optional Tab D for Q&A: standards-bundles directory in GitHub (`https://github.com/idanshimon/agentic-sdlc/tree/main/standards-bundles`).
+
+The AgentAssistant slide-over (floating Sparkles button, or ⌘K) is wired on every tab in Tab A and Tab B. It reads whatever page you are on and answers from real run state. See Step 9.
 
 ---
 
@@ -159,6 +162,34 @@ Optional Tab D for Q&A: standards-bundles directory in GitHub (`https://github.c
 > the PR, drafts an ADR, assigns reviewers, blocks merge until quorum.
 > Five percent canary rollout for seven days; auto-revert if metrics
 > regress. Every merge writes a `meta` ledger entry.
+
+---
+
+## Step 9 — Context-aware AgentAssistant
+
+**Action:** Stay on Tab A's run-detail page. There should be 5 awaiting-gate decision cards on screen. Click the floating Sparkles button at the bottom-right, or hit ⌘K. A slide-over opens.
+
+**Verbal:**
+
+> Notice the chip suggestions at the top of the panel. They are not static. Because this run is awaiting gate, the first chip reads `What do you recommend for these cards?`. If I had opened the assistant from the dashboard, the chip would instead read `N runs awaiting gate, what should I clear first?` with N counted from the actual portfolio.
+
+**Action:** Click the recommendation chip, or type `what do you recommend`. The reply appears.
+
+**Verbal (point to the reply text):**
+
+> The reply quotes this run's actual run id. Each of the 5 awaiting-gate decisions is listed verbatim with its `bundle_refs` chips, the same chips you saw in the cards. The cost so far is summed from the real ledger entries for this run. PHI-high count is from the same source. Nothing here is a template; the assistant read the run state and the run-scoped ledger entries and composed the reply from those.
+
+**Action:** Switch to Tab A's dashboard. Open the assistant again. Type `summarize the portfolio`.
+
+**Verbal:**
+
+> Now the same assistant is reading a different shape: total runs, by_status breakdown, total cost across the portfolio, and citation density across the ledger. Same component, different context, different data source.
+
+**Talking point:**
+
+> This is grounded in real data, not pre-canned. The function that gathers context for the demo is `gatherContext()`. In production, that same snapshot is the system prompt sent to the orchestrator's chat agent; the LLM composes the reply. In v0.7 the demo is deterministic, so the composer is local. The contract is identical.
+
+> v0.7 ships the deterministic stand-in. Live LLM integration is not promised in this release.
 
 ---
 

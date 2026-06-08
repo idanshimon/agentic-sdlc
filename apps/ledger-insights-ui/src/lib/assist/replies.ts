@@ -1,369 +1,524 @@
-/* Pre-canned agent replies for Demo Mode.
+"use client";
+/* Context-aware agent reply engine.
  *
- * Each reply is keyed by `AssistContextKind` and a fuzzy-matched user prompt
- * keyword. Returns narrative text + ApplyAction[] the user can click to apply
- * back to the live state.
+ * Reads the actual demo store + run state at reply time and synthesizes
+ * replies grounded in what's literally on screen. No more keyword-matched
+ * pre-canned text — replies are composed from real data.
  *
- * In production these come from the orchestrator's chat endpoint; in demo
- * mode they're hand-authored to look reasonable for a customer audience.
+ * Production parity: in live mode the same `gatherContext()` output becomes
+ * the system-prompt context block sent to the orchestrator chat agent. The
+ * demo composer is the deterministic stand-in for the LLM call.
  */
+
 import type { AssistContext, ApplyAction } from "./context";
+import {
+  getDemoRun,
+  listDemoRuns,
+  listDemoLedgerEntries,
+  getDemoArtifacts,
+} from "@/lib/demo";
 
 export interface AgentReply {
   text: string;
   reasoning?: string;
-  /** Optional patch the user can click "Apply" on. */
   actions: ApplyAction[];
-  /** Cited bundle rules / decisions / runs for this reply. */
   citations?: { label: string; ref: string }[];
 }
 
-interface ReplyMatcher {
-  /** All keywords (lowercased) must appear in the user prompt for this match. */
-  keywords: string[];
-  reply: (ctx: AssistContext) => AgentReply;
+/* ─────────────── context gathering ─────────────── */
+
+export interface GatheredContext {
+  viewing: AssistContext;
+  run?: {
+    id: string;
+    status: string;
+    stage: string | null;
+    awaiting_gate: boolean;
+    completed_stages: string[];
+    has_artifacts: boolean;
+    pr_url?: string;
+  };
+  decisions: Array<{
+    id: string;
+    decision: string;
+    stage: string;
+    bundle_refs: string[];
+    phi_class: string;
+    cost_usd: number;
+    model_used: string;
+    rationale: string;
+  }>;
+  portfolio?: {
+    total_runs: number;
+    by_status: Record<string, number>;
+    awaiting_gate_count: number;
+    total_cost_usd: number;
+    total_decisions: number;
+    bundle_citation_density: number;
+  };
 }
 
-/* ─────────────── per-context demo replies ─────────────── */
+function readDecisions(runId?: string) {
+  const filter = runId
+    ? { run_id: runId, entry_type: "runtime", limit: 50 }
+    : { entry_type: "runtime", limit: 25 };
+  const entries = listDemoLedgerEntries(filter);
+  return entries.map((e) => ({
+    id: String(e.id ?? e.entry_id ?? "(no-id)"),
+    decision: String(e.decision ?? "(no decision text)"),
+    stage: String(e.stage ?? "?"),
+    bundle_refs: Array.isArray(e.bundle_refs) ? (e.bundle_refs as string[]) : [],
+    phi_class: String(e.phi_class ?? "none"),
+    cost_usd: Number(e.cost_usd ?? 0),
+    model_used: String(e.model_used ?? "?"),
+    rationale: String(e.rationale ?? ""),
+  }));
+}
 
-const DASHBOARD_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["health", "status"],
-    reply: () => ({
-      text: "All four planes report healthy. Standards bundles are pinned at v0.1.0 (security/privacy/architect/finops). Pipeline is processing 1 active demo run. Ledger is recording 5 decisions with full bundle citations. Agent HQ runtime registered 4 active personas. Combined posture score: **92/100** — only deduction is the 1 stale prompt version on `test_plan.derive` (v0.1.0 → v0.2.0 available).",
-      actions: [
-        { kind: "navigate", description: "Update test_plan prompt to v0.2.0", href: "/prompts" },
-        { kind: "navigate", description: "View governance reports", href: "/reports" },
-      ],
-      citations: [
-        { label: "Stale prompt", ref: "prompt:test_plan.derive@v0.1.0" },
-      ],
-    }),
-  },
-  {
-    keywords: ["report", "exec", "summary"],
-    reply: () => ({
-      text: "I drafted an executive summary for the last 24h: **8 runs · 5 decisions · $0.62 spend · 0 PHI violations · 0 secret-scan blockers · 12% autopilot rate**. The autopilot rate trend is rising +4pp week-over-week — your team's precedent ledger is paying off. Want me to open the full Reports page or send this to your CFO format?",
-      actions: [
-        { kind: "navigate", description: "Open governance reports", href: "/reports" },
-      ],
-    }),
-  },
-];
+function readPortfolio() {
+  const runs = listDemoRuns();
+  const by_status: Record<string, number> = {};
+  let awaiting_gate_count = 0;
+  let total_cost_usd = 0;
+  for (const r of runs) {
+    const status = r.status ?? "unknown";
+    by_status[status] = (by_status[status] ?? 0) + 1;
+    if (status === "awaiting_gate") awaiting_gate_count += 1;
+  }
+  const all_decisions = listDemoLedgerEntries({ entry_type: "runtime" });
+  for (const e of all_decisions) {
+    total_cost_usd += Number(e.cost_usd ?? 0);
+  }
+  const cited = all_decisions.filter(
+    (e) => Array.isArray(e.bundle_refs) && (e.bundle_refs as string[]).length > 0,
+  ).length;
+  const bundle_citation_density =
+    all_decisions.length === 0 ? 0 : cited / all_decisions.length;
+  return {
+    total_runs: runs.length,
+    by_status,
+    awaiting_gate_count,
+    total_cost_usd,
+    total_decisions: all_decisions.length,
+    bundle_citation_density,
+  };
+}
 
-const RUN_RESOLVER_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["recommend"],
-    reply: (ctx) => ({
-      text: `Based on your **security/v0.1.0** and **privacy/v0.1.0** bundle rules, the Architect+Privacy precedent ledger, and HIPAA §164.312(d) entity-authentication requirements, I recommend approving all 5 cards as the Assessor classified them. The recommendations form a coherent posture: mTLS+OAuth for vendor connectors, Safe Harbor 18-identifier redaction at egress, 6-year retention with archival, field-level allowlist for the consumer, and RS256 JWT 15min TTL on WebSocket. Combined risk surface: $1,750 blast-radius averted.`,
-      reasoning: "All 5 cards have a 'recommended' option backed by at least one bundle rule citation. No card has a precedent-mismatch score above 0.2. Auto-resolve confidence: high.",
-      actions: [],
-      citations: [
-        { label: "HIPAA §164.312(d)", ref: "security/v0.1.0/AUTH-001" },
-        { label: "HIPAA §164.514(b) Safe Harbor", ref: "privacy/v0.1.0/PHI-REDACT-001" },
-        { label: "HIPAA §164.530(j)", ref: "privacy/v0.1.0/RETENTION-001" },
-      ],
-    }),
-  },
-  {
-    keywords: ["override", "different"],
-    reply: () => ({
-      text: "If you override the recommended option on Card 1 (`auth-policy`) to API-key-with-IP-allowlist, you'll trip `security/v0.1.0/AUTH-001` which requires entity authentication for HIPAA. The pipeline will block at review-scan unless you also stage a standards-change PR to relax that rule. Cost of override: $450 incremental blast radius + ~2 days delay for the standards-change committee. Want me to draft the OpenSpec change proposal?",
-      actions: [
-        {
-          kind: "create_bundle_change",
-          description: "Draft openspec change: relax AUTH-001 to allow API-key for legacy connectors",
-          dept: "security",
-          new_version: "v0.2.0",
-          reasoning: "Some legacy Philips IntelliVue firmware versions don't support OAuth flows natively — relaxation needed for vendor compatibility.",
-        },
-      ],
-      citations: [
-        { label: "Blocking rule", ref: "security/v0.1.0/AUTH-001" },
-      ],
-    }),
-  },
-];
+/** Build the full state snapshot. Called fresh on every user turn. */
+export function gatherContext(viewing: AssistContext): GatheredContext {
+  const out: GatheredContext = { viewing, decisions: [] };
 
-const PROMPT_EDIT_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["test", "decision"],
-    reply: () => ({
-      text: "I see you're on the test_plan prompt. The current v0.1.0 doesn't bind decisions into the prompt context — that's the bug we caught in the Phase A vs Phase B experiment (it produced generic CRUD tests for streaming WebSocket APIs). I drafted a v0.2.0 that consumes both `prd_text` AND `decisions` AND requires verbatim decision citations in each test entry. Want me to apply this draft? It will create a new version in your local edit history and you can roll back any time.",
-      actions: [
-        {
-          kind: "apply_text_edit",
-          description: "Apply test_plan.derive v0.2.0 (decision-grounded)",
-          new_content: `# Test Plan stage prompt v0.2.0 (decision-grounded)
+  if (viewing.kind === "run-detail" || viewing.kind === "run-resolver-gate") {
+    const runId = viewing.id;
+    if (runId) {
+      const run = getDemoRun(runId);
+      // Spec REQ-3: missing run from the demo store MUST yield run=undefined.
+      // The composer falls back to an open-question reply in that path.
+      if (run) {
+        const artifacts = getDemoArtifacts(runId);
+        const completed_stages = run.events
+          ? Array.from(
+              new Set(
+                run.events
+                  .filter((e) => e.status === "completed")
+                  .map((e) => String(e.stage)),
+              ),
+            )
+          : [];
+        out.run = {
+          id: runId,
+          status: String(run.status ?? "unknown"),
+          stage: run.current_stage ?? null,
+          awaiting_gate: run.status === "awaiting_gate",
+          completed_stages,
+          has_artifacts: !!artifacts,
+          pr_url: artifacts?.pr_url,
+        };
+        out.decisions = readDecisions(runId);
+      }
+    }
+  } else if (
+    viewing.kind === "decisions" ||
+    viewing.kind === "telemetry" ||
+    viewing.kind === "reports"
+  ) {
+    out.decisions = readDecisions();
+    out.portfolio = readPortfolio();
+  } else if (viewing.kind === "dashboard" || viewing.kind === "runs-list") {
+    out.portfolio = readPortfolio();
+    out.decisions = readDecisions().slice(0, 5);
+  }
+  return out;
+}
 
-You are the Test Plan generator. Produce a test plan that verifies the
-PRD requirements AND every resolved decision.
+/* ─────────────── intent detection ─────────────── */
 
-## Inputs
-- PRD body: {prd_text}
-- Resolved decisions: {decisions}
-- Architecture proposal: {architecture}
+type Intent =
+  | "recommend"
+  | "explain"
+  | "summarize"
+  | "what_if"
+  | "drill_in"
+  | "compare"
+  | "next_step"
+  | "open_question";
 
-## Required output
-Markdown test plan with:
-1. **Decision-coverage tests** — for each resolved decision, ≥1 test that
-   verifies the system enforces that decision. Quote each decision verbatim
-   in the test description.
-2. **PRD-requirement tests** — happy path, error path, contract test per
-   stated requirement.
-3. **Bundle-rule tests** — for every cited bundle rule, ≥1 test that
-   verifies the rule is enforced.
-4. **PHI guard tests** — verify no raw PHI in logs, prompts, telemetry.
-5. **Performance tests** — verify SLAs from PRD/decisions.
-
-Each test entry: {name, type, description, decision_ref|bundle_ref,
-fixture, asserts}.
-
-## Hard rules
-- Quote each decision verbatim in the relevant test description.
-- Cite the bundle rule in the test's tag/category.
-- Synthetic PHI only.
-- Generic CRUD tests are NOT acceptable for streaming/auth/PHI requirements.
-`,
-        },
-      ],
-      citations: [
-        { label: "Phase A vs B finding", ref: "experiments/COMPARISON.md#test-spec" },
-      ],
-    }),
-  },
-  {
-    keywords: ["why", "explain"],
-    reply: (ctx) => ({
-      text: `This prompt is the template the orchestrator binds at the **${ctx.id ?? "current"}** stage. The variables in curly braces (\`{prd_text}\`, \`{decisions}\`, etc.) are populated at runtime from the run state. Each version you save here becomes a new prompt-library variant — but to actually ship it to production runs, you'll need an OpenSpec change PR for the orchestrator's prompt registry. Want me to walk you through the deployment flow?`,
-      actions: [
-        { kind: "navigate", description: "View OpenSpec methodology", href: "/changes" },
-      ],
-    }),
-  },
-];
-
-const AGENT_EDIT_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["tighten", "phi"],
-    reply: (ctx) => ({
-      text: `I can tighten this agent's PHI rule. Currently it cites \`security/v0.1.0/PHI-001\` once. I propose adding three concrete don'ts: never include raw MRN/SSN/DOB even in code comments, always use \`redacted_id()\` for log lines, and never write to \`Observation.subject.reference\` without first running it through the tokenization service. This is a cumulative tightening — no relaxation, so it won't trigger a standards-change committee review.`,
-      actions: [
-        {
-          kind: "apply_text_edit",
-          description: `Add three concrete PHI don'ts to ${ctx.id} agent`,
-          new_content: "(full agent.md content with appended hard rules — handler will compose)",
-        },
-      ],
-      citations: [
-        { label: "PHI rule", ref: "security/v0.1.0/PHI-001" },
-      ],
-    }),
-  },
-  {
-    keywords: ["add", "model"],
-    reply: () => ({
-      text: "If you add `gpt-5` to preferred_models, I should warn: GPT-5 is not currently routed via APIM in your tenant. The orchestrator will fall back to the next model in the list. To actually use GPT-5 you need (a) APIM route for it, (b) APIM rate-limit policy, (c) prompt-library entry for `<stage>:openai-apim:gpt-5`. Want me to draft an OpenSpec change covering all three?",
-      actions: [
-        {
-          kind: "create_bundle_change",
-          description: "Draft openspec change: register gpt-5 via APIM with prompt-library variant",
-          dept: "architect",
-          new_version: "v0.2.0",
-          reasoning: "Add GPT-5 routing for stages that benefit from longer-context reasoning.",
-        },
-      ],
-    }),
-  },
-];
-
-const DECISIONS_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["why", "phi"],
-    reply: () => ({
-      text: "The 5 decisions for this run all classified `phi_class: high` because the Patient Vitals Streaming PRD explicitly mentions FHIR Observation resources with patient identifiers in `subject.reference` fields. The Assessor's PHI classifier matched 3 patterns: MRN-like identifier reference, FHIR resource subject pointer, and HIPAA Safe Harbor identifier category. All 5 decisions cite at least one PHI bundle rule. This is the expected posture for any run touching FHIR + PHI.",
-      actions: [],
-      citations: [
-        { label: "PHI classifier", ref: "security/v0.1.0/PHI-001" },
-        { label: "Safe Harbor", ref: "privacy/v0.1.0/PHI-REDACT-001" },
-      ],
-    }),
-  },
-  {
-    keywords: ["amend", "rationale"],
-    reply: () => ({
-      text: "I can amend the rationale on a decision, but be aware: the original rationale stays in the audit trail. Every amend creates a new ledger entry of type `meta:rationale_amendment` with a pointer to the original. This preserves the integrity of the audit log while allowing post-hoc clarification. Which decision id do you want to amend?",
-      actions: [],
-    }),
-  },
-];
-
-const TELEMETRY_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["spend", "cost"],
-    reply: () => ({
-      text: "Your last 24h spend is $0.62 across 8 runs. Codegen accounts for 32% (largest), then Architect at 30%, Assessor 18%, TestPlan 12%. The TestPlan share rose from 4% to 12% this week — that's the v0.2.0 prompt fix doing real work (decision-grounded tests cost more than CRUD generics). Cost-per-decision is $0.124. If you want hard savings, the next lever is shifting Codegen from sonnet-4-6 to haiku-4-5 for runs without security/architect bundle citations — saves ~40% on that stage with ~5% quality loss in our eval.",
-      actions: [
-        { kind: "navigate", description: "Open governance reports", href: "/reports" },
-      ],
-    }),
-  },
-  {
-    keywords: ["drift", "trend"],
-    reply: () => ({
-      text: "Class drift over the last 7 days: `phi-classification` flat, `auth-policy` -8% (good — fewer ambiguous auth specs reaching the pipeline), `data-retention` +14% (this is new — investigate which team is filing PRDs without retention windows). Mean gate-wall-clock time is 47s, down from 2m12s last week — your humans are getting faster at the resolver gate.",
-      actions: [],
-      citations: [
-        { label: "Class window", ref: "telemetry/classes?window=7d" },
-      ],
-    }),
-  },
-];
-
-const BUNDLES_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["change", "edit", "rule"],
-    reply: () => ({
-      text: "Bundles can't be edited directly — that's by design. To change a rule, I need to draft an OpenSpec change PR that creates `standards-bundles/<dept>/v<n.n.n>/rules.yaml` (next minor version), reviewed by the bundle's pinned reviewer roster. Tell me which rule you want to change and I'll draft the proposal + tasks + spec delta.",
-      actions: [
-        {
-          kind: "create_bundle_change",
-          description: "Draft openspec change for next bundle version",
-          dept: "(unspecified)",
-          new_version: "v0.2.0",
-          reasoning: "Specify the rule and direction (tighten/relax) to fill in.",
-        },
-      ],
-    }),
-  },
-];
-
-const RUNS_LIST_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["latest", "recent"],
-    reply: () => ({
-      text: "Showing the most recent 6 runs. The vitals-streaming demo run is currently `awaiting_gate` with 5 decisions pending human resolution. Eligibility-check ran clean (no gates triggered). The PCI-clean run is at the architect stage. Mean wall-clock for runs that completed: 4m12s. Want me to drill into a specific one?",
-      actions: [
-        { kind: "navigate", description: "Start a fresh run", href: "/runs/new" },
-      ],
-    }),
-  },
-];
-
-const REPORTS_REPLIES: ReplyMatcher[] = [
-  {
-    keywords: ["explain", "score"],
-    reply: () => ({
-      text: "Governance posture score is computed as: 0.4 × bundle-rule-coverage + 0.3 × decision-citation-completeness + 0.2 × prompt-version-currency + 0.1 × autopilot-precedent-confidence. Your current 92/100 breakdown: bundle coverage 100%, citation completeness 95%, prompt currency 75% (one stale), autopilot confidence 80%. Updating that one stale prompt would lift you to ~96/100.",
-      actions: [
-        { kind: "navigate", description: "Update stale prompt", href: "/prompts" },
-      ],
-    }),
-  },
-];
-
-/* ─────────────── master matcher ─────────────── */
-
-const MATCHERS: Record<string, ReplyMatcher[]> = {
-  dashboard: DASHBOARD_REPLIES,
-  "runs-list": RUNS_LIST_REPLIES,
-  "run-detail": RUN_RESOLVER_REPLIES,
-  "run-resolver-gate": RUN_RESOLVER_REPLIES,
-  decisions: DECISIONS_REPLIES,
-  telemetry: TELEMETRY_REPLIES,
-  bundles: BUNDLES_REPLIES,
-  "agents-list": AGENT_EDIT_REPLIES,
-  "agent-edit": AGENT_EDIT_REPLIES,
-  "prompts-list": PROMPT_EDIT_REPLIES,
-  "prompt-edit": PROMPT_EDIT_REPLIES,
-  reports: REPORTS_REPLIES,
+const INTENT_KEYWORDS: Record<Intent, string[]> = {
+  recommend: ["recommend", "should i", "approve", "what would you do", "auto"],
+  explain: ["why", "explain", "how does", "how do", "what does", "tell me about", "what is"],
+  summarize: ["summary", "summarize", "tldr", "tl;dr", "overview", "report", "status"],
+  what_if: ["what if", "if i ", "override", "instead", "different", "change", "swap"],
+  drill_in: ["which", "show me", "list", "find", "where"],
+  compare: ["compare", "difference", "vs", "versus", "better", "trade", "stale"],
+  next_step: ["next", "what now", "ship", "deploy", "merge", "approve all"],
+  open_question: [],
 };
 
-/** Generic fallback for any context. */
-const FALLBACK_REPLY: AgentReply = {
-  text: "I can read the current view's context but I don't have a pre-canned answer for that exact question. In production I'd route this through the orchestrator's chat agent with the bundle rules + recent decisions + active prompt as system context. Try one of these prompts: \"why\" / \"recommend\" / \"explain score\" / \"trend\" / \"add rule\" / \"override\".",
-  actions: [],
-};
+function detectIntent(prompt: string): Intent {
+  const lower = prompt.toLowerCase();
+  const ranked: Array<[Intent, number]> = (Object.keys(INTENT_KEYWORDS) as Intent[]).map(
+    (intent) => {
+      const kws = INTENT_KEYWORDS[intent];
+      const hits = kws.filter((kw) => lower.includes(kw)).length;
+      return [intent, hits];
+    },
+  );
+  ranked.sort((a, b) => b[1] - a[1]);
+  if (ranked[0][1] === 0) return "open_question";
+  return ranked[0][0];
+}
 
-/**
- * Pick the best pre-canned reply for the user's prompt within the current
- * context. Falls back to a generic explanation when no keyword matches.
- */
+/* ─────────────── reply composition helpers ─────────────── */
+
+function bulletList(items: string[], cap = 5): string {
+  return items.slice(0, cap).map((s) => `- ${s}`).join("\n");
+}
+
+function fmtUsd(n: number): string {
+  return `$${n.toFixed(4)}`;
+}
+
+function uniqueBundleRefs(decisions: GatheredContext["decisions"]): string[] {
+  const set = new Set<string>();
+  for (const d of decisions) for (const ref of d.bundle_refs) set.add(ref);
+  return Array.from(set);
+}
+
+/* ─────────────── per-context composers ─────────────── */
+
+function composeRunReply(g: GatheredContext, intent: Intent): AgentReply {
+  const r = g.run;
+  if (!r) {
+    return {
+      text: "I don't see a run loaded yet — give me a moment, or refresh the page.",
+      actions: [],
+    };
+  }
+  const decs = g.decisions;
+  const bundleRefs = uniqueBundleRefs(decs);
+  const totalCost = decs.reduce((acc, d) => acc + d.cost_usd, 0);
+  const phiHigh = decs.filter((d) => d.phi_class === "high").length;
+  const stagesDone = r.completed_stages.length;
+
+  const stateLine = r.awaiting_gate
+    ? `Run \`${r.id}\` is **awaiting human gate** at the resolver stage. ${decs.length} decision card${decs.length === 1 ? "" : "s"} need your call.`
+    : r.status === "completed"
+      ? `Run \`${r.id}\` is **complete**. ${stagesDone} stages shipped, ${decs.length} ledger decisions written.`
+      : `Run \`${r.id}\` is **${r.status}** at stage \`${r.stage ?? "?"}\`. ${stagesDone} stages complete so far.`;
+
+  if (intent === "recommend") {
+    if (!r.awaiting_gate) {
+      return {
+        text: `${stateLine}\n\nNothing to recommend — there are no open gates. The run is moving through the pipeline on its own. Ask "summarize" for current state or "explain" for a stage rationale.`,
+        actions: [],
+      };
+    }
+    const recItems = decs.map((d) => {
+      const refList = d.bundle_refs.length > 0 ? d.bundle_refs.join(", ") : "(no bundle citation)";
+      return `**${d.decision}** — cited ${refList}`;
+    });
+    return {
+      text: `${stateLine}\n\nReading the actual gate state, I recommend approving all ${decs.length} as the Assessor classified them. Each decision is bundle-cited; the combined posture is internally consistent.\n\n${bulletList(recItems, 8)}\n\nPHI-high decisions: ${phiHigh}/${decs.length}. Bundles in play: ${bundleRefs.join(", ") || "(none)"}. Reasoning cost so far: ${fmtUsd(totalCost)}.`,
+      reasoning: `gate=awaiting, decisions=${decs.length}, bundle_refs=${bundleRefs.length}, phi_high=${phiHigh}`,
+      actions: [],
+      citations: bundleRefs.slice(0, 5).map((ref) => ({ label: ref, ref })),
+    };
+  }
+
+  if (intent === "what_if") {
+    return {
+      text: `${stateLine}\n\nTo answer a what-if I need to know which card you're considering overriding. The cards on this run cite: ${bundleRefs.join(", ") || "(no rules cited yet)"}. Override any of those and the pipeline will block at review-scan unless you stage an OpenSpec change to relax the rule. Committee SLA on tighten-vs-relax is typically 1–3 business days.`,
+      actions: [],
+    };
+  }
+
+  if (intent === "explain" || intent === "open_question") {
+    if (decs.length === 0) {
+      return {
+        text: `${stateLine}\n\nThis run hasn't written any decisions yet — the orchestrator has only emitted ${stagesDone} stage events so far. Ask again once the resolver stage runs.`,
+        actions: [],
+      };
+    }
+    const phiLine =
+      phiHigh > 0
+        ? `${phiHigh}/${decs.length} decisions classified PHI-high`
+        : `no PHI-high classifications`;
+    const stageDist: Record<string, number> = {};
+    for (const d of decs) stageDist[d.stage] = (stageDist[d.stage] ?? 0) + 1;
+    const stageLines = Object.entries(stageDist).map(
+      ([s, n]) => `**${s}**: ${n} decision${n === 1 ? "" : "s"}`,
+    );
+    return {
+      text: `${stateLine}\n\n**What's actually in this run's ledger:**\n${bulletList(stageLines, 8)}\n\nBundle rules cited: ${bundleRefs.join(", ") || "(none)"}. ${phiLine}. Total reasoning cost: ${fmtUsd(totalCost)}. Models used: ${Array.from(new Set(decs.map((d) => d.model_used))).join(", ")}.`,
+      actions: [],
+      citations: bundleRefs.slice(0, 5).map((ref) => ({ label: ref, ref })),
+    };
+  }
+
+  if (intent === "summarize") {
+    return {
+      text: `${stateLine}\n\n${stagesDone} stages complete (${r.completed_stages.join(" → ") || "(none yet)"}). ${decs.length} ledger decisions, ${bundleRefs.length} unique bundle rules cited, ${phiHigh} PHI-high. Cost so far: ${fmtUsd(totalCost)}. ${r.has_artifacts ? `Artifacts available (architecture, test plan, code, decisions.md).` : `No artifacts yet — the deliver stage hasn't run.`}${r.pr_url ? ` PR: ${r.pr_url}` : ""}`,
+      actions: r.has_artifacts
+        ? [{ kind: "navigate", description: "View run artifacts", href: `/runs/${r.id}` }]
+        : [],
+    };
+  }
+
+  if (intent === "next_step") {
+    if (r.awaiting_gate) {
+      return {
+        text: `${stateLine}\n\nNext step is yours: approve the ${decs.length} cards (use the Approve-all-recommended button if you trust my read) or override the ones you disagree with. Once you approve, the run continues to architect → testplan → codegen → review → deliver and writes a PR.`,
+        actions: [],
+      };
+    }
+    if (r.status === "completed") {
+      return {
+        text: `${stateLine}\n\nNothing left to do on this run. ${r.pr_url ? `PR is open at ${r.pr_url}.` : "Open the artifacts to see the architecture, test plan, code, and decisions.md."}`,
+        actions: r.has_artifacts
+          ? [{ kind: "navigate", description: "Open artifacts", href: `/runs/${r.id}` }]
+          : [],
+      };
+    }
+    return {
+      text: `${stateLine}\n\nThe orchestrator is still working. Wait for stage \`${r.stage ?? "?"}\` to finish, or open the live event stream to watch.`,
+      actions: [],
+    };
+  }
+
+  return {
+    text: `${stateLine}\n\nI can answer: "what do you recommend", "explain the decisions", "summarize the run", "what if I override card 1", or "what's next". Ask anything specific about: ${bundleRefs.join(", ") || "this run's stages"}.`,
+    actions: [],
+  };
+}
+
+function composePortfolioReply(g: GatheredContext, intent: Intent): AgentReply {
+  const p = g.portfolio;
+  if (!p) return { text: "No portfolio state available yet.", actions: [] };
+  const decs = g.decisions;
+  const bundleRefs = uniqueBundleRefs(decs);
+  const statusLine =
+    Object.entries(p.by_status)
+      .map(([s, n]) => `${n} ${s}`)
+      .join(", ") || "no runs yet";
+  const headline = `**Portfolio:** ${p.total_runs} demo run${p.total_runs === 1 ? "" : "s"} (${statusLine}). ${p.total_decisions} decisions in the ledger, ${(p.bundle_citation_density * 100).toFixed(0)}% with bundle citations. Total reasoning cost: ${fmtUsd(p.total_cost_usd)}.`;
+
+  if (intent === "recommend" || intent === "next_step") {
+    if (p.awaiting_gate_count > 0) {
+      return {
+        text: `${headline}\n\nYou have **${p.awaiting_gate_count} run${p.awaiting_gate_count === 1 ? "" : "s"} awaiting gate** — that's your highest-leverage next step. Open Runs to clear them.`,
+        actions: [{ kind: "navigate", description: "Go to Runs", href: "/runs" }],
+      };
+    }
+    if (p.total_runs === 0) {
+      return {
+        text: `${headline}\n\nNo runs yet — start one from /runs/new with the vitals or eligibility fixture to see the pipeline in motion.`,
+        actions: [{ kind: "navigate", description: "Start a new run", href: "/runs/new" }],
+      };
+    }
+    return {
+      text: `${headline}\n\nNothing urgent. Bundle citation density is ${(p.bundle_citation_density * 100).toFixed(0)}% — healthy. Worth poking at the Reports page if you want to see where spend goes by stage.`,
+      actions: [{ kind: "navigate", description: "Open governance reports", href: "/reports" }],
+    };
+  }
+
+  if (intent === "summarize" || intent === "explain") {
+    return {
+      text: `${headline}\n\nBreakdown:\n${bulletList(
+        [
+          `Awaiting human gate: ${p.awaiting_gate_count}`,
+          `Bundle rules in play: ${bundleRefs.length} (${bundleRefs.slice(0, 4).join(", ")}${bundleRefs.length > 4 ? "…" : ""})`,
+          `Avg cost per decision: ${p.total_decisions > 0 ? fmtUsd(p.total_cost_usd / p.total_decisions) : "n/a"}`,
+          `Models: ${Array.from(new Set(decs.map((d) => d.model_used))).join(", ") || "(none)"}`,
+        ],
+        6,
+      )}`,
+      actions: [],
+      citations: bundleRefs.slice(0, 5).map((ref) => ({ label: ref, ref })),
+    };
+  }
+
+  return {
+    text: `${headline}\n\nAsk "what should I do next", "summarize", or "explain bundle coverage".`,
+    actions: [],
+  };
+}
+
+function composeContextualReply(
+  g: GatheredContext,
+  intent: Intent,
+): AgentReply {
+  const v = g.viewing;
+  switch (v.kind) {
+    case "run-detail":
+    case "run-resolver-gate":
+      return composeRunReply(g, intent);
+    case "dashboard":
+    case "runs-list":
+    case "decisions":
+    case "telemetry":
+    case "reports":
+      return composePortfolioReply(g, intent);
+    case "agent-edit":
+    case "agents-list":
+      return {
+        text: `You're editing the **${v.id ?? "?"}** agent. The agent assistant works on this resource specifically — every change you apply creates a new local version (rollbackable). Tell me concretely what to change: "tighten the PHI rule" / "add gpt-5 routing" / "explain bundle subscriptions".`,
+        actions: [],
+      };
+    case "prompt-edit":
+    case "prompts-list":
+      return {
+        text: `You're on the **${v.id ?? "prompt library"}**. Versioning is local-storage backed; every saved version shows up in the History tab with line-level diff. Tell me what to change: "bind decisions into context" / "add bundle-citation requirement" / "why is this template missing X".`,
+        actions: [],
+      };
+    case "bundles":
+      return {
+        text: `Standards bundles can't be edited directly — by design. To change a rule I'd draft an OpenSpec change PR for the next minor version, reviewed by the bundle's pinned reviewer roster. Tell me which dept and which rule.`,
+        actions: [
+          { kind: "navigate", description: "View OpenSpec changes flow", href: "/changes" },
+        ],
+      };
+    case "phi-classifier":
+      return {
+        text: `The PHI classifier runs at the Assessor stage and at the PreToolUse hook for IDE sessions. It pattern-matches on MRN-like identifiers, FHIR \`subject.reference\` pointers, name+DOB combinations, and the 18 HIPAA Safe Harbor categories. Output classes: none / low / high. Ask "why was X classified Y" with a specific decision id.`,
+        actions: [],
+      };
+    default:
+      return {
+        text: `I see you're on **${v.label ?? v.kind}**. Ask me a specific question — "summarize", "explain", "what's next", or "recommend".`,
+        actions: [],
+      };
+  }
+}
+
+/** Public entry point: same shape as the old `pickReply` so call sites work. */
 export function pickReply(
   context: AssistContext | null,
   userPrompt: string,
 ): AgentReply {
-  if (!context) return FALLBACK_REPLY;
-  const lower = userPrompt.toLowerCase();
-  const matchers = MATCHERS[context.kind] ?? [];
-  for (const m of matchers) {
-    if (m.keywords.every((kw) => lower.includes(kw))) {
-      return m.reply(context);
-    }
+  if (!context) {
+    return {
+      text: "I don't have a page context yet — give me a moment for the page to publish its state.",
+      actions: [],
+    };
   }
-  // First reply for the context as a soft default.
-  if (matchers.length > 0) return matchers[0].reply(context);
-  return FALLBACK_REPLY;
+  const g = gatherContext(context);
+  const intent = detectIntent(userPrompt);
+  return composeContextualReply(g, intent);
 }
 
-/**
- * Suggested prompts shown as chips before the user types anything.
- * Context-specific so the user can see what's possible at a glance.
- */
+/* ─────────────── suggestions (also context-aware) ─────────────── */
+
 export function getSuggestions(context: AssistContext | null): string[] {
   if (!context) return [];
-  switch (context.kind) {
-    case "dashboard":
-    case "reports":
+  const g = gatherContext(context);
+
+  if ((context.kind === "run-detail" || context.kind === "run-resolver-gate") && g.run) {
+    if (g.run.awaiting_gate) {
       return [
-        "How is the system health right now?",
-        "Show me an exec summary",
-        "What's the trend on autopilot rate?",
-      ];
-    case "runs-list":
-      return [
-        "What's the latest run state?",
-        "Which runs need my attention?",
-      ];
-    case "run-detail":
-    case "run-resolver-gate":
-      return [
-        "What do you recommend?",
+        "What do you recommend for these cards?",
         "What if I override card 1?",
-        "Why is this gating?",
+        "Explain the decisions",
       ];
-    case "decisions":
+    }
+    if (g.run.status === "completed") {
       return [
-        "Why are these classified PHI high?",
-        "How do I amend a rationale?",
+        "Summarize this run",
+        "Explain the decisions",
+        "What was the architecture?",
       ];
-    case "telemetry":
-      return [
-        "Where is my spend going?",
-        "What's the drift trend?",
-      ];
-    case "bundles":
-      return [
-        "How do I change a rule?",
-        "What does each bundle govern?",
-      ];
-    case "agents-list":
-    case "agent-edit":
-      return [
-        "Tighten the PHI rule",
-        "Add gpt-5 to preferred models",
-        "What does this agent write to ledger?",
-      ];
-    case "prompts-list":
-    case "prompt-edit":
-      return [
-        "Why this prompt? Explain it.",
-        "Update test_plan to bind decisions",
-      ];
-    case "phi-classifier":
-      return [
-        "How does the classifier work?",
-        "What patterns trigger high PHI class?",
-      ];
+    }
+    return ["Summarize this run", "What's next?", "Why is this stage running?"];
   }
+
+  if (context.kind === "dashboard" || context.kind === "runs-list") {
+    if (g.portfolio && g.portfolio.awaiting_gate_count > 0) {
+      return [
+        `${g.portfolio.awaiting_gate_count} runs awaiting gate — what should I clear first?`,
+        "Summarize the portfolio",
+        "What's the current spend?",
+      ];
+    }
+    if (g.portfolio && g.portfolio.total_runs === 0) {
+      return [
+        "How do I start a run?",
+        "Show me the demo flow",
+        "What does this dashboard show?",
+      ];
+    }
+    return [
+      "Summarize the portfolio",
+      "Where's my spend going?",
+      "What should I do next?",
+    ];
+  }
+
+  if (context.kind === "decisions") {
+    return [
+      "Why are these classified PHI high?",
+      "Summarize the bundle coverage",
+      "Which decisions cost the most?",
+    ];
+  }
+
+  if (context.kind === "telemetry" || context.kind === "reports") {
+    return [
+      "Where is my spend going?",
+      "What's the citation density trend?",
+      "Explain the posture score",
+    ];
+  }
+
+  if (context.kind === "bundles") {
+    return [
+      "How do I change a rule?",
+      "What does each bundle govern?",
+      "Show me the reviewer roster",
+    ];
+  }
+
+  if (context.kind === "agents-list" || context.kind === "agent-edit") {
+    return [
+      "Tighten the PHI rule",
+      "Add gpt-5 to preferred models",
+      "What does this agent write to ledger?",
+    ];
+  }
+
+  if (context.kind === "prompts-list" || context.kind === "prompt-edit") {
+    return [
+      "Why this prompt? Explain it.",
+      "Bind decisions into context",
+      "Compare versions",
+    ];
+  }
+
+  if (context.kind === "phi-classifier") {
+    return [
+      "How does the classifier work?",
+      "What patterns trigger high PHI class?",
+      "What's the false-positive rate?",
+    ];
+  }
+
+  return [];
 }

@@ -83,6 +83,32 @@ can write. Frontmatter MUST validate against
 `.github/agents/agent-frontmatter.schema.json`; CI rejects PRs that introduce
 malformed agent files.
 
+## In-UI AgentAssistant (reading layer, NOT a ledger writer)
+
+The `ledger-insights-ui` dashboard ships an in-UI conversational assistant
+(floating Sparkles button + ⌘K slide-over) that answers operator questions
+grounded in the live ledger + run + portfolio state. It is a **reading layer**
+over what already exists, NOT a custom agent that participates in the
+pipeline.
+
+Hard boundaries (enforced by the openspec change `add-context-aware-agent-assistant`):
+
+- The AgentAssistant **MUST NOT** write to the Decision Ledger.
+- The AgentAssistant **MUST NOT** modify standards bundles, agent files, or
+  prompt-library entries directly. Apply-back actions on agent / prompt
+  edits write to a local versioned store (rollback-friendly), not to the
+  canonical bundles.
+- Demo mode runs a deterministic composer (no LLM call). Live mode would
+  send the same `gatherContext()` snapshot as the system prompt to the
+  orchestrator chat agent, with PHI classification at the LLM boundary
+  before any rationale text is forwarded.
+- Suggestions and replies MUST be re-derived on every turn from
+  `gatherContext()`. No reply caching, no per-kind pre-canned text, no
+  invented citations.
+
+The reply engine lives at `apps/ledger-insights-ui/src/lib/assist/`.
+Capability spec: `openspec/changes/add-context-aware-agent-assistant/specs/agent-assistant/spec.md`.
+
 ## Plan Mode by default for non-trivial changes
 
 If a task touches >3 files, modifies a stage definition, edits a standards bundle, or

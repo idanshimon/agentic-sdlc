@@ -45,6 +45,58 @@ or `if (isDemoRun(...))`:
 3. `src/components/layout/topbar.tsx` — DEMO MODE pill
 4. `src/app/runs/new/page.tsx` — DEMO badges + short-circuit `onSample`
 
+## AgentAssistant subsystem
+
+A floating Sparkles button (or `⌘K`) opens a slide-over assistant on every page. Replies are composed from the live demo store, not from canned templates. The whole thing is wired through one rip-out unit at `src/lib/assist/`.
+
+### Module layout
+
+| File | Purpose |
+|---|---|
+| `src/lib/assist/context.tsx` | provider + `useAssistantContext` hook (the page declares its kind + ids) |
+| `src/lib/assist/replies.ts` | `gatherContext()`, `pickReply()`, `getSuggestions()`, intent detection (8 classes: `recommend`, `explain`, `summarize`, `what_if`, `drill_in`, `compare`, `next_step`, `open_question`) |
+| `src/components/domain/assistant-panel.tsx` | slide-over UI (Sheet from radix), chat history, `applyHandler` |
+| `src/components/layout/assist-keyboard-shortcut.tsx` | ⌘K binding |
+
+`gatherContext()` reads from `src/lib/demo/index.ts`:
+
+- `getDemoRun(runId)`
+- `listDemoRuns()`
+- `listDemoLedgerEntries({ run_id, entry_type, limit })`
+- `getDemoArtifacts(runId)`
+
+### Behaviour by context kind
+
+| Context | What gatherContext reads | Reply shape |
+|---|---|---|
+| `run-detail` / `run-resolver-gate` | run state + run-scoped ledger entries + artifacts | run line + per-decision bullets with `bundle_refs` |
+| `dashboard` / `runs-list` | portfolio rollup + recent decisions | aggregate counts + `by_status` |
+| `decisions` / `telemetry` / `reports` | full ledger query + portfolio | citation density, model breakdown, cost rollup |
+| `agent-edit` / `prompt-edit` | resource id from `context.id` | resource-specific prompts, no aggregation |
+| `bundles` | none, bundles are spec-only | refers user to OpenSpec change flow |
+
+13 context kinds are wired across pages: `dashboard`, `runs-list`, `run-detail`, `run-resolver-gate`, `decisions`, `telemetry`, `reports`, `bundles`, `agents-list`, `agent-edit`, `prompts-list`, `prompt-edit`, `phi-classifier`, `changes-list`.
+
+### Production parity
+
+The shape returned by `gatherContext()` is the same shape that would be sent as the system prompt to the orchestrator's chat agent in live mode. Demo mode is a deterministic composer; live mode is the LLM. The contract does not change.
+
+Live LLM integration is not part of v0.7.
+
+### How to test
+
+```bash
+pnpm dev   # :3005
+# open any page, click the floating Sparkles button or ⌘K
+# type a question; chips reflect current state
+```
+
+Suggestion chips are dynamic. On a run that is awaiting gate, the recommend chip says `What do you recommend for these cards?`. On the dashboard with N awaiting-gate runs, the chip says `N runs awaiting gate, what should I clear first?`.
+
+### Rip-out semantics
+
+`src/lib/assist/` is the rip-out unit. Removing it removes the assistant entirely. Touchpoints outside the folder are: the `<AssistantPanel/>` mount + `<AssistKeyboardShortcut/>` mount in the root layout, and a `useAssistantContext({ kind, id })` call in each page that opts in. Drop the imports and the assistant is gone.
+
 ## Regenerate fixtures
 
 ```bash
