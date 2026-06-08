@@ -184,16 +184,12 @@ export default function DashboardPage() {
           <EmptyState
             icon={GitBranch}
             title="No runs yet"
-            description="Submit a PRD via POST /api/run to kick off the pipeline. Use the Swagger UI under API docs to try the first run."
+            description="Start a new run from a sample PRD or paste your own. Every run streams through the 7-stage pipeline; gates pause for human review when ambiguity is high."
             action={
               <Button variant="primary" asChild>
-                <a
-                  href="https://ca-orchestrator.whitewater-f74a5db8.eastus2.azurecontainerapps.io/docs#/default/create_run_api_run_post"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Start a run <ExternalLink className="h-3.5 w-3.5" />
-                </a>
+                <Link href="/runs/new">
+                  Start a run <ArrowRight className="h-4 w-4" />
+                </Link>
               </Button>
             }
           />

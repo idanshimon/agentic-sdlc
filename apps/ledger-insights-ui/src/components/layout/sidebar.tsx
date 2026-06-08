@@ -67,9 +67,22 @@ const planeColor: Record<string, string> = {
 };
 
 export function Sidebar() {
-  const pathname = usePathname();
   return (
     <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-[var(--border-default)] bg-[var(--surface)]">
+      <SidebarBody />
+    </aside>
+  );
+}
+
+/**
+ * Just the body — used directly inside the mobile Sheet so the sidebar's
+ * `hidden lg:flex` desktop-gating wrapper doesn't make the contents invisible
+ * inside the mobile drawer.
+ */
+export function SidebarBody() {
+  const pathname = usePathname();
+  return (
+    <div className="flex h-full w-full flex-col bg-[var(--surface)]">
       <div className="px-4 py-4 border-b border-[var(--border-default)]">
         <Link href="/" className="flex items-center gap-2 group">
           <div className="relative h-8 w-8 rounded-md bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center">
@@ -136,6 +149,6 @@ export function Sidebar() {
           <span>idanshimon/agentic-sdlc</span>
         </a>
       </div>
-    </aside>
+    </div>
   );
 }

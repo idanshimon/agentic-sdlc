@@ -1,5 +1,6 @@
 "use client";
-import { GitBranch, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { GitBranch, ArrowRight } from "lucide-react";
 import { useRuns } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
 import { RunCard } from "@/components/domain/run-card";
@@ -24,13 +25,9 @@ export default function RunsPage() {
         description="Every orchestrator run — submit a PRD, watch it stream through the 7-stage pipeline, gate it manually if it needs review, ship a PR at the end."
         actions={
           <Button variant="primary" asChild>
-            <a
-              href="https://ca-orchestrator.whitewater-f74a5db8.eastus2.azurecontainerapps.io/docs#/default/create_run_api_run_post"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Start a run <ExternalLink className="h-4 w-4" />
-            </a>
+            <Link href="/runs/new">
+              Start a run <ArrowRight className="h-4 w-4" />
+            </Link>
           </Button>
         }
       />
@@ -45,16 +42,12 @@ export default function RunsPage() {
         <EmptyState
           icon={GitBranch}
           title="No runs yet"
-          description="Use POST /api/run with a PRD body to kick off a run. Open the API docs to try it interactively — every event is streamed back via SSE on /api/runs/{id}/stream."
+          description="Pick a sample PRD on the next screen and watch the pipeline stream through. Demo Mode replays a full healthcare run end-to-end without any backend dependency."
           action={
             <Button variant="primary" asChild>
-              <a
-                href="https://ca-orchestrator.whitewater-f74a5db8.eastus2.azurecontainerapps.io/docs"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open Swagger <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+              <Link href="/runs/new">
+                Start a run <ArrowRight className="h-4 w-4" />
+              </Link>
             </Button>
           }
         />

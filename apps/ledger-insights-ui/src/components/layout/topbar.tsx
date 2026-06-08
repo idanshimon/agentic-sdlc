@@ -4,7 +4,7 @@ import { Menu, Search, Command as CommandIcon, Sun, Moon, Sparkles } from "lucid
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Sidebar } from "./sidebar";
+import { Sidebar, SidebarBody } from "./sidebar";
 import { CommandPalette } from "./command-palette";
 import { HealthIndicator } from "@/components/domain/health-indicator";
 import { isDemoMode } from "@/lib/demo";
@@ -25,7 +25,7 @@ export function TopBar() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-60">
-            <Sidebar />
+            <SidebarBody />
           </SheetContent>
         </Sheet>
         <button
