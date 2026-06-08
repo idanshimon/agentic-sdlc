@@ -34,6 +34,12 @@ import type { RunState, StageEvent, AmbiguityCard } from "@/lib/types";
 
 const DEMO_RUN_PREFIX = "demo-";
 const STORAGE_KEY = "agentic-sdlc.demo.runs";
+/** Hard cap on number of demo runs kept in localStorage. Older runs are LRU-
+ * evicted on save. Each run can hold ~30 KB of events + ledger entries +
+ * payloads, so an uncapped store can quickly grow to multi-MB and trigger
+ * O(N) JSON.parse on every gatherContext() call — eventually OOMing the
+ * renderer. 10 is plenty for a demo and well under the 5MB localStorage cap. */
+const MAX_DEMO_RUNS = 10;
 
 /* ───────────────────────── feature flag ───────────────────────── */
 
@@ -127,25 +133,88 @@ interface StoredDemoRun {
   ledger_entries: Record<string, unknown>[];
 }
 
+/* Memoized loadStore: parses localStorage once per raw-string identity.
+ *
+ * Background: gatherContext() (called from every page's getSuggestions on
+ * every render) calls listDemoRuns() + listDemoLedgerEntries(), which means
+ * 2 full JSON.parse calls per render. Multiply by N pages × M renders per
+ * second from React Query refetch + the AssistantPanel context-publish chain
+ * + the demo replay engine's setTimeout cascade, and the main thread chokes
+ * on parse work. The renderer eventually OOMs and Chrome SIGKILLs the tab.
+ *
+ * The cache is keyed on the raw localStorage string, so any write (which
+ * happens via saveStore) instantly invalidates the cached parse the next
+ * time loadStore() reads. SSR-safe: returns fresh on server.
+ */
+let _cachedRaw: string | null = null;
+let _cachedStore: Record<string, StoredDemoRun> = {};
+
 function loadStore(): Record<string, StoredDemoRun> {
   if (typeof window === "undefined") return {};
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw);
+    if (!raw) {
+      _cachedRaw = null;
+      _cachedStore = {};
+      return _cachedStore;
+    }
+    if (raw === _cachedRaw) return _cachedStore;
+    _cachedRaw = raw;
+    _cachedStore = JSON.parse(raw);
+    return _cachedStore;
   } catch {
-    return {};
+    _cachedRaw = null;
+    _cachedStore = {};
+    return _cachedStore;
   }
+}
+
+/* LRU-evict to MAX_DEMO_RUNS by updated_at, keeping the most recent. */
+function enforceCap(
+  store: Record<string, StoredDemoRun>,
+): Record<string, StoredDemoRun> {
+  const ids = Object.keys(store);
+  if (ids.length <= MAX_DEMO_RUNS) return store;
+  const sorted = ids.sort((a, b) => {
+    const at = store[a].updated_at ?? "";
+    const bt = store[b].updated_at ?? "";
+    return bt.localeCompare(at); // newest first
+  });
+  const keep = sorted.slice(0, MAX_DEMO_RUNS);
+  const out: Record<string, StoredDemoRun> = {};
+  for (const id of keep) out[id] = store[id];
+  return out;
 }
 
 function saveStore(store: Record<string, StoredDemoRun>) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-    // Notify same-tab listeners (storage event only fires cross-tab).
-    window.dispatchEvent(new CustomEvent("demo-runs-changed"));
+    const capped = enforceCap(store);
+    const raw = JSON.stringify(capped);
+    window.localStorage.setItem(STORAGE_KEY, raw);
+    // Refresh memoization cache in-process so the next loadStore() call
+    // doesn't re-parse what we just serialized.
+    _cachedRaw = raw;
+    _cachedStore = capped;
   } catch {
-    /* quota exceeded — ignore */
+    /* quota exceeded — drop oldest half and retry once before giving up. */
+    try {
+      const ids = Object.keys(store).sort((a, b) => {
+        const at = store[a].updated_at ?? "";
+        const bt = store[b].updated_at ?? "";
+        return bt.localeCompare(at);
+      });
+      const trimmed: Record<string, StoredDemoRun> = {};
+      for (const id of ids.slice(0, Math.max(1, Math.floor(ids.length / 2)))) {
+        trimmed[id] = store[id];
+      }
+      const raw = JSON.stringify(trimmed);
+      window.localStorage.setItem(STORAGE_KEY, raw);
+      _cachedRaw = raw;
+      _cachedStore = trimmed;
+    } catch {
+      /* still over quota — give up; user can hit Reset demo */
+    }
   }
 }
 
@@ -268,7 +337,10 @@ function patchStore(runId: string, patch: Partial<StoredDemoRun>) {
 export function clearDemoRuns() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(STORAGE_KEY);
-  window.dispatchEvent(new CustomEvent("demo-runs-changed"));
+  // Wipe the in-process cache too so any subsequent loadStore() call sees
+  // the empty state immediately rather than serving stale data.
+  _cachedRaw = null;
+  _cachedStore = {};
 }
 
 /* ───────────────────────── replay engine ───────────────────────── */
