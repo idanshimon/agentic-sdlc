@@ -1,5 +1,5 @@
 "use client";
-import { use } from "react";
+import { use, useMemo } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,11 +31,23 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
   const allEvents = [...(run?.events ?? []), ...liveEvents];
   const awaitingGate = run?.status === "awaiting_gate";
 
+  // Memoize the payload object so its identity is stable across renders that
+  // don't change status/stage. Inline `payload: {status, stage}` literals at
+  // this call site triggered renderer SIGKILL during the demo replay engine's
+  // setTimeout cascade after Approve (caught 2026-06-09 customer-blocking).
+  // The provider-side fix in assist/context.tsx makes payload not part of the
+  // dep key, so this useMemo is belt-and-suspenders — but it's also the
+  // canonical pattern for any future call sites.
+  const assistPayload = useMemo(
+    () => ({ status: run?.status, stage: run?.current_stage }),
+    [run?.status, run?.current_stage],
+  );
+
   useAssistantContext({
     kind: awaitingGate ? "run-resolver-gate" : "run-detail",
     id: runId,
     label: run ? `Run ${shortId(runId, 8)}` : "Run",
-    payload: { status: run?.status, stage: run?.current_stage },
+    payload: assistPayload,
   });
 
   const onApproved = () => {

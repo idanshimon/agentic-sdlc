@@ -38,7 +38,19 @@ export function useRun(runId: string | undefined) {
     queryKey: ["run", runId],
     queryFn: () => orchestrator.getRun(runId!),
     enabled: !!runId,
-    refetchInterval: 3_000,
+    // Poll every 3s while the run is active; stop once it reaches a terminal
+    // state. Terminal-state polling is dead weight that compounds with the
+    // demo replay engine's setTimeout cascade and the AssistantPanel's
+    // useAssistantContext ctxKey changes — all three together can SIGKILL
+    // the renderer on /runs/[runId] (see assist/context.tsx for the
+    // primitive-deps fix).
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      if (status === "completed" || status === "failed" || status === "cancelled") {
+        return false;
+      }
+      return 3_000;
+    },
   });
 }
 

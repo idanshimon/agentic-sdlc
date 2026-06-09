@@ -78,16 +78,38 @@ export function useAssist(): AssistApi {
 /** Page-level hook: declare your context once at the top of a page.
  *
  * The hook stores the latest applyHandler in a ref so the page can pass an
- * inline arrow without thrashing the provider's state. Only ctxKey changes
- * cause a re-publish — the ref always points at the latest handler.
+ * inline arrow without thrashing the provider's state. Only PRIMITIVE
+ * dependencies (kind, id, label) drive re-publish — `payload` is forwarded
+ * to the provider for its replies but does NOT trigger re-renders, because
+ * inline `payload: {status, stage}` literals at call sites would otherwise
+ * produce a fresh object identity every render and turn `JSON.stringify`
+ * into a render-storm trigger on busy pages (run-detail during demo replay,
+ * 11-timer setTimeout cascade, 3s polling). The provider's reply engine
+ * reads payload via the latest-context ref at reply time, not via React
+ * state — so payload doesn't need to live in the dep key.
+ *
+ * Caught 2026-06-09 live: `/runs/[runId]` after Approve clicked the demo
+ * replay engine + the inline payload `{status, stage}` literal at call
+ * site triggered an SIGKILL on the renderer, surfacing as Chrome's native
+ * "This page couldn't load" page. Fix: drop payload from the dep key,
+ * keep it on the live context the provider holds.
  */
 export function useAssistantContext(
   context: AssistContext,
   applyHandler?: (action: ApplyAction) => void | Promise<void>,
 ) {
   const api = useContext(Ctx);
-  const ctxKey = JSON.stringify(context);
+  // Stable dep key — only PRIMITIVE-typed fields. `payload` is intentionally
+  // excluded to avoid render-storm triggers on call sites that pass inline
+  // object literals like `payload: { status, stage }`.
+  const ctxKey = `${context.kind}|${context.id ?? ""}|${context.label ?? ""}`;
   const hasHandler = !!applyHandler;
+
+  // Latest-context ref — the provider's reply engine reads context.payload
+  // at reply time via this ref, NOT via React state. Updated on every render
+  // (cheap, no setState).
+  const contextRef = useRef(context);
+  contextRef.current = context;
 
   // Latest-handler ref — updated by an effect so we don't write during render
   // (React 19 strict mode flags ref writes during render). The effect runs
@@ -101,7 +123,9 @@ export function useAssistantContext(
 
   useEffect(() => {
     if (!api) return;
-    api.setContext(context);
+    // Read fresh context from the ref so the provider gets the current
+    // payload even though the dep key only watched primitives.
+    api.setContext(contextRef.current);
     if (hasHandler) {
       api.setApplyHandler({
         run: (action) =>
