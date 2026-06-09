@@ -19,7 +19,7 @@ export interface ToolDef {
 export const tools: Record<string, ToolDef> = {
   "ledger.query": {
     name: "ledger.query",
-    description: "Read decision ledger entries by team, with optional filters on entry_type, session, bundle_ref prefix.",
+    description: "Read decision ledger entries by team, with optional filters on entry_type, session, bundle_ref prefix. team_id defaults to the authed team when omitted.",
     inputSchema: {
       type: "object",
       properties: {
@@ -29,14 +29,24 @@ export const tools: Record<string, ToolDef> = {
         agent_session_id: { type: "string" },
         bundle_ref_prefix: { type: "string" },
       },
-      required: ["team_id"],
+      // team_id is no longer "required" — defaults to the authed team
+      required: [],
     },
     handler: async (input, authedTeamId) => {
       const args = LedgerQueryInputSchema.parse(input);
-      if (args.team_id !== authedTeamId) {
-        throw new Error(`Token scoped to '${authedTeamId}'; request targeted '${args.team_id}'`);
+      // Default to the authed team when caller omits team_id (the common
+      // dashboard read pattern). Cross-team requests are still rejected.
+      const team_id = args.team_id ?? authedTeamId;
+      if (team_id !== authedTeamId) {
+        throw new Error(`Token scoped to '${authedTeamId}'; request targeted '${team_id}'`);
       }
-      const entries = await queryEntries(args);
+      const entries = await queryEntries({
+        team_id,
+        limit: args.limit,
+        entry_type: args.entry_type,
+        agent_session_id: args.agent_session_id,
+        bundle_ref_prefix: args.bundle_ref_prefix,
+      });
       return { entries };
     },
   },

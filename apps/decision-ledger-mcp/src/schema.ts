@@ -41,8 +41,13 @@ export const RuntimeEntrySchema = z.object({
 );
 
 // ------------ tool input schemas ---------------------------------------------
+// `team_id` is optional in the SCHEMA; the handler defaults it to the authed
+// team when absent. This keeps the partition-scoped query intact (no
+// cross-tenant reads) while letting the dashboard call ledger.query without
+// hard-coding a team id in the client. See openspec change
+// fix-decisions-page-empty-on-cold-load for the full rationale.
 export const LedgerQueryInputSchema = z.object({
-  team_id: z.string(),
+  team_id: z.string().optional(),
   limit: z.number().int().min(1).max(200).optional().default(25),
   entry_type: z.enum(["runtime", "meta"]).optional(),
   agent_session_id: z.string().optional(),

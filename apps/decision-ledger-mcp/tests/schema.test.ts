@@ -34,8 +34,17 @@ describe("RuntimeEntrySchema", () => {
 });
 
 describe("LedgerQueryInputSchema", () => {
-  it("requires team_id", () => {
-    expect(() => LedgerQueryInputSchema.parse({})).toThrow();
+  it("allows omitting team_id (defaults applied at handler layer)", () => {
+    // Schema layer: team_id is optional. Handler layer defaults it to the
+    // authed team — see tools.ts ledger.query handler + tools.test.ts.
+    expect(() => LedgerQueryInputSchema.parse({})).not.toThrow();
+    const r = LedgerQueryInputSchema.parse({});
+    expect(r.team_id).toBeUndefined();
+  });
+
+  it("accepts explicit team_id", () => {
+    const r = LedgerQueryInputSchema.parse({ team_id: "team-x" });
+    expect(r.team_id).toBe("team-x");
   });
 
   it("defaults limit to 25", () => {
