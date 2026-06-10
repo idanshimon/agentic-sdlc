@@ -5,7 +5,57 @@ import { relativeTime, shortId, fmtUsd } from "@/lib/utils";
 import type { LedgerEntry } from "@/lib/types";
 import { ShieldAlert, ShieldCheck, ShieldOff, User, Bot } from "lucide-react";
 
-export function DecisionCard({ entry }: { entry: LedgerEntry }) {
+/**
+ * DecisionCard — defensive renderer for ledger entries.
+ *
+ * Entries come from two sources with slightly different shapes:
+ *   1. The decision-ledger-mcp Cosmos backend (canonical LedgerEntry schema)
+ *   2. The demo fixtures in lib/demo/fixtures.ts (resolver-decision rows
+ *      that get listed via listDemoLedgerEntries — historically a different
+ *      shape, with `created_by` instead of `actor: {kind, id}`)
+ *
+ * Rendering a fixture row that doesn't match the canonical shape used to
+ * crash the whole page on `entry.actor.kind` (2026-06-10 customer-blocking
+ * — the crash chained from a Cosmos firewall regression that flooded the
+ * UI with malformed retry fallbacks). Every field is now coerced behind a
+ * normalizer so non-canonical inputs render as "unknown" cards instead
+ * of taking down /decisions.
+ */
+
+type RawEntry = Partial<LedgerEntry> & {
+  // Tolerated legacy field names from demo fixtures.
+  created_by?: string;
+  resolution_text?: string;
+  ambiguity_class?: string;
+};
+
+function normalize(raw: RawEntry): LedgerEntry {
+  const actor = raw.actor && typeof raw.actor === "object" && "kind" in raw.actor
+    ? raw.actor
+    : {
+        kind: "agent" as const,
+        id: raw.created_by ?? "unknown",
+      };
+  return {
+    id: raw.id ?? "unknown",
+    entry_type: raw.entry_type ?? "runtime",
+    actor,
+    decision: raw.decision ?? raw.resolution_text ?? raw.ambiguity_class ?? "(no decision text)",
+    rationale: raw.rationale ?? "",
+    phi_class: raw.phi_class ?? "none",
+    cost_usd: typeof raw.cost_usd === "number" ? raw.cost_usd : 0,
+    model_used: raw.model_used ?? "",
+    bundle_refs: Array.isArray(raw.bundle_refs) ? raw.bundle_refs : [],
+    precedent_refs: Array.isArray(raw.precedent_refs) ? raw.precedent_refs : [],
+    stage: raw.stage,
+    run_id: raw.run_id,
+    agent_session_id: raw.agent_session_id,
+    created_at: raw.created_at ?? new Date().toISOString(),
+  };
+}
+
+export function DecisionCard({ entry: raw }: { entry: LedgerEntry }) {
+  const entry = normalize(raw as RawEntry);
   const phiIcon =
     entry.phi_class === "high" ? ShieldAlert :
     entry.phi_class === "low" ? ShieldOff : ShieldCheck;
