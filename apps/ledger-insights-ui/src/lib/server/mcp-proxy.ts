@@ -19,7 +19,15 @@ function bearer(): string | undefined {
   return env["LEDGER_MCP_TOKEN"] ?? env["LEDGER_MCP_DEMO_TOKEN"];
 }
 
-export async function forwardToLedgerMcp(toolPath: string, body: unknown) {
+/**
+ * Low-level: POST to a tool path on the ledger MCP, return parsed JSON +
+ * the upstream HTTP status. Used when a route handler needs to react to the
+ * upstream response (e.g. /api/economics computes aggregations on top).
+ */
+export async function callLedgerMcp(
+  toolPath: string,
+  body: unknown,
+): Promise<{ status: number; data: unknown }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = bearer();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -36,5 +44,14 @@ export async function forwardToLedgerMcp(toolPath: string, body: unknown) {
   } catch {
     data = { error: "Non-JSON response from ledger-mcp", body: text.slice(0, 500) };
   }
-  return NextResponse.json(data, { status: res.status });
+  return { status: res.status, data };
+}
+
+/**
+ * High-level: forward a request and return a NextResponse mirroring the
+ * upstream status/body. Used by simple proxy routes like /api/ledger/query.
+ */
+export async function forwardToLedgerMcp(toolPath: string, body: unknown) {
+  const { status, data } = await callLedgerMcp(toolPath, body);
+  return NextResponse.json(data, { status });
 }

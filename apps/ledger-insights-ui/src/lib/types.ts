@@ -61,6 +61,7 @@ export interface ResolutionOption {
 export interface LedgerEntry {
   id: string;
   entry_type: "runtime" | "meta";
+  team_id?: string;
   run_id?: string;
   agent_session_id?: string;
   stage?: Stage;
@@ -72,6 +73,20 @@ export interface LedgerEntry {
   model_used: string;
   bundle_refs: string[];
   precedent_refs?: string[];
+  /**
+   * Discriminator added by the orchestrator. Most card-style renderers
+   * don't need this directly, but the economics aggregator uses it to
+   * classify autonomy (plan_proposed = human-gated even if actor=agent).
+   * Track B will add: feedback_thumbs, mark_rejected, replay_link, block_precedent.
+   */
+  runtime_kind?:
+    | "stage_decision"
+    | "ide_session_summary"
+    | "ide_tool_call"
+    | "auto_fix"
+    | "delivered"
+    | "plan_proposed"
+    | "phi_block";
   created_at: string;
 }
 
