@@ -196,6 +196,12 @@ function saveStore(store: Record<string, StoredDemoRun>) {
     // doesn't re-parse what we just serialized.
     _cachedRaw = raw;
     _cachedStore = capped;
+    // Notify in-process subscribers that the demo store changed. useRun for
+    // demo runs listens to this and invalidates its query so the dashboard
+    // reflects status flips (running → awaiting_gate → completed) without
+    // waiting for a 3s poll cycle. Same-tab only — cross-tab uses the
+    // native `storage` event the browser already dispatches.
+    window.dispatchEvent(new CustomEvent("demo-store-updated"));
   } catch {
     /* quota exceeded — drop oldest half and retry once before giving up. */
     try {
@@ -212,6 +218,7 @@ function saveStore(store: Record<string, StoredDemoRun>) {
       window.localStorage.setItem(STORAGE_KEY, raw);
       _cachedRaw = raw;
       _cachedStore = trimmed;
+      window.dispatchEvent(new CustomEvent("demo-store-updated"));
     } catch {
       /* still over quota — give up; user can hit Reset demo */
     }
@@ -341,6 +348,7 @@ export function clearDemoRuns() {
   // the empty state immediately rather than serving stale data.
   _cachedRaw = null;
   _cachedStore = {};
+  window.dispatchEvent(new CustomEvent("demo-store-updated"));
 }
 
 /* ───────────────────────── replay engine ───────────────────────── */

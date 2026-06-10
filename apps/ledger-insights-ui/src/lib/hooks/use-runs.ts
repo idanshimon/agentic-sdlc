@@ -1,7 +1,9 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { orchestrator } from "@/lib/api/orchestrator";
 import { ledgerMcp } from "@/lib/api/ledger-mcp";
+import { isDemoMode, isDemoRun } from "@/lib/demo";
 
 export function useHealth() {
   return useQuery({
@@ -26,6 +28,20 @@ export function useHealth() {
 }
 
 export function useRuns() {
+  const queryClient = useQueryClient();
+
+  // Same demo-store-updated subscription as useRun, but for the list view.
+  // Makes the /runs page reflect new demo runs + status flips instantly.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isDemoMode()) return;
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ["runs"] });
+    };
+    window.addEventListener("demo-store-updated", handler);
+    return () => window.removeEventListener("demo-store-updated", handler);
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ["runs"],
     queryFn: () => orchestrator.listRuns(),
@@ -34,6 +50,30 @@ export function useRuns() {
 }
 
 export function useRun(runId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  // Demo runs are written to localStorage by the replay engine's setTimeout
+  // cascade (lib/demo/index.ts). Pure polling at 3s loses ~3 seconds of
+  // latency between a status flip (running → awaiting_gate) and the gate UI
+  // appearing — long enough that customers think the dashboard is broken.
+  // Subscribe to the same-tab `demo-store-updated` CustomEvent and force-
+  // invalidate this query when the demo store changes. Cross-tab updates
+  // still come through the native `storage` event (which TanStack's
+  // refetchOnWindowFocus + 3s poll cover).
+  //
+  // Caught 2026-06-09 customer-blocking: localStorage status=awaiting_gate
+  // for 12+ seconds, page badge still showed "running", Resolver Gate
+  // panel never rendered, customer couldn't approve.
+  useEffect(() => {
+    if (!runId || typeof window === "undefined") return;
+    if (!(isDemoMode() && isDemoRun(runId))) return;
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ["run", runId] });
+    };
+    window.addEventListener("demo-store-updated", handler);
+    return () => window.removeEventListener("demo-store-updated", handler);
+  }, [runId, queryClient]);
+
   return useQuery({
     queryKey: ["run", runId],
     queryFn: () => orchestrator.getRun(runId!),

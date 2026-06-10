@@ -83,7 +83,7 @@ export function SidebarBody() {
   const pathname = usePathname();
   return (
     <div className="flex h-full w-full flex-col bg-[var(--surface)]">
-      <div className="px-4 py-4 border-b border-[var(--border-default)]">
+      <div className="flex h-14 items-center px-4 border-b border-[var(--border-default)]">
         <Link href="/" className="flex items-center gap-2 group">
           <div className="relative h-8 w-8 rounded-md bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center">
             <span className="text-[10px] font-bold text-[#001018]">LI</span>
