@@ -392,6 +392,67 @@ async def get_run(run_id: str) -> RunState:
     raise HTTPException(404, "run not found")
 
 
+@app.get("/api/runs/{run_id}/ledger")
+async def get_run_ledger(run_id: str) -> dict:
+    """Return ledger entries written for this run.
+
+    Cross-partition Cosmos query so the caller doesn't have to know which
+    team_id the run was filed under. Useful for:
+      - UI: render decision provenance on /runs/<id>
+      - Phase 2.6 verification: confirm prompt_resolution_path is pinned
+        on every decision the assessor / approver wrote
+      - Audit: surface the full per-run decision history without going
+        through ledger-mcp's per-token team-scoped auth
+
+    Returns up to 100 entries ordered by created_at desc.
+    """
+    if _ledger is None:
+        return {"entries": [], "run_id": run_id, "note": "ledger not configured"}
+
+    # First fetch the run to learn its team_id (partition key).
+    run = _runs.get(run_id)
+    team_id: str | None = None
+    if run is not None:
+        team_id = run.team_id
+    elif _ledger is not None:
+        try:
+            doc = await _ledger.get_run(run_id)
+            if doc:
+                team_id = doc.get("team_id")
+        except Exception:
+            pass
+
+    if not team_id:
+        raise HTTPException(404, "run not found and could not infer team_id")
+
+    # Query the decision-ledger container for this team partition; filter to
+    # entries for this run. Re-use the orchestrator's already-authenticated
+    # CosmosLedger client via its underlying _ledger container handle.
+    try:
+        entries = []
+        async for item in _ledger._ledger.query_items(  # type: ignore[attr-defined]
+            query=(
+                "SELECT * FROM c WHERE c.team_id = @team AND c.run_id = @run "
+                "ORDER BY c.created_at DESC OFFSET 0 LIMIT 100"
+            ),
+            parameters=[
+                {"name": "@team", "value": team_id},
+                {"name": "@run",  "value": run_id},
+            ],
+            partition_key=team_id,
+        ):
+            entries.append(item)
+        return {
+            "run_id": run_id,
+            "team_id": team_id,
+            "count": len(entries),
+            "entries": entries,
+        }
+    except Exception as exc:
+        _logger.warning("Ledger read for run %s failed: %s", run_id, exc)
+        raise HTTPException(500, f"ledger read failed: {exc}") from exc
+
+
 @app.post("/api/runs/{run_id}/pause")
 async def pause_run(run_id: str) -> dict:
     """Flip run to MANUAL mode mid-flight. Pipeline does not interrupt the
