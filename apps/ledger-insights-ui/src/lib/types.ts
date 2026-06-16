@@ -77,7 +77,7 @@ export interface LedgerEntry {
    * Discriminator added by the orchestrator. Most card-style renderers
    * don't need this directly, but the economics aggregator uses it to
    * classify autonomy (plan_proposed = human-gated even if actor=agent).
-   * Track B will add: feedback_thumbs, mark_rejected, replay_link, block_precedent.
+   * Track B: feedback_thumbs, decision_flagged, replay_requested, class_paused.
    */
   runtime_kind?:
     | "stage_decision"
@@ -86,7 +86,19 @@ export interface LedgerEntry {
     | "auto_fix"
     | "delivered"
     | "plan_proposed"
-    | "phi_block";
+    | "phi_block"
+    | "feedback_thumbs"
+    | "decision_flagged"
+    | "replay_requested"
+    | "class_paused";
+  /** Track B: pointer back to the decision this teaching signal acts on. */
+  references_entry_id?: string;
+  /** Track B: thumbs subkind, only set when runtime_kind=feedback_thumbs. */
+  feedback_kind?: "thumbs_up" | "thumbs_down";
+  /** Track B: the ambiguity class paused, only set when runtime_kind=class_paused. */
+  paused_class?: string;
+  /** Original ambiguity class — set on stage_decision entries by the assessor. */
+  ambiguity_class?: string;
   created_at: string;
 }
 
