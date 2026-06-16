@@ -8,6 +8,7 @@ export const ActorSchema = z.object({
 });
 
 export const RuntimeKindSchema = z.enum([
+  // Pipeline-internal kinds (orchestrator stages)
   "stage_decision",
   "ide_session_summary",
   "ide_tool_call",
@@ -15,7 +16,22 @@ export const RuntimeKindSchema = z.enum([
   "delivered",
   "plan_proposed",
   "phi_block",
+  // Track B: teaching-signal kinds. These are operator-authored entries
+  // that the system reads back to refine its future behavior. Every kind
+  // here MUST set references_entry_id pointing at the decision being acted
+  // upon (or, for class_paused, set paused_class to the affected ambiguity
+  // class). The aggregator on /feedback reads these.
+  "feedback_thumbs",      // T0 — thumbs up/down sentiment
+  "decision_flagged",     // T1 — "this decision was wrong, don't reuse it as precedent"
+  "replay_requested",     // T2 — "re-run the same inputs against current rules"
+  "class_paused",         // T3 — "stop auto-deciding this whole ambiguity class"
 ]);
+
+/**
+ * Track B: feedback_kind discriminates the thumbs subkind. Only meaningful
+ * when runtime_kind === "feedback_thumbs". Other kinds ignore it.
+ */
+export const FeedbackKindSchema = z.enum(["thumbs_up", "thumbs_down"]);
 
 export const PHIClassSchema = z.enum(["none", "low", "high"]);
 
@@ -35,9 +51,34 @@ export const RuntimeEntrySchema = z.object({
   stage: z.string().optional().nullable(),
   runtime_kind: RuntimeKindSchema.optional().nullable(),
   ambiguity_class: z.string().optional().nullable(),
+  // Track B teaching-signal fields. All optional and additive — pre-Track-B
+  // entries that don't include them parse identically. Specific runtime_kinds
+  // require specific subsets of these (enforced via .refine below):
+  //
+  //   feedback_thumbs   → references_entry_id REQUIRED, feedback_kind REQUIRED
+  //   decision_flagged  → references_entry_id REQUIRED
+  //   replay_requested  → references_entry_id REQUIRED
+  //   class_paused      → paused_class REQUIRED
+  references_entry_id: z.string().optional().nullable(),
+  feedback_kind: FeedbackKindSchema.optional().nullable(),
+  paused_class: z.string().optional().nullable(),
 }).refine(
   (e) => e.run_id != null || e.agent_session_id != null,
   { message: "runtime entry requires at least one of: run_id, agent_session_id" }
+).refine(
+  (e) => {
+    if (e.runtime_kind === "feedback_thumbs") {
+      return e.references_entry_id != null && e.feedback_kind != null;
+    }
+    if (e.runtime_kind === "decision_flagged" || e.runtime_kind === "replay_requested") {
+      return e.references_entry_id != null;
+    }
+    if (e.runtime_kind === "class_paused") {
+      return e.paused_class != null && e.paused_class.length > 0;
+    }
+    return true;
+  },
+  { message: "teaching-signal entries require their associated reference: feedback_thumbs needs references_entry_id+feedback_kind; decision_flagged/replay_requested need references_entry_id; class_paused needs paused_class" }
 );
 
 // ------------ tool input schemas ---------------------------------------------

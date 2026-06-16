@@ -131,6 +131,180 @@ export const tools: Record<string, ToolDef> = {
       return classifyPhi(args.text);
     },
   },
+
+  // -------- Track B: teaching-signal write paths -------------------------
+  // Each tool below writes a runtime entry of a specific runtime_kind.
+  // The handlers all delegate to writeRuntimeEntry after building a
+  // RuntimeEntrySchema-valid object — this keeps the audit trail uniform
+  // (the /decisions page renders teaching signals alongside stage decisions
+  // because they're all just runtime entries with different runtime_kind).
+
+  "ledger.add_feedback": {
+    name: "ledger.add_feedback",
+    description: "Operator thumbs up/down on a past decision. Lightest-weight teaching signal — no rationale required, used for sentiment aggregation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team_id: { type: "string" },
+        actor: { type: "object" },
+        references_entry_id: { type: "string" },
+        feedback_kind: { type: "string", enum: ["thumbs_up", "thumbs_down"] },
+        rationale: { type: "string" },
+        agent_session_id: { type: "string" },
+      },
+      required: ["actor", "references_entry_id", "feedback_kind"],
+    },
+    handler: async (input, authedTeamId) => {
+      const raw = input as Record<string, unknown>;
+      const team_id = (raw.team_id as string | undefined) ?? authedTeamId;
+      if (team_id !== authedTeamId) {
+        throw new Error(`Token scoped to '${authedTeamId}'; request targeted '${team_id}'`);
+      }
+      // Validate at the handler boundary — the inputSchema `required` array is
+      // advertised to MCP clients but NOT enforced server-side, and naively
+      // coercing missing values via String(undefined) yields the literal
+      // string "undefined" which the schema refine would happily accept.
+      const refIdRaw = raw.references_entry_id;
+      if (typeof refIdRaw !== "string" || refIdRaw.length === 0) {
+        throw new Error("references_entry_id is required and must be a non-empty string");
+      }
+      const kindRaw = raw.feedback_kind;
+      if (kindRaw !== "thumbs_up" && kindRaw !== "thumbs_down") {
+        throw new Error("feedback_kind is required and must be 'thumbs_up' or 'thumbs_down'");
+      }
+      const args = RuntimeEntrySchema.parse({
+        team_id,
+        actor: raw.actor,
+        decision: `${kindRaw} on ${refIdRaw}`,
+        rationale: typeof raw.rationale === "string" ? raw.rationale : "",
+        runtime_kind: "feedback_thumbs",
+        references_entry_id: refIdRaw,
+        feedback_kind: kindRaw,
+        agent_session_id: (raw.agent_session_id as string | undefined) ?? `feedback-${Date.now()}`,
+      });
+      return await writeRuntimeEntry(args);
+    },
+  },
+
+  "ledger.flag_decision": {
+    name: "ledger.flag_decision",
+    description: "Flag a past decision as wrong. Stops findPrecedent from returning it next time. Audit-preserving — original decision is NOT modified.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team_id: { type: "string" },
+        actor: { type: "object" },
+        references_entry_id: { type: "string" },
+        rationale: { type: "string" },
+        agent_session_id: { type: "string" },
+      },
+      required: ["actor", "references_entry_id", "rationale"],
+    },
+    handler: async (input, authedTeamId) => {
+      const raw = input as Record<string, unknown>;
+      const team_id = (raw.team_id as string | undefined) ?? authedTeamId;
+      if (team_id !== authedTeamId) {
+        throw new Error(`Token scoped to '${authedTeamId}'; request targeted '${team_id}'`);
+      }
+      const refIdRaw = raw.references_entry_id;
+      if (typeof refIdRaw !== "string" || refIdRaw.length === 0) {
+        throw new Error("references_entry_id is required and must be a non-empty string");
+      }
+      const rationaleRaw = raw.rationale;
+      if (typeof rationaleRaw !== "string" || rationaleRaw.length === 0) {
+        throw new Error("rationale is required when flagging a decision");
+      }
+      const args = RuntimeEntrySchema.parse({
+        team_id,
+        actor: raw.actor,
+        decision: `Flagged decision ${refIdRaw} as wrong`,
+        rationale: rationaleRaw,
+        runtime_kind: "decision_flagged",
+        references_entry_id: refIdRaw,
+        agent_session_id: (raw.agent_session_id as string | undefined) ?? `flag-${Date.now()}`,
+      });
+      return await writeRuntimeEntry(args);
+    },
+  },
+
+  "ledger.request_replay": {
+    name: "ledger.request_replay",
+    description: "Request a replay of a past decision against current bundles. Writes a durable request entry; the orchestrator-side worker that actually re-runs is Track C.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team_id: { type: "string" },
+        actor: { type: "object" },
+        references_entry_id: { type: "string" },
+        rationale: { type: "string" },
+        agent_session_id: { type: "string" },
+      },
+      required: ["actor", "references_entry_id"],
+    },
+    handler: async (input, authedTeamId) => {
+      const raw = input as Record<string, unknown>;
+      const team_id = (raw.team_id as string | undefined) ?? authedTeamId;
+      if (team_id !== authedTeamId) {
+        throw new Error(`Token scoped to '${authedTeamId}'; request targeted '${team_id}'`);
+      }
+      const refIdRaw = raw.references_entry_id;
+      if (typeof refIdRaw !== "string" || refIdRaw.length === 0) {
+        throw new Error("references_entry_id is required and must be a non-empty string");
+      }
+      const args = RuntimeEntrySchema.parse({
+        team_id,
+        actor: raw.actor,
+        decision: `Requested replay of ${refIdRaw} against current rules`,
+        rationale: typeof raw.rationale === "string" ? raw.rationale : "",
+        runtime_kind: "replay_requested",
+        references_entry_id: refIdRaw,
+        agent_session_id: (raw.agent_session_id as string | undefined) ?? `replay-${Date.now()}`,
+      });
+      return await writeRuntimeEntry(args);
+    },
+  },
+
+  "ledger.pause_class": {
+    name: "ledger.pause_class",
+    description: "Pause autopilot for an entire ambiguity class. findPrecedent returns null for any decision in the paused class until cleared. Most consequential teaching signal.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team_id: { type: "string" },
+        actor: { type: "object" },
+        paused_class: { type: "string" },
+        rationale: { type: "string" },
+        agent_session_id: { type: "string" },
+      },
+      required: ["actor", "paused_class", "rationale"],
+    },
+    handler: async (input, authedTeamId) => {
+      const raw = input as Record<string, unknown>;
+      const team_id = (raw.team_id as string | undefined) ?? authedTeamId;
+      if (team_id !== authedTeamId) {
+        throw new Error(`Token scoped to '${authedTeamId}'; request targeted '${team_id}'`);
+      }
+      const clsRaw = raw.paused_class;
+      if (typeof clsRaw !== "string" || clsRaw.length === 0) {
+        throw new Error("paused_class is required and must be a non-empty string");
+      }
+      const rationaleRaw = raw.rationale;
+      if (typeof rationaleRaw !== "string" || rationaleRaw.length === 0) {
+        throw new Error("rationale is required when pausing a class");
+      }
+      const args = RuntimeEntrySchema.parse({
+        team_id,
+        actor: raw.actor,
+        decision: `Paused autopilot for class '${clsRaw}'`,
+        rationale: rationaleRaw,
+        runtime_kind: "class_paused",
+        paused_class: clsRaw,
+        ambiguity_class: clsRaw,
+        agent_session_id: (raw.agent_session_id as string | undefined) ?? `pause-${Date.now()}`,
+      });
+      return await writeRuntimeEntry(args);
+    },
+  },
 };
 
 export const toolList = Object.values(tools).map((t) => ({
