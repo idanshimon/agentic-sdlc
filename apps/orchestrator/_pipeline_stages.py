@@ -349,18 +349,25 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
 async def stage_architect(run: RunState) -> AsyncIterator[StageEvent]:
     """Produce a high-level architecture sketch (design.md §2)."""
     yield _ev(run, Stage.ARCHITECT, "started", "Drafting architecture")
+
+    # Phase 2.3 wiring (2026-06-16): architect prompt now flows through the
+    # YAML resolver. owner_persona for architect-global is `architect`, so
+    # the Architect persona team owns this prompt in CODEOWNERS — PM cannot
+    # change it without their review, and vice versa.
+    catalog = get_prompt_catalog()
+    resolved = catalog.resolve(
+        stage="architect",
+        model=get_model_for_stage(run, "architect"),
+        team=run.team_id,
+    )
     res = await _call(
         run=run, stage_key="architect", agent_name="architect",
-        system_prompt=(
-            "You are the Architect agent. Read the resolved decisions below and "
-            "produce a concise solution architecture (8-12 bullets) that respects "
-            "every decision. Cover: components, data flow, security/PHI handling, "
-            "scale assumptions, observability. Cite which decision drove each bullet."
-        ),
+        system_prompt=resolved.template,
         user_prompt="Resolved decisions:\n" + "\n".join(
             f"- {d.decision_kind}: {d.resolution_text}" for d in run.decisions
         ),
     )
+    res.prompt_resolution = resolved
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
     # NOTE: previously truncated to 1200 chars, which silently dropped
@@ -408,39 +415,17 @@ async def stage_test_plan(
 
     prd_excerpt = (prd_text or "")[:3000]
 
-    sys_prompt = (
-        "You are the Test Planner. Your tests MUST verify the SPECIFIC "
-        "architectural assertions in the input — not generic REST/CRUD "
-        "behaviour. The pipeline already had a failure mode where you "
-        "produced 'POST returns 201, GET returns 200, DELETE returns 204' "
-        "for a streaming WebSocket API. Don't do that.\n\n"
-        "OUTPUT FORMAT — markdown only, no code fences. For each test:\n\n"
-        "## Test N: <Title naming the assertion under test>\n\n"
-        "**Verifies decision:** <quote the resolved decision OR the "
-        "architectural component / invariant being tested — verbatim if "
-        "you can>\n\n"
-        "**Given** <preconditions referencing real architectural elements "
-        "from the input>\n"
-        "**When** <a concrete action involving the named transport, auth, "
-        "or data shape>\n"
-        "**Then** <an observable outcome that would be falsifiable in a "
-        "real test, citing specific status codes / metrics / log entries "
-        "/ data shapes>\n\n"
-        "RULES:\n"
-        "1. Produce 5-8 tests, one per resolved decision plus 1-2 "
-        "cross-cutting tests (e.g. observability, failure-mode).\n"
-        "2. EVERY test MUST cite at least one named element from the "
-        "decisions or architecture (component name, protocol, claim, "
-        "metric, decision keyword). Generic 'the API' references are "
-        "REJECTED.\n"
-        "3. If the architecture mentions WebSocket, mTLS, JWT, FHIR, "
-        "PHI redaction, OAuth, latency SLO, or vendor connectors, AT "
-        "LEAST one test MUST exercise each named primitive that has a "
-        "matching decision.\n"
-        "4. Do not ship plain HTTP-status contract tests (POST 201, "
-        "DELETE 204, GET 404) UNLESS the decisions or PRD explicitly "
-        "specify those status codes."
+    # Phase 2.4 wiring (2026-06-16): test_plan prompt now flows through the
+    # YAML resolver. owner_persona is `qa` — QA team CODEOWNS the test_plan
+    # prompt, so changes require their review even if the change is filed
+    # by SRE or platform-team.
+    catalog = get_prompt_catalog()
+    resolved = catalog.resolve(
+        stage="test_plan",
+        model=get_model_for_stage(run, "test_plan"),
+        team=run.team_id,
     )
+    sys_prompt = resolved.template
 
     user_prompt = (
         f"PRD excerpt:\n{prd_excerpt}\n\n"
@@ -453,6 +438,7 @@ async def stage_test_plan(
         run=run, stage_key="test_plan", agent_name="test-planner",
         system_prompt=sys_prompt, user_prompt=user_prompt,
     )
+    res.prompt_resolution = resolved
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
     yield _ev(run, Stage.TEST_PLAN, "completed", "Test plan ready",
@@ -490,20 +476,29 @@ async def stage_codegen(run: RunState) -> AsyncIterator[StageEvent]:
         if "test_plan" in p:
             tests_md = str(p["test_plan"])
 
+    # Phase 2.4 wiring (2026-06-16): both codegen calls now flow through
+    # the YAML resolver. Each call gets its own prompt_id resolved:
+    #   - "codegen"        owner: sre  (impl prompt)
+    #   - "codegen-tests"  owner: sre  (tests prompt)
+    # Both owned by SRE — these prompts encode operability constraints
+    # (stub fallbacks, no-PHI rule, no-markdown-fences) that SRE has to
+    # uphold in incident review.
+    catalog = get_prompt_catalog()
+    impl_resolved = catalog.resolve(
+        stage="codegen",
+        model=get_model_for_stage(run, "codegen"),
+        team=run.team_id,
+    )
+    tests_resolved = catalog.resolve(
+        stage="codegen-tests",
+        model=get_model_for_stage(run, "codegen"),
+        team=run.team_id,
+    )
+
     # Call 1: implementation
     impl_res = await _call(
         run=run, stage_key="codegen", agent_name="codegen-impl",
-        system_prompt=(
-            "You are the CodeGen agent producing a deployable FastAPI service. "
-            "Output ONE complete Python module ready to deploy as `app.py` on "
-            "Azure Container Apps. Include FastAPI app instantiation, route "
-            "handlers, Pydantic models, and `if __name__ == \"__main__\": "
-            "uvicorn.run(...)`. Include type hints, docstrings, and minimal "
-            "error handling. Use stub/in-memory implementations for external "
-            "dependencies (FHIR endpoint, Service Bus, blob, Cosmos) so the "
-            "module starts up locally. Be concrete; no TODOs. NO test code "
-            "in this file — tests come in a separate call."
-        ),
+        system_prompt=impl_resolved.template,
         user_prompt=(
             f"Architecture:\n{arch}\n\n"
             f"Contract tests (markdown spec to satisfy):\n{tests_md}\n\n"
@@ -511,27 +506,21 @@ async def stage_codegen(run: RunState) -> AsyncIterator[StageEvent]:
             "Start with imports and end with the uvicorn block."
         ),
     )
+    impl_res.prompt_resolution = impl_resolved
     run.total_tokens += impl_res.prompt_tokens + impl_res.completion_tokens
     run.total_cost_usd += impl_res.usd
 
     # Call 2: pytest tests against the impl
     test_res = await _call(
         run=run, stage_key="codegen", agent_name="codegen-tests",
-        system_prompt=(
-            "You are the CodeGen agent producing pytest contract tests. "
-            "Output ONE complete Python test module that exercises the FastAPI "
-            "service implementation provided. Use `from fastapi.testclient import "
-            "TestClient` and `from app import app`. Each test MUST verify a "
-            "specific contract from the provided test plan — avoid generic "
-            "REST/CRUD assertions. Include synthetic-only test data; never "
-            "real PHI. Be concrete; no TODOs."
-        ),
+        system_prompt=tests_resolved.template,
         user_prompt=(
             f"Implementation (app.py):\n{impl_res.text}\n\n"
             f"Test plan (markdown spec):\n{tests_md}\n\n"
             "Output the pytest module code only — no prose, no markdown fences."
         ),
     )
+    test_res.prompt_resolution = tests_resolved
     run.total_tokens += test_res.prompt_tokens + test_res.completion_tokens
     run.total_cost_usd += test_res.usd
 

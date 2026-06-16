@@ -30,6 +30,13 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy orchestrator source as a Python package at /app/orchestrator
 COPY apps/orchestrator /app/orchestrator
 
+# Phase 2.2: prompts/ ship inside the image so the catalog loader
+# (orchestrator._pipeline_stages.get_prompt_catalog) finds /app/prompts
+# at startup. Without this COPY the loader raises PromptValidationError
+# ("prompts directory does not exist: prompts") on the first run that
+# hits a wired stage — caught on first deploy of v5 (run 40f34d2a).
+COPY prompts /app/prompts
+
 EXPOSE 8000
 # Run as a package so the dotted imports (.config, .stages …) resolve.
 CMD ["uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]

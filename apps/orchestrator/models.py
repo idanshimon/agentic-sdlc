@@ -108,6 +108,16 @@ class LedgerEntry(BaseModel):
     stage_decision-style write (which is everything the orchestrator
     emits today). Teaching-signal writes go through a different
     code path (the ledger-mcp tools, not this entry).
+
+    NOTE 2026-06-16 (Phase 2.5): added prompt_resolution_path. When a
+    stage writes a ledger entry, this field pins the full inheritance
+    chain (team → persona → global) that produced the prompt — including
+    the matched scope's prompt_id, version, git_sha, and owner_persona.
+    This closes the audit loop: every decision is reproducible because
+    we know exactly which prompt version was used at decision time, and
+    the YAML files are immutable once published (per openspec Requirement 8).
+    Old entries without this field render gracefully ("chain unavailable
+    (pre-v2)") in the UI per openspec spec scenario.
     """
     id: str = Field(default_factory=_uuid)
     entry_type: str = "runtime"  # ledger-core write_entry() reads this
@@ -125,6 +135,11 @@ class LedgerEntry(BaseModel):
     created_by: str = "unknown"
     precedent_id: Optional[str] = None  # for back-trace index (design.md §4 demote)
     confidence_source: Literal["human", "autopilot"] = "human"
+    # Phase 2.5: full prompt inheritance chain that produced this decision.
+    # Populated by stages that have completed migration to prompt_library_v2;
+    # None for legacy entries and for any entry not associated with a
+    # specific catalog-resolved prompt (e.g. operator-only resolutions).
+    prompt_resolution_path: Optional[list[dict[str, Any]]] = None
 
 
 # --- stage events / run state -------------------------------------------------
