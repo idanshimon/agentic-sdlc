@@ -36,12 +36,32 @@ export interface RunState {
   team_id: string;
   mode: RunMode;
   status: RunStatus;
-  current_stage?: Stage | null;
+  current_stage?: Stage | string | null;
   created_at: string;
   updated_at: string;
   events: StageEvent[];
+  /** @deprecated read total_cost_usd; this alias kept for legacy demo data. */
   cost_usd?: number;
+  total_cost_usd?: number;
+  total_tokens?: number;
   decisions_count?: number;
+  /** Per-stage wall-clock seconds. Populated by the orchestrator + the
+   *  experiments harness; absent on legacy in-memory-only runs. */
+  stage_durations_seconds?: Record<string, number>;
+  /** Total wall clock for the run (from harness summary.json). */
+  wall_clock_seconds?: number;
+  /** Per-stage provider/model routing snapshot. Useful when an A/B harness
+   *  is comparing two models — operator can drill into the run and see
+   *  which model produced which artifact. */
+  model_routing?: Record<string, { provider?: string; model?: string }>;
+  /** Output artifact sizes, keyed by name (architecture_chars, etc.). */
+  artifact_sizes?: Record<string, number>;
+  /** Experiment-namespace provenance (set by the SBM harness seeder). */
+  namespace?: string;
+  model?: string;
+  model_slug?: string;
+  source_run_dir?: string;
+  original_team_id?: string;
 }
 
 export interface AmbiguityCard {

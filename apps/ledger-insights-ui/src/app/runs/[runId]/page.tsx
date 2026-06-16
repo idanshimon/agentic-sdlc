@@ -13,6 +13,7 @@ import { StagePill } from "@/components/domain/stage-pill";
 import { StatusDot } from "@/components/domain/status-dot";
 import { ResolverGate } from "@/components/domain/resolver-gate";
 import { RunArtifactsPanel } from "@/components/domain/run-artifacts-panel";
+import { RunSummaryPanel } from "@/components/domain/run-summary-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { relativeTime, shortId, fmtUsd } from "@/lib/utils";
 import type { Stage, StageEvent } from "@/lib/types";
@@ -213,32 +214,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
 
           <RunArtifactsPanel runId={runId} status={run.status} />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Card className="p-4">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-                Spend
-              </div>
-              <div className="text-2xl font-semibold tabular mt-1">
-                {fmtUsd(run.cost_usd ?? 0)}
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-                Decisions
-              </div>
-              <div className="text-2xl font-semibold tabular mt-1">
-                {run.decisions_count ?? 0}
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-                Created
-              </div>
-              <div className="text-sm mt-1.5 text-[var(--text-secondary)]">
-                {new Date(run.created_at).toLocaleString()}
-              </div>
-            </Card>
-          </div>
+          <RunSummaryPanel run={run} />
         </>
       )}
     </div>

@@ -8,9 +8,14 @@
 # Ignore everything by default
 *
 
-# Whitelist what the Dockerfile actually needs.
+# Whitelist what the Dockerfiles actually need.
+# UI:           apps/ledger-insights-ui, openspec, standards-bundles
+# orchestrator: apps/orchestrator, packages/ledger-core
 !apps/ledger-insights-ui
+!apps/orchestrator
+!packages/ledger-core
 !openspec
+!standards-bundles
 
 # Re-ignore noise inside the whitelisted paths.
 apps/ledger-insights-ui/node_modules
