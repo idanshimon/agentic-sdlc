@@ -19,6 +19,7 @@
 
 import { useState } from "react";
 import { ThumbsUp, ThumbsDown, Flag, RotateCcw, PauseCircle } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   useThumbsMutation,
@@ -79,11 +80,17 @@ export function TeachingSignalBar({ entry }: { entry: LedgerEntry }) {
           icon={ThumbsUp}
           label="Helpful"
           onClick={() =>
-            thumbs.mutate({
-              references_entry_id: entry.id,
-              feedback_kind: "thumbs_up",
-              actor_id: ACTOR_ID,
-            })
+            thumbs.mutate(
+              {
+                references_entry_id: entry.id,
+                feedback_kind: "thumbs_up",
+                actor_id: ACTOR_ID,
+              },
+              {
+                onSuccess: () => toast.success("Recorded 👍"),
+                onError: (e) => toast.error(`Failed to record: ${String(e)}`),
+              },
+            )
           }
           disabled={busy}
           accent="success"
@@ -93,11 +100,17 @@ export function TeachingSignalBar({ entry }: { entry: LedgerEntry }) {
           icon={ThumbsDown}
           label="Not helpful"
           onClick={() =>
-            thumbs.mutate({
-              references_entry_id: entry.id,
-              feedback_kind: "thumbs_down",
-              actor_id: ACTOR_ID,
-            })
+            thumbs.mutate(
+              {
+                references_entry_id: entry.id,
+                feedback_kind: "thumbs_down",
+                actor_id: ACTOR_ID,
+              },
+              {
+                onSuccess: () => toast.success("Recorded 👎"),
+                onError: (e) => toast.error(`Failed to record: ${String(e)}`),
+              },
+            )
           }
           disabled={busy}
           accent="danger"
@@ -116,11 +129,17 @@ export function TeachingSignalBar({ entry }: { entry: LedgerEntry }) {
           icon={RotateCcw}
           label="Replay"
           onClick={() =>
-            replay.mutate({
-              references_entry_id: entry.id,
-              actor_id: ACTOR_ID,
-              rationale: "Re-run requested from /decisions card",
-            })
+            replay.mutate(
+              {
+                references_entry_id: entry.id,
+                actor_id: ACTOR_ID,
+                rationale: "Re-run requested from /decisions card",
+              },
+              {
+                onSuccess: () => toast.success("Replay queued — Track C worker picks it up"),
+                onError: (e) => toast.error(`Failed to queue replay: ${String(e)}`),
+              },
+            )
           }
           disabled={busy}
           accent="primary"
@@ -157,7 +176,9 @@ export function TeachingSignalBar({ entry }: { entry: LedgerEntry }) {
                 onSuccess: () => {
                   setFlagReason("");
                   setShowFlag(false);
+                  toast.success("Decision flagged — findPrecedent will skip it next time");
                 },
+                onError: (e) => toast.error(`Failed to flag: ${String(e)}`),
               },
             );
           }}
@@ -184,7 +205,9 @@ export function TeachingSignalBar({ entry }: { entry: LedgerEntry }) {
                 onSuccess: () => {
                   setPauseReason("");
                   setShowPause(false);
+                  toast.warning(`Autopilot paused for '${ambiguityClass}'`);
                 },
+                onError: (e) => toast.error(`Failed to pause: ${String(e)}`),
               },
             );
           }}
@@ -192,19 +215,8 @@ export function TeachingSignalBar({ entry }: { entry: LedgerEntry }) {
         />
       )}
 
-      {(thumbs.isError || replay.isError) && (
-        <div className="text-[11px] text-[var(--danger)]">
-          {String(thumbs.error || replay.error)}
-        </div>
-      )}
-      {thumbs.isSuccess && (
-        <div className="text-[11px] text-[var(--success)]">Thanks — recorded.</div>
-      )}
-      {replay.isSuccess && (
-        <div className="text-[11px] text-[var(--success)]">
-          Replay requested. The orchestrator worker (Track C) will pick it up.
-        </div>
-      )}
+      {/* Inline success/error duplicated by sonner toasts — removed.
+          Errors still surface inside FormPanel for flag/pause. */}
     </div>
   );
 }

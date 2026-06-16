@@ -11,16 +11,42 @@ const stageMeta: Record<Stage, { label: string; abbr: string }> = {
   deliver: { label: "Deliver", abbr: "DE" },
 };
 
+/**
+ * Defensive label/abbr fallback for stages that aren't in the canonical
+ * pipeline map (e.g. "resolver" / "gate" / "design_review" written by
+ * upstream tools or seeded fixtures). Without this, an unknown stage
+ * crashed the entire /decisions page on `meta.abbr` lookup.
+ *
+ * Same defense-in-depth lesson as DecisionCard's normalize() — never
+ * trust the input shape; never render off `undefined.field`.
+ */
+function fallbackMeta(stage: string): { label: string; abbr: string } {
+  // Title-case the stage name for the label.
+  const label = stage
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(" ");
+  // Abbr: first 2 letters of the first 1-2 words, max 4 chars.
+  const parts = stage.split(/[_\s-]+/).filter(Boolean);
+  const abbr =
+    parts.length >= 2
+      ? (parts[0][0] + parts[1][0]).toUpperCase()
+      : (stage.slice(0, 2)).toUpperCase();
+  return { label: label || stage, abbr: abbr || "??" };
+}
+
 export function StagePill({
   stage,
   status = "idle",
   className,
 }: {
-  stage: Stage;
+  stage: Stage | string;
   status?: "idle" | "running" | "completed" | "failed" | "awaiting_gate";
   className?: string;
 }) {
-  const meta = stageMeta[stage];
+  const meta = (stageMeta as Record<string, { label: string; abbr: string }>)[stage as string]
+    ?? fallbackMeta(String(stage));
   const statusStyles: Record<string, string> = {
     idle: "bg-[var(--overlay)] text-[var(--text-tertiary)] border-[var(--border-default)]",
     running: "bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30",
