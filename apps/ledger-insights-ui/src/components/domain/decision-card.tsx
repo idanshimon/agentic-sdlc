@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StagePill } from "./stage-pill";
 import { TeachingSignalBar } from "./teaching-signal-bar";
+import { PromptChainBadge } from "./prompt-chain-badge";
 import { relativeTime, shortId, fmtUsd } from "@/lib/utils";
 import type { LedgerEntry } from "@/lib/types";
 import { ShieldAlert, ShieldCheck, ShieldOff, User, Bot, ThumbsUp, ThumbsDown, Flag, RotateCcw, PauseCircle } from "lucide-react";
@@ -56,6 +57,9 @@ function normalize(raw: RawEntry): LedgerEntry {
     feedback_kind: raw.feedback_kind,
     paused_class: raw.paused_class,
     ambiguity_class: raw.ambiguity_class,
+    prompt_resolution_path: Array.isArray(raw.prompt_resolution_path)
+      ? raw.prompt_resolution_path
+      : null,
     created_at: raw.created_at ?? new Date().toISOString(),
   };
 }
@@ -157,6 +161,13 @@ export function DecisionCard({ entry: raw }: { entry: LedgerEntry }) {
         <span className="tabular">
           {fmtUsd(entry.cost_usd)} · {relativeTime(entry.created_at)}
         </span>
+      </div>
+      {/* Phase 5: prompt-chain attribution. Closes the audit loop by
+          showing operators exactly which YAML prompt produced this
+          decision. Click-through to /prompts opens the catalog for
+          drilldown + Edit + open PR. */}
+      <div className="px-4 pb-2 -mt-1">
+        <PromptChainBadge chain={entry.prompt_resolution_path} variant="card" />
       </div>
       <TeachingSignalBar entry={entry} />
     </Card>
