@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { TeachingSignalBar } from "./teaching-signal-bar";
 import { StagePill } from "./stage-pill";
 import { relativeTime, shortId, fmtUsd, cn } from "@/lib/utils";
+import { PromptChainBadge } from "./prompt-chain-badge";
 import type { LedgerEntry } from "@/lib/types";
 
 type RawEntry = Partial<LedgerEntry> & {
@@ -57,6 +58,9 @@ function normalize(raw: RawEntry): LedgerEntry {
     feedback_kind: raw.feedback_kind,
     paused_class: raw.paused_class,
     ambiguity_class: raw.ambiguity_class,
+    prompt_resolution_path: Array.isArray(raw.prompt_resolution_path)
+      ? raw.prompt_resolution_path
+      : null,
     created_at: raw.created_at ?? new Date().toISOString(),
   };
 }
@@ -572,6 +576,15 @@ function DecisionDetail({
           </dl>
         </Section>
       </div>
+
+      {/* Phase 5: full prompt-chain visualization. Operators can see
+          every scope the resolver checked and which one matched, with
+          the matched prompt's git_sha + owner_persona visible. This
+          closes the audit loop: any decision is traceable back to its
+          YAML source-of-truth. */}
+      <Section title="Prompt resolution">
+        <PromptChainBadge chain={entry.prompt_resolution_path} variant="full" />
+      </Section>
 
       {entry.bundle_refs.length > 0 && (
         <Section title={`Bundle citations (${entry.bundle_refs.length})`}>

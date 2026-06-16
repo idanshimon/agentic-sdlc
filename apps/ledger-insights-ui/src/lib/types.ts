@@ -100,6 +100,30 @@ export interface LedgerEntry {
   bundle_refs: string[];
   precedent_refs?: string[];
   /**
+   * Phase 2.6 chain pinning (2026-06-16): every LedgerEntry written by
+   * a stage_decision now carries the full prompt inheritance chain that
+   * produced its ambiguity-card recommendation. The orchestrator's
+   * stages stash chain on RunState.prompt_chain_by_stage; both ledger
+   * writers (autopilot in main.py::_drive, per-card in main.py::approve)
+   * copy that chain into LedgerEntry.prompt_resolution_path before write.
+   *
+   * Shape mirrors PromptCatalog.resolve(...).chain_as_list():
+   *   each step has scope + matched + reason + (when matched) the full
+   *   matched-prompt frontmatter (prompt_id, version, git_sha, owner_persona).
+   *
+   * Legacy entries (pre-Phase-2) have null/undefined here — UI renders
+   * "chain unavailable (pre-v2)" per openspec spec scenario.
+   */
+  prompt_resolution_path?: Array<{
+    scope: "team" | "persona" | "global";
+    matched: boolean;
+    reason?: string;
+    prompt_id?: string;
+    version?: string;
+    git_sha?: string;
+    owner_persona?: string;
+  }> | null;
+  /**
    * Discriminator added by the orchestrator. Most card-style renderers
    * don't need this directly, but the economics aggregator uses it to
    * classify autonomy (plan_proposed = human-gated even if actor=agent).
