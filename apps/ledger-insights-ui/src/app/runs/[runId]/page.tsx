@@ -29,7 +29,23 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
   const { events: liveEvents, connected } = useRunStream(runId);
   const queryClient = useQueryClient();
 
-  const allEvents = [...(run?.events ?? []), ...liveEvents];
+  // Phase 4 (2026-06-16): dedup events from server + live SSE so each
+  // stage transition only renders once. Without this, the event-stream
+  // panel showed every event twice as polling + SSE both delivered the
+  // same payloads. Composite key (stage, status, ts) is the same shape
+  // useRunStream uses for its internal dedup.
+  const allEvents = useMemo(() => {
+    const map = new Map<string, StageEvent>();
+    for (const ev of run?.events ?? []) {
+      const key = `${ev.stage}|${ev.status}|${ev.ts ?? ""}`;
+      map.set(key, ev);
+    }
+    for (const ev of liveEvents) {
+      const key = `${ev.stage}|${ev.status}|${ev.ts ?? ""}`;
+      if (!map.has(key)) map.set(key, ev);
+    }
+    return Array.from(map.values());
+  }, [run?.events, liveEvents]);
   const awaitingGate = run?.status === "awaiting_gate";
 
   // Memoize the payload object so its identity is stable across renders that
@@ -114,12 +130,44 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
         <Card className="p-6 text-center text-sm text-[var(--text-tertiary)]">Run not found.</Card>
       ) : (
         <>
+          {/* Phase 4: sticky needs-your-attention banner when a gate is open.
+              Stays pinned to the top of the viewport while operator scrolls
+              through events/payloads — without this, the gate card scrolls
+              off-screen and the operator can't tell at a glance that they
+              need to act. Click → smooth-scroll to the actual gate card. */}
           {awaitingGate && (
-            <ResolverGate
-              runId={runId}
-              events={allEvents}
-              onApproved={onApproved}
-            />
+            <div className="sticky top-0 z-40 -mx-2 px-2 py-2 backdrop-blur bg-[var(--warning)]/15 border border-[var(--warning)]/40 rounded-lg flex items-center gap-3">
+              <span className="inline-flex h-2 w-2 rounded-full bg-[var(--warning)] animate-pulse shrink-0" />
+              <div className="flex-1 text-xs">
+                <span className="font-semibold text-[var(--text-primary)]">
+                  Pipeline paused at {run.current_stage === "design_review" ? "Design Review" : "Resolver"} gate.
+                </span>
+                <span className="text-[var(--text-secondary)] ml-1.5">
+                  Your decision is needed to advance.
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  document.getElementById("resolver-gate-anchor")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                }}
+                className="text-[11px] font-medium px-2.5 py-1 rounded bg-[var(--warning)] text-black hover:opacity-90 shrink-0"
+              >
+                Jump to gate ↓
+              </button>
+            </div>
+          )}
+
+          {awaitingGate && (
+            <div id="resolver-gate-anchor">
+              <ResolverGate
+                runId={runId}
+                events={allEvents}
+                onApproved={onApproved}
+              />
+            </div>
           )}
 
           <Card className="p-4">
