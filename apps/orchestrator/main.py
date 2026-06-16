@@ -86,9 +86,45 @@ app.add_middleware(
 
 # ---------- helpers -----------------------------------------------------------
 async def _push(run_id: str, ev: StageEvent | None) -> None:
+    """Push an event to any open SSE subscriber AND durably persist the
+    run to Cosmos so pod restarts don't zombie the run.
+
+    Phase 6.1 fix (2026-06-16): previously save_run() only fired in the
+    finally block of _drive, so any pod death mid-stage (revision
+    rollover, OOM, network blip, scale-to-zero, ACR redeploy) left the
+    Cosmos doc stuck at the ingest-time snapshot: status=running,
+    events=[], decisions=[]. The /runs table then displayed 8 zombie
+    rows all showing "running · 0 decisions · $0.0000" for hours after
+    they had actually progressed through gates and decisions in-memory.
+
+    Caught operator-side via screenshot: 8 of 13 rows showed "running"
+    with no progress even though backend curl proved they were past the
+    assessor stage. Verified via cross-check of /api/runs vs
+    /api/runs/<id> showing list_status="running" / truth_events=0 for
+    every revision-rollover survivor.
+
+    Persist on every event so the durable view always matches in-memory
+    state to within one stage transition. Cost: one extra Cosmos write
+    per event (~30 events per run). At demo scale that's ~$0.001/run
+    extra; at production scale we'd batch or debounce, but for now
+    correctness wins over cost.
+    """
     q = _queues.get(run_id)
     if q is not None:
         await q.put(ev)
+    # Skip the durable write for the stream-complete sentinel — _drive's
+    # own finally block has the final save and we don't want a double-write.
+    if ev is not None and _ledger is not None:
+        run = _runs.get(run_id)
+        if run is not None:
+            try:
+                await _ledger.save_run(run)
+            except Exception as exc:
+                _logger.warning(
+                    "Per-event Cosmos save_run failed for %s on event "
+                    "(%s, %s): %s",
+                    run_id, ev.stage, ev.status, exc,
+                )
 
 
 async def _run_autopilot(run: RunState) -> None:
