@@ -15,13 +15,67 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from .config import get_model_for_stage, get_provider_for_stage, settings
 from .models import AmbiguityCard, ResolutionOption, RunState, Stage, StageEvent
+from .prompt_library_v2 import (
+    PromptCatalog,
+    PromptValidationError,
+    ResolveResult,
+    load_prompts,
+)
 from .telemetry import record_tokens
 
 _logger = logging.getLogger("orchestrator.stages")
+
+# ---------------------------------------------------------------------------
+# Prompt catalog singleton — loaded at first use.
+#
+# Loaded lazily so that test fixtures that monkey-patch prompts/ get
+# their own view (the catalog is a property, not a module-level constant).
+# Production runs read once from /app/prompts/ inside the container image.
+# ---------------------------------------------------------------------------
+_catalog: PromptCatalog | None = None
+
+def _prompts_root() -> Path:
+    """Where to look for prompts/. Order:
+      1. PROMPTS_ROOT env var (test fixtures / hot-reload future work)
+      2. /app/prompts (production container layout from Dockerfile.repo-root)
+      3. <repo_root>/prompts (developer-laptop layout)
+    """
+    env = os.environ.get("PROMPTS_ROOT")
+    if env:
+        return Path(env)
+    container = Path("/app/prompts")
+    if container.is_dir():
+        return container
+    # Walk up from this file to find the monorepo root
+    here = Path(__file__).resolve()
+    for parent in [here.parent.parent.parent, here.parent.parent]:
+        candidate = parent / "prompts"
+        if candidate.is_dir():
+            return candidate
+    return Path("prompts")  # last resort; loader will raise if missing
+
+def get_prompt_catalog() -> PromptCatalog:
+    """Lazy-load the catalog. Raises PromptValidationError if any
+    prompt file is malformed — orchestrator startup will fail-fast
+    rather than silently fall back to hardcoded defaults."""
+    global _catalog
+    if _catalog is None:
+        root = _prompts_root()
+        _logger.info("Loading prompt catalog from %s", root)
+        _catalog = load_prompts(root)
+    return _catalog
+
+def reset_prompt_catalog() -> None:
+    """For tests + hot-reload: force the next get_prompt_catalog() call
+    to reload from disk."""
+    global _catalog
+    _catalog = None
+
 
 # Rough USD/1k-token estimates — Phase 1 calibrates real numbers (design.md §7).
 _PRICE_PER_1K = {
@@ -41,6 +95,12 @@ class CallResult:
     prompt_tokens: int
     completion_tokens: int
     usd: float
+    # 2026-06-16: per Phase 2 wiring, every _call that resolved its prompt
+    # through the catalog records the chain here. Stages then propagate it
+    # to events / ledger so the audit trail pins (prompt_id, version, git_sha,
+    # owner_persona) on every decision. None when the stage didn't use the
+    # catalog (legacy inline-prompt path still works).
+    prompt_resolution: Optional[ResolveResult] = None
 
 
 async def _call(
@@ -125,49 +185,27 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
     resolution" rather than "I accept an ambiguity exists."
     """
     yield _ev(run, Stage.ASSESSOR, "started", "Scanning spec for ambiguity")
-    sys_prompt = (
-        "You are the Assessor agent in a healthcare SDLC pipeline. Read the PRD "
-        "and surface 5-8 SPECIFIC ambiguities grounded in actual PRD text. For each "
-        "ambiguity, propose 2 concrete resolution options (1 recommended + 1 plausible "
-        "alternative) so the human reviewer can either Accept the recommendation, pick "
-        "the alternative, write their own, or Reject as not-applicable.\n\n"
-        "Return ONLY a JSON array. NO prose, NO markdown fences. Each item must be:\n"
-        "{\n"
-        '  "title": "<short headline>",\n'
-        '  "class": "<one of: phi-classification, scope-resolution, sla-binding,\n'
-        '           identifier-format, auth-policy, data-retention, naming-convention, other>",\n'
-        '  "prd_quote": "<verbatim text from PRD, ≤200 chars, the EXACT phrase you flagged>",\n'
-        '  "prd_section": "<PRD section heading the quote came from, ≤80 chars>",\n'
-        '  "gap_description": "<1 sentence — what is MISSING that needs to be decided>",\n'
-        '  "blast_usd": <50-500 float>,\n'
-        '  "options": [\n'
-        '    {\n'
-        '      "label": "<short headline for this option>",\n'
-        '      "resolution": "<1-2 sentences — the concrete resolution text>",\n'
-        '      "rationale": "<1 sentence — why this option, citing regulation/policy/precedent>",\n'
-        '      "downstream_impact": "<what Architect/CodeGen will do differently if this wins>",\n'
-        '      "recommended": true\n'
-        '    },\n'
-        '    {\n'
-        '      "label": "<alternative headline>",\n'
-        '      "resolution": "<alternative resolution text>",\n'
-        '      "rationale": "<why someone might prefer this>",\n'
-        '      "downstream_impact": "<what changes downstream>",\n'
-        '      "recommended": false\n'
-        '    }\n'
-        '  ]\n'
-        "}\n\n"
-        "Recommendation guidance: for PHI/auth/data-retention, default to HIPAA-aligned "
-        "options citing specific regs (§164.x). For SLA, cite measurable thresholds. For "
-        "naming/scope, propose a single normative convention. Blast cost: 50-150 for naming/scope, "
-        "200-500 for PHI/auth/retention, 100-300 for SLA. Be concrete and PRD-grounded."
+
+    # Phase 2 wiring (2026-06-16): resolve the assessor system prompt through
+    # the per-team / per-persona / global inheritance catalog instead of
+    # hardcoding it inline. The resolved chain is captured into the event
+    # payload + ledger so every ambiguity card the assessor surfaces is
+    # auditable to a specific prompt_id/version/git_sha.
+    #
+    # Falls back to a clear PromptValidationError if the catalog is misconfigured
+    # (e.g. global YAML missing) — fail-loud over silent inline default.
+    catalog = get_prompt_catalog()
+    resolved = catalog.resolve(
+        stage="assessor",
+        model=get_model_for_stage(run, "assessor"),
+        team=run.team_id,
     )
-    # The largest sample PRD shipped (~250KB / 5,924 lines) needs the 128K-token APIM context window via gpt-4.1.
-    # 60k chars ≈ 15k tokens — comfortably fits + leaves room for ~4k tokens of structured output.
+    sys_prompt = resolved.template
     res = await _call(
         run=run, stage_key="assessor", agent_name="assessor",
         system_prompt=sys_prompt, user_prompt=prd_text[:60000],
     )
+    res.prompt_resolution = resolved   # carry chain to caller for ledger pinning
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
 
