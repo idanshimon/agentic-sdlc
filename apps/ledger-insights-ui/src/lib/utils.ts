@@ -33,3 +33,34 @@ export function fmtNumber(value: number | null | undefined): string {
   if (value == null) return "—";
   return new Intl.NumberFormat("en-US").format(value);
 }
+
+/**
+ * Stage events come from two backends with two different field names for
+ * the timestamp:
+ *   - Orchestrator (apps/orchestrator/models.py::StageEvent) emits `ts`
+ *   - Demo Mode + some legacy fixtures emit `timestamp`
+ *
+ * Reading `e.timestamp` directly on a real-orchestrator event produced
+ * `Invalid Date` everywhere event timestamps were rendered. Caught
+ * 2026-06-16 when seeded SBM runs landed in the dashboard — the bug had
+ * been latent since the dashboard was first wired to the live pipeline.
+ *
+ * Always use this helper. Returns `null` when neither field is present
+ * or both are unparseable so callers can render `—` instead of
+ * `Invalid Date`.
+ */
+export function eventTimestamp(
+  e: { ts?: string; timestamp?: string },
+): Date | null {
+  const raw = e?.ts ?? e?.timestamp;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function eventTimeLabel(
+  e: { ts?: string; timestamp?: string },
+): string {
+  const d = eventTimestamp(e);
+  return d ? d.toLocaleTimeString() : "—";
+}
