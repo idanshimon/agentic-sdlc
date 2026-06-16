@@ -206,6 +206,10 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
         system_prompt=sys_prompt, user_prompt=prd_text[:60000],
     )
     res.prompt_resolution = resolved   # carry chain to caller for ledger pinning
+    # Phase 2.6: stash chain on RunState so the ledger writers (autopilot
+    # in main.py::_drive and per-card /approve in main.py::approve) can
+    # pin it on every LedgerEntry that derives from this assessor pass.
+    run.prompt_chain_by_stage["assessor"] = resolved.chain_as_list()
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
 
@@ -368,6 +372,7 @@ async def stage_architect(run: RunState) -> AsyncIterator[StageEvent]:
         ),
     )
     res.prompt_resolution = resolved
+    run.prompt_chain_by_stage["architect"] = resolved.chain_as_list()
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
     # NOTE: previously truncated to 1200 chars, which silently dropped
@@ -439,6 +444,7 @@ async def stage_test_plan(
         system_prompt=sys_prompt, user_prompt=user_prompt,
     )
     res.prompt_resolution = resolved
+    run.prompt_chain_by_stage["test_plan"] = resolved.chain_as_list()
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
     yield _ev(run, Stage.TEST_PLAN, "completed", "Test plan ready",
@@ -507,6 +513,7 @@ async def stage_codegen(run: RunState) -> AsyncIterator[StageEvent]:
         ),
     )
     impl_res.prompt_resolution = impl_resolved
+    run.prompt_chain_by_stage["codegen"] = impl_resolved.chain_as_list()
     run.total_tokens += impl_res.prompt_tokens + impl_res.completion_tokens
     run.total_cost_usd += impl_res.usd
 
@@ -521,6 +528,7 @@ async def stage_codegen(run: RunState) -> AsyncIterator[StageEvent]:
         ),
     )
     test_res.prompt_resolution = tests_resolved
+    run.prompt_chain_by_stage["codegen-tests"] = tests_resolved.chain_as_list()
     run.total_tokens += test_res.prompt_tokens + test_res.completion_tokens
     run.total_cost_usd += test_res.usd
 

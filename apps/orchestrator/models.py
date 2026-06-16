@@ -206,3 +206,11 @@ class RunState(BaseModel):
     # Per-run stage→provider override. Beats config. Shape:
     #   {"architect": {"provider": "foundry-anthropic", "model": "claude-sonnet-4-6", "via_apim": false}}
     stage_provider_overrides: dict[str, dict] = Field(default_factory=dict)
+    # Phase 2.6: per-stage prompt resolution chains. Populated by each
+    # stage helper after it calls catalog.resolve(); read by the ledger
+    # writers (autopilot in main.py::_drive, per-card in /approve) so
+    # every LedgerEntry pins the prompt chain that produced its
+    # ambiguity-card recommendation. Keys are stage names ("assessor",
+    # "architect", "test_plan", "codegen", "codegen-tests"); values
+    # are the chain_as_list() output (list[dict] — JSON-safe).
+    prompt_chain_by_stage: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
