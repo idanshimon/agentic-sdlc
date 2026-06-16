@@ -9,10 +9,12 @@
 *
 
 # Whitelist what the Dockerfiles actually need.
-# UI:           apps/ledger-insights-ui, openspec, standards-bundles
-# orchestrator: apps/orchestrator, packages/ledger-core
+# UI:                  apps/ledger-insights-ui, openspec, standards-bundles
+# orchestrator:        apps/orchestrator, packages/ledger-core
+# decision-ledger-mcp: apps/decision-ledger-mcp, standards-bundles
 !apps/ledger-insights-ui
 !apps/orchestrator
+!apps/decision-ledger-mcp
 !packages/ledger-core
 !openspec
 !standards-bundles

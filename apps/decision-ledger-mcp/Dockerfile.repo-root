@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1.7
+# decision-ledger-mcp built from REPO ROOT so we can COPY standards-bundles/
+# into the image. The original Dockerfile assumes apps/decision-ledger-mcp/
+# context and relies on a Container App volume mount — that mount was never
+# provisioned in v0.7 and the bundle endpoint returned ENOENT in production
+# (caught 2026-06-16 during stabilization).
+#
+# Build:
+#   az acr build --registry <acr> --image decision-ledger-mcp:<tag> \
+#     --file apps/decision-ledger-mcp/Dockerfile.repo-root .
+#
+# Build context: . (monorepo root). Filtered by /.dockerignore which
+# whitelists apps/decision-ledger-mcp and standards-bundles.
+
+FROM node:20-alpine AS builder
+WORKDIR /build
+COPY apps/decision-ledger-mcp/package*.json apps/decision-ledger-mcp/tsconfig.json ./
+RUN npm ci --omit=optional
+COPY apps/decision-ledger-mcp/src ./src
+RUN npm run build
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk add --no-cache tini
+COPY apps/decision-ledger-mcp/package*.json ./
+RUN npm ci --omit=dev --omit=optional
+COPY --from=builder /build/dist ./dist
+# Bake bundles into the image — /api/ledger/bundle and /bundles depend on
+# them being readable at runtime. Path is the WORKDIR-relative target,
+# which becomes /app/standards-bundles to match STANDARDS_BUNDLES_ROOT.
+COPY standards-bundles ./standards-bundles
+ENV STANDARDS_BUNDLES_ROOT=/app/standards-bundles
+EXPOSE 3001
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/server.js", "--transport", "http", "--port", "3001"]
