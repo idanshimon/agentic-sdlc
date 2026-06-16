@@ -52,6 +52,7 @@ function normalize(raw: RawEntry): LedgerEntry {
     precedent_refs: Array.isArray(raw.precedent_refs) ? raw.precedent_refs : [],
     stage: raw.stage,
     run_id: raw.run_id,
+    team_id: raw.team_id,
     agent_session_id: raw.agent_session_id,
     runtime_kind: raw.runtime_kind,
     references_entry_id: raw.references_entry_id,
@@ -81,6 +82,7 @@ type SortDir = "asc" | "desc";
 interface Filters {
   search: string;
   stage: string;
+  team_id: string;
   actorKind: "" | "human" | "agent";
   phi: "" | "none" | "low" | "high";
   runtimeKind: string;
@@ -90,6 +92,7 @@ interface Filters {
 const DEFAULT_FILTERS: Filters = {
   search: "",
   stage: "",
+  team_id: "",
   actorKind: "",
   phi: "",
   runtimeKind: "",
@@ -131,10 +134,20 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
     return Array.from(s).sort();
   }, [normalized]);
 
+  // Phase 8 (2026-06-16): distinct team_ids for the Team filter dropdown.
+  // Multi-team partitioning UX completion — /runs/new and /runs already
+  // had team scoping from earlier work; this is the last gap.
+  const teams = useMemo(() => {
+    const s = new Set<string>();
+    normalized.forEach((e) => e.team_id && s.add(e.team_id));
+    return Array.from(s).sort();
+  }, [normalized]);
+
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     return normalized.filter((e) => {
       if (filters.stage && e.stage !== filters.stage) return false;
+      if (filters.team_id && e.team_id !== filters.team_id) return false;
       if (filters.actorKind && e.actor.kind !== filters.actorKind) return false;
       if (filters.phi && e.phi_class !== filters.phi) return false;
       if (filters.runtimeKind && e.runtime_kind !== filters.runtimeKind) return false;
@@ -207,6 +220,7 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
         filters={filters}
         onChange={setFilters}
         stages={stages}
+        teams={teams}
         runtimeKinds={runtimeKinds}
         filterCount={filterCount}
         totalRows={normalized.length}
@@ -297,11 +311,12 @@ function SortableTh({
 }
 
 function FilterBar({
-  filters, onChange, stages, runtimeKinds, filterCount, totalRows, visibleRows,
+  filters, onChange, stages, teams, runtimeKinds, filterCount, totalRows, visibleRows,
 }: {
   filters: Filters;
   onChange: (f: Filters) => void;
   stages: string[];
+  teams: string[];
   runtimeKinds: string[];
   filterCount: number;
   totalRows: number;
@@ -336,6 +351,12 @@ function FilterBar({
           value={filters.stage}
           onChange={(v) => onChange({ ...filters, stage: v })}
           options={stages.map((s) => ({ value: s, label: s }))}
+        />
+        <Select
+          label="Team"
+          value={filters.team_id}
+          onChange={(v) => onChange({ ...filters, team_id: v })}
+          options={teams.map((t) => ({ value: t, label: t }))}
         />
         <Select
           label="Actor"
