@@ -148,6 +148,12 @@ async def _run_autopilot(run: RunState) -> None:
                 decision_kind="accept",
                 created_by=auto_decision.actor,
                 confidence_source="autopilot",
+                # Phase 2.6: pin the prompt chain that produced this
+                # auto-decision. Cards come out of the assessor stage,
+                # so the assessor's chain is the right one to capture.
+                # Empty dict for runs that pre-date Phase 2 wiring (legacy
+                # entries render "chain unavailable (pre-v2)" in the UI).
+                prompt_resolution_path=run.prompt_chain_by_stage.get("assessor"),
             )
             try:
                 await _ledger.write_decision(entry)
@@ -509,6 +515,10 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
                 resolution_text=final_text,
                 decision_kind=decision.decision_kind, created_by=decision.actor,
+                # Phase 2.6: same as the autopilot path — the assessor's
+                # resolved prompt chain is the audit trail for which prompt
+                # produced the ambiguity card the operator just decided on.
+                prompt_resolution_path=run.prompt_chain_by_stage.get("assessor"),
             )
             try:
                 await _ledger.write_decision(entry)
