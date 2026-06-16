@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { StagePill } from "@/components/domain/stage-pill";
 import { StatusDot } from "@/components/domain/status-dot";
 import { ResolverGate } from "@/components/domain/resolver-gate";
+import { DesignReviewGate } from "@/components/domain/design-review-gate";
 import { RunArtifactsPanel } from "@/components/domain/run-artifacts-panel";
 import { RunSummaryPanel } from "@/components/domain/run-summary-panel";
 import { PageHeader } from "@/components/layout/page-header";
@@ -162,11 +163,24 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
 
           {awaitingGate && (
             <div id="resolver-gate-anchor">
-              <ResolverGate
-                runId={runId}
-                events={allEvents}
-                onApproved={onApproved}
-              />
+              {/* Phase 4.1: route to the right gate component based on stage.
+                  Resolver gate = per-card decisions with cards from assessor.
+                  Design review gate = whole-stage approve of architecture.
+                  Other gates fall back to the generic ResolverGate which
+                  shows its "can't parse" hint — never silent. */}
+              {run.current_stage === "design_review" ? (
+                <DesignReviewGate
+                  runId={runId}
+                  run={run}
+                  onApproved={onApproved}
+                />
+              ) : (
+                <ResolverGate
+                  runId={runId}
+                  events={allEvents}
+                  onApproved={onApproved}
+                />
+              )}
             </div>
           )}
 
