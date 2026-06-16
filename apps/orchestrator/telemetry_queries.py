@@ -391,9 +391,21 @@ async def query_recent_runs(
                 "total_cost_usd": item.get("total_cost_usd"),
                 "total_tokens": item.get("total_tokens"),
                 "gate_wall_clock_seconds": item.get("gate_wall_clock_seconds"),
+                "wall_clock_seconds": item.get("wall_clock_seconds"),
                 "created_at": item.get("created_at"),
                 "updated_at": item.get("updated_at"),
                 "decisions_count": len(item.get("decisions") or []),
+                # Experiment provenance + model attribution. These come from
+                # the harness seeder via RunState's extra="allow". The UI's
+                # RunCard renders model as a compact badge so operators can
+                # tell haiku runs from sonnet runs at a glance on /runs.
+                # Without these fields in the projection, the dashboard had
+                # 5 cards all showing the same generic shape and the demo
+                # narrator had to map cost→model from memory.
+                "model": item.get("model"),
+                "model_slug": item.get("model_slug"),
+                "namespace": item.get("namespace"),
+                "source_run_dir": item.get("source_run_dir"),
             }
             out.append(summary)
         # Sort newest-first client-side (Cosmos ORDER BY cross-partition needs index).
