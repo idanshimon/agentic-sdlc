@@ -33,6 +33,55 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 /* Real orchestrator response shapes (verified against deployed API on 2026-06-06).
    Do NOT change these without re-checking the OpenAPI at /openapi.json. */
 
+/**
+ * Phase 3 — prompt catalog (YAML-backed, persona-owned, versioned).
+ *
+ * Shape verified against deployed orchestrator's GET /api/prompts/catalog
+ * on 2026-06-16. Templates intentionally NOT included on list responses to
+ * keep payload small; fetch via promptDetail() for the full body.
+ */
+export interface PromptCatalogEntry {
+  prompt_id: string;
+  version: string;
+  stage: string;
+  scope: "global" | "persona" | "team";
+  owner_persona: string;
+  status: "draft" | "published" | "superseded";
+  git_sha: string;
+  authored_by: string;
+  reason: string;
+  effective_from: string;
+  superseded_by: string | null;
+  model_compat_notes: string;
+  template_chars: number;
+  template_first_line: string;
+}
+
+export interface PromptCatalogV2Response {
+  loaded_from: string;
+  count: number;
+  by_persona: Record<string, PromptCatalogEntry[]>;
+  by_stage: Record<string, PromptCatalogEntry[]>;
+  prompts: PromptCatalogEntry[];
+}
+
+export interface PromptDetailResponse {
+  prompt_id: string;
+  version: string;
+  stage: string;
+  scope: "global" | "persona" | "team";
+  owner_persona: string;
+  status: "draft" | "published" | "superseded";
+  git_sha: string;
+  authored_by: string;
+  reason: string;
+  effective_from: string;
+  superseded_by: string | null;
+  model_compat_notes: string;
+  template: string;
+  versions: Array<{ version: string; status: string; effective_from: string }>;
+}
+
 export interface RunsListResponse {
   items: RunState[];
   count: number;
@@ -214,6 +263,15 @@ export const orchestrator = {
   },
   promptForStage(stage: string) {
     return req<PromptLookupResponse>(`/api/prompt-library/${stage}`);
+  },
+  // Phase 3 — new prompt catalog backed by YAML files under prompts/global/<stage>/v*.yaml
+  // and resolved through the Phase 2 inheritance walker on every pipeline stage.
+  promptCatalog() {
+    return req<PromptCatalogV2Response>("/api/prompts/catalog");
+  },
+  promptDetail(promptId: string, version?: string) {
+    const q = version ? `?version=${encodeURIComponent(version)}` : "";
+    return req<PromptDetailResponse>(`/api/prompts/${encodeURIComponent(promptId)}${q}`);
   },
   streamUrl(runId: string) {
     return `${apiConfig.orchestratorUrl}/api/runs/${runId}/stream`;

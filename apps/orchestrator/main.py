@@ -453,6 +453,150 @@ async def get_run_ledger(run_id: str) -> dict:
         raise HTTPException(500, f"ledger read failed: {exc}") from exc
 
 
+# ---------------------------------------------------------------------------
+# Phase 3 — prompt catalog endpoints
+#
+# Surfaces the orchestrator's lazy-loaded PromptCatalog (Phase 2 work) to
+# any caller — UI tree browse, version detail page, resolution preview.
+# Read-only. Editing goes through a separate GitHub-PR flow (filed as
+# openspec change add-prompt-editor-github-pr-flow).
+# ---------------------------------------------------------------------------
+
+@app.get("/api/prompts/catalog")
+async def list_prompts() -> dict:
+    """Return every prompt file in the catalog, grouped for UI tree browse.
+
+    Shape:
+      {
+        loaded_from: "/app/prompts",
+        count: 7,
+        by_persona: {
+          "pm":        [ {prompt_id, version, stage, scope, ...}, ... ],
+          "architect": [ ... ],
+          ...
+        },
+        by_stage: {
+          "assessor":      [ ... ],
+          ...
+        },
+        prompts: [  # flat list for table view
+          { prompt_id, version, stage, scope, owner_persona, status,
+            git_sha, authored_by, reason, effective_from, template_chars,
+            template_first_line }
+        ]
+      }
+
+    template_chars/template_first_line ship instead of the full template so
+    list responses stay small (one ~50KB template would make this 50KB+
+    each). Full body comes from /api/prompts/<id>.
+    """
+    from .prompt_library_v2 import PromptValidationError
+    from ._pipeline_stages import get_prompt_catalog, _prompts_root
+    try:
+        catalog = get_prompt_catalog()
+    except PromptValidationError as exc:
+        raise HTTPException(500, f"catalog load failed: {exc}") from exc
+
+    prompts = catalog._all  # safe — read-only view
+    by_persona: dict[str, list] = {}
+    by_stage: dict[str, list] = {}
+    flat: list[dict] = []
+    for p in prompts:
+        first_line = p.template.splitlines()[0] if p.template else ""
+        entry = {
+            "prompt_id": p.prompt_id,
+            "version": p.version,
+            "stage": p.stage,
+            "scope": p.scope,
+            "owner_persona": p.owner_persona,
+            "status": p.status,
+            "git_sha": p.git_sha,
+            "authored_by": p.authored_by,
+            "reason": p.reason,
+            "effective_from": p.effective_from,
+            "superseded_by": p.superseded_by,
+            "model_compat_notes": p.model_compat_notes,
+            "template_chars": len(p.template),
+            "template_first_line": first_line[:120],
+        }
+        flat.append(entry)
+        by_persona.setdefault(p.owner_persona, []).append(entry)
+        by_stage.setdefault(p.stage, []).append(entry)
+
+    return {
+        "loaded_from": str(_prompts_root()),
+        "count": len(prompts),
+        "by_persona": by_persona,
+        "by_stage": by_stage,
+        "prompts": flat,
+    }
+
+
+@app.get("/api/prompts/{prompt_id}")
+async def get_prompt_detail(prompt_id: str, version: str | None = None) -> dict:
+    """Return one prompt's full content + all versions.
+
+    Query params:
+      version: optional. If set, returns only that version. Otherwise
+               returns the newest published version + all historical
+               versions in the `versions` list.
+    """
+    from .prompt_library_v2 import PromptValidationError
+    from ._pipeline_stages import get_prompt_catalog
+    try:
+        catalog = get_prompt_catalog()
+    except PromptValidationError as exc:
+        raise HTTPException(500, f"catalog load failed: {exc}") from exc
+
+    matches = [p for p in catalog._all if p.prompt_id == prompt_id]
+    if not matches:
+        raise HTTPException(404, f"prompt_id={prompt_id!r} not found")
+
+    matches.sort(key=lambda p: tuple(int(x) for x in p.version.lstrip("v").split(".")),
+                 reverse=True)
+
+    if version:
+        match = next((p for p in matches if p.version == version), None)
+        if not match:
+            raise HTTPException(404, f"version={version!r} not found for prompt_id={prompt_id!r}")
+        return {
+            "prompt_id": match.prompt_id,
+            "version": match.version,
+            "stage": match.stage,
+            "scope": match.scope,
+            "owner_persona": match.owner_persona,
+            "status": match.status,
+            "git_sha": match.git_sha,
+            "authored_by": match.authored_by,
+            "reason": match.reason,
+            "effective_from": match.effective_from,
+            "superseded_by": match.superseded_by,
+            "model_compat_notes": match.model_compat_notes,
+            "template": match.template,
+            "versions": [{"version": p.version, "status": p.status,
+                          "effective_from": p.effective_from} for p in matches],
+        }
+
+    current = matches[0]
+    return {
+        "prompt_id": current.prompt_id,
+        "version": current.version,
+        "stage": current.stage,
+        "scope": current.scope,
+        "owner_persona": current.owner_persona,
+        "status": current.status,
+        "git_sha": current.git_sha,
+        "authored_by": current.authored_by,
+        "reason": current.reason,
+        "effective_from": current.effective_from,
+        "superseded_by": current.superseded_by,
+        "model_compat_notes": current.model_compat_notes,
+        "template": current.template,
+        "versions": [{"version": p.version, "status": p.status,
+                      "effective_from": p.effective_from} for p in matches],
+    }
+
+
 @app.post("/api/runs/{run_id}/pause")
 async def pause_run(run_id: str) -> dict:
     """Flip run to MANUAL mode mid-flight. Pipeline does not interrupt the
