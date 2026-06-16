@@ -139,7 +139,18 @@ class GateDecision(BaseModel):
 
 
 class RunState(BaseModel):
-    """Persisted to Cosmos pipeline-runs container, partitioned by run_id."""
+    """Persisted to Cosmos pipeline-runs container, partitioned by run_id.
+
+    Pydantic config: `extra="allow"` so harness-seeded fields like
+    `model`, `model_slug`, `namespace`, `source_run_dir`, `original_team_id`,
+    `wall_clock_seconds`, `stage_durations_seconds`, `model_routing`,
+    `artifact_sizes` survive round-trip through `_ledger.get_run` →
+    `RunState.model_validate(doc)`. Without this, the get_run Cosmos
+    fallback path silently strips those fields and the /runs/<id> page
+    can't show experiment provenance or stage durations.
+    """
+    model_config = {"extra": "allow"}
+
     run_id: str = Field(default_factory=_uuid)
     team_id: str = "team-demo"
     prd_blob_url: str = ""

@@ -353,11 +353,37 @@ async def rerun(run_id: str, body: dict | None = None) -> dict:
 
 @app.get("/api/runs/{run_id}")
 async def get_run(run_id: str) -> RunState:
-    """Return the in-memory run state. See design.md §2."""
+    """Return the run state. See design.md §2.
+
+    Resolves in this order:
+      1. In-memory _runs dict (live runs in this pod)
+      2. Cosmos pipeline-runs container (durable; survives pod restart)
+
+    The in-memory check covers the live-streaming case where /api/runs/{id}/stream
+    is hot. The Cosmos fallback covers the long-tail case where an operator
+    drills into a historical run from /runs after a deploy or scale event.
+    """
     run = _runs.get(run_id)
-    if run is None:
-        raise HTTPException(404, "run not found")
-    return run
+    if run is not None:
+        return run
+    # Cosmos fallback. Ledger client may be None in stub-only test runs.
+    if _ledger is not None:
+        try:
+            doc = await _ledger.get_run(run_id)
+        except Exception as exc:
+            _logger.warning("Cosmos get_run failed for %s: %s", run_id, exc)
+            doc = None
+        if doc is not None:
+            try:
+                # The persisted doc is a RunState.model_dump() shape — re-hydrate.
+                return RunState.model_validate(doc)
+            except Exception as exc:
+                _logger.warning("Failed to re-hydrate Cosmos run doc %s: %s", run_id, exc)
+                # Last-resort: return the raw dict so the UI doesn't crash with 500.
+                # FastAPI will serialize this; consumers using RunState fields will
+                # still see the right keys because Cosmos stores model_dump output.
+                return doc  # type: ignore[return-value]
+    raise HTTPException(404, "run not found")
 
 
 @app.post("/api/runs/{run_id}/pause")

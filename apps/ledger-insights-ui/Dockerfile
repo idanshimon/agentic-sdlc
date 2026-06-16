@@ -60,6 +60,12 @@ COPY --from=builder --chown=nextjs:nodejs /repo/apps/ledger-insights-ui/.next/st
 # server runs from /app, so openspec/ must live at /app/openspec/.
 COPY --chown=nextjs:nodejs openspec ./openspec
 
+# /api/ledger/bundle (and /bundles) reads standards-bundles/<dept>/<ver>/rules.yaml
+# from disk at request time. Same /app cwd, so standards-bundles/ must live at
+# /app/standards-bundles/. Caught 2026-06-16: bundle endpoint returned ENOENT
+# because .dockerignore whitelisted only apps/ledger-insights-ui and openspec/.
+COPY --chown=nextjs:nodejs standards-bundles ./standards-bundles
+
 USER nextjs
 EXPOSE 3000
 CMD ["node", "server.js"]
