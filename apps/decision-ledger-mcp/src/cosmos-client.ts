@@ -77,13 +77,41 @@ export async function findPrecedent(opts: {
   slot_value_hash: string;
 }): Promise<unknown | null> {
   const { ledger } = getCosmos();
-  const { resources } = await ledger.items
+
+  // Track B: class-pause check. If any class_paused entry exists for this
+  // ambiguity_class on this team, return null — the operator has explicitly
+  // disabled auto-precedent for this category until they clear it.
+  const { resources: paused } = await ledger.items
     .query(
       {
         query:
-          "SELECT TOP 1 * FROM c " +
+          "SELECT TOP 1 c.id FROM c " +
+          "WHERE c.team_id=@t AND c.runtime_kind='class_paused' AND c.paused_class=@k " +
+          "ORDER BY c.created_at DESC",
+        parameters: [
+          { name: "@t", value: opts.team_id },
+          { name: "@k", value: opts.ambiguity_class },
+        ],
+      },
+      { partitionKey: opts.team_id }
+    )
+    .fetchAll();
+  if (paused.length > 0) return null;
+
+  // Track B: flag-skip. Pull a small window of candidate precedents (most
+  // recent first) and exclude any that have been flagged. We cap the
+  // candidate set so a heavily-flagged class doesn't degenerate into a full
+  // table scan; if the top 5 are all flagged the operator should pause the
+  // class anyway.
+  const { resources: candidates } = await ledger.items
+    .query(
+      {
+        query:
+          "SELECT TOP 5 * FROM c " +
           "WHERE c.team_id=@t AND c.ambiguity_class=@k AND c.slot_value_hash=@s " +
-          "AND c.entry_type='runtime' ORDER BY c.created_at DESC",
+          "AND c.entry_type='runtime' " +
+          "AND (NOT IS_DEFINED(c.runtime_kind) OR c.runtime_kind='stage_decision') " +
+          "ORDER BY c.created_at DESC",
         parameters: [
           { name: "@t", value: opts.team_id },
           { name: "@k", value: opts.ambiguity_class },
@@ -93,5 +121,30 @@ export async function findPrecedent(opts: {
       { partitionKey: opts.team_id }
     )
     .fetchAll();
-  return resources[0] ?? null;
+
+  if (candidates.length === 0) return null;
+
+  // Pull the set of flagged ids for this team in one query and exclude
+  // matching candidates. Done in two queries instead of one nested EXISTS to
+  // keep partition-scoped cost predictable.
+  const { resources: flagged } = await ledger.items
+    .query(
+      {
+        query:
+          "SELECT VALUE c.references_entry_id FROM c " +
+          "WHERE c.team_id=@t AND c.runtime_kind='decision_flagged' " +
+          "AND IS_DEFINED(c.references_entry_id)",
+        parameters: [{ name: "@t", value: opts.team_id }],
+      },
+      { partitionKey: opts.team_id }
+    )
+    .fetchAll();
+  const flaggedIds = new Set<string>(flagged.filter((x): x is string => typeof x === "string"));
+
+  for (const candidate of candidates) {
+    const id = (candidate as { id?: string }).id;
+    if (id && flaggedIds.has(id)) continue;
+    return candidate;
+  }
+  return null;
 }
