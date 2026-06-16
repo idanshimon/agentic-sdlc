@@ -91,8 +91,26 @@ class AmbiguityCard(BaseModel):
 
 
 class LedgerEntry(BaseModel):
-    """Decision Ledger row. See design.md §4 typed schema."""
+    """Decision Ledger row. See design.md §4 typed schema.
+
+    NOTE 2026-06-16: ledger-core's CosmosLedger.write_entry() (in
+    packages/ledger-core/ledger_core/cosmos.py) branches on
+    entry.entry_type to decide invariant-validation vs pass-through.
+    The orchestrator's LedgerEntry model historically had no
+    entry_type field, so every /approve call raised AttributeError
+    on first reach into the invariant guard. Caught during Phase 0
+    live-pipeline verification: per-card POST /api/runs/{id}/approve
+    returned 500 even though the gate finalized cleanly via the
+    auto-finalize default-recommended path. UI operator-agency
+    buttons (Accept/Swap per card) were silently broken in prod.
+
+    Defaulting to "runtime" matches the existing behaviour for every
+    stage_decision-style write (which is everything the orchestrator
+    emits today). Teaching-signal writes go through a different
+    code path (the ledger-mcp tools, not this entry).
+    """
     id: str = Field(default_factory=_uuid)
+    entry_type: str = "runtime"  # ledger-core write_entry() reads this
     team_id: str  # partition key
     run_id: str
     card_id: str
