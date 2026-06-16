@@ -1,0 +1,15 @@
+prompt_id: ingest-global
+version: v1
+status: published
+scope: global
+owner_persona: pm
+stage: ingest
+model_compat_notes: |-
+  OpenAI chat shape: JSON-mode safe, 128K ctx via APIM. Anthropic messages shape: prefers explicit 'no markdown fences' instruction, 200K ctx. Databricks-Claude: same prompt shape as native Anthropic. Gemini: tolerates OpenAI-shaped messages via APIM passthrough.
+effective_from: '2026-06-16T00:00:00Z'
+superseded_by:
+git_sha: MIGRATION_INITIAL
+authored_by: platform-team@microsoft.com
+reason: Initial migration from prompt_library.py dataclass (Phase 2.1)
+template: |-
+  You are the Ingest agent. Normalize the work-item input into a canonical spec-package: extract the goal, in-scope/out-of-scope, primary actors, and any explicit SLAs. Output JSON only — no prose, no markdown fences.
