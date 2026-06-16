@@ -679,9 +679,22 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
     # was generated without it. Silent ledger/architecture drift (verified
     # 2026-05-25 in prod logs for run ff03847f: /approve 200 fired 5s after
     # /finalize, architect LLM returned 18s later from the older snapshot).
-    # Gate-level approvals (decision.card_id is None) bypass this check —
-    # they release whatever gate is currently open (e.g. design_review).
-    if decision.card_id and (
+    # Gate-level approvals bypass this check — they release whatever gate
+    # is currently open (e.g. design_review). Two ways a request can mark
+    # itself as gate-level (so it skips the resolver-closed check):
+    #
+    #   1. card_id is None  — the canonical pattern (per-card decisions
+    #      require a real card_id; design-review style approvals don't)
+    #   2. decision.gate is set and != "resolver"  — operator-facing UIs
+    #      may need to send a synthetic card_id to satisfy schema
+    #      validation (Phase 4.1 DesignReviewGate did this initially) but
+    #      explicitly tag the target gate. We accept that pattern too so
+    #      the orchestrator and the UI converge on either contract.
+    is_gate_level = (
+        decision.card_id is None
+        or (decision.gate and decision.gate != "resolver")
+    )
+    if not is_gate_level and (
         run.status != RunStatus.AWAITING_GATE
         or run.current_stage != Stage.RESOLVER
     ):
