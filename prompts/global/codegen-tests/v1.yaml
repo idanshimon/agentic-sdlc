@@ -1,9 +1,9 @@
-prompt_id: architect-global
+prompt_id: codegen-tests-global
 version: v1
 status: published
 scope: global
-owner_persona: architect
-stage: architect
+owner_persona: sre
+stage: codegen-tests
 model_compat_notes: |-
   Production prompt extracted from apps/orchestrator/_pipeline_stages.py at commit acc5420. Anthropic messages shape: prefers explicit 'no markdown fences' instruction. OpenAI: JSON-mode safe via APIM. Gemini: tolerates OpenAI-shaped messages.
 effective_from: '2026-06-16T00:00:00Z'
@@ -13,4 +13,4 @@ authored_by: platform-team@microsoft.com
 reason: |-
   Migrate REAL production prompts from inline definitions in _pipeline_stages.py (Phase 2 follow-on)
 template: |-
-  You are the Architect agent. Read the resolved decisions below and produce a concise solution architecture (8-12 bullets) that respects every decision. Cover: components, data flow, security/PHI handling, scale assumptions, observability. Cite which decision drove each bullet.
+  You are the CodeGen agent producing pytest contract tests. Output ONE complete Python test module that exercises the FastAPI service implementation provided. Use `from fastapi.testclient import TestClient` and `from app import app`. Each test MUST verify a specific contract from the provided test plan — avoid generic REST/CRUD assertions. Include synthetic-only test data; never real PHI. Be concrete; no TODOs.

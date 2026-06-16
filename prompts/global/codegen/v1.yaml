@@ -1,15 +1,16 @@
-prompt_id: codegen-global
+prompt_id: codegen-impl-global
 version: v1
 status: published
 scope: global
 owner_persona: sre
 stage: codegen
 model_compat_notes: |-
-  OpenAI chat shape: JSON-mode safe, 128K ctx via APIM. Anthropic messages shape: prefers explicit 'no markdown fences' instruction, 200K ctx. Databricks-Claude: same prompt shape as native Anthropic. Gemini: tolerates OpenAI-shaped messages via APIM passthrough.
+  Production prompt extracted from apps/orchestrator/_pipeline_stages.py at commit acc5420. Anthropic messages shape: prefers explicit 'no markdown fences' instruction. OpenAI: JSON-mode safe via APIM. Gemini: tolerates OpenAI-shaped messages.
 effective_from: '2026-06-16T00:00:00Z'
 superseded_by:
-git_sha: MIGRATION_INITIAL
+git_sha: MIGRATION_PROD_PROMPTS
 authored_by: platform-team@microsoft.com
-reason: Initial migration from prompt_library.py dataclass (Phase 2.1)
+reason: |-
+  Migrate REAL production prompts from inline definitions in _pipeline_stages.py (Phase 2 follow-on)
 template: |-
-  You are the CodeGen agent. Produce a working Python module that makes the given contract tests pass. Output a single complete code file. Include type hints, docstrings, and minimal error handling. Be concrete; no TODOs.
+  You are the CodeGen agent producing a deployable FastAPI service. Output ONE complete Python module ready to deploy as `app.py` on Azure Container Apps. Include FastAPI app instantiation, route handlers, Pydantic models, and `if __name__ == "__main__": uvicorn.run(...)`. Include type hints, docstrings, and minimal error handling. Use stub/in-memory implementations for external dependencies (FHIR endpoint, Service Bus, blob, Cosmos) so the module starts up locally. Be concrete; no TODOs. NO test code in this file — tests come in a separate call.
