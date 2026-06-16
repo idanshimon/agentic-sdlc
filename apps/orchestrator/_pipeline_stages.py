@@ -325,8 +325,14 @@ async def stage_architect(run: RunState) -> AsyncIterator[StageEvent]:
     )
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
+    # NOTE: previously truncated to 1200 chars, which silently dropped
+    # observability / scale / security / Tier 2+3 sections of any non-trivial
+    # architecture (caught on the SBM cardiology PRD — Tier 2 cohort dashboard
+    # got chopped mid-sentence, leaving TestPlan and CodeGen ungrounded on
+    # critical decisions). The 8K max_tokens cap on the upstream call already
+    # bounds the size; further truncation here was a footgun.
     yield _ev(run, Stage.ARCHITECT, "completed", "Architecture drafted",
-              architecture=res.text[:1200])
+              architecture=res.text)
     yield _ev(run, Stage.DESIGN_REVIEW, "gate_open",
               "Gate 2 (Design Review) — human review in v1")
 
@@ -401,7 +407,7 @@ async def stage_test_plan(
     user_prompt = (
         f"PRD excerpt:\n{prd_excerpt}\n\n"
         f"Resolved decisions:\n{decisions_block}\n\n"
-        f"Architecture:\n{arch_text[:3000]}\n\n"
+        f"Architecture:\n{arch_text}\n\n"
         "Produce the test plan now. Markdown only."
     )
 
@@ -412,37 +418,94 @@ async def stage_test_plan(
     run.total_tokens += res.prompt_tokens + res.completion_tokens
     run.total_cost_usd += res.usd
     yield _ev(run, Stage.TEST_PLAN, "completed", "Test plan ready",
-              test_plan=res.text[:6000])
+              test_plan=res.text)
 
 
 # --- 5. CODEGEN ---------------------------------------------------------------
 async def stage_codegen(run: RunState) -> AsyncIterator[StageEvent]:
-    """Generate code against contract tests (design.md §2). Uses Claude Sonnet via Databricks."""
+    """Generate deployable code from architecture + test plan (design.md §2).
+
+    Splits codegen into TWO calls:
+      1. app.py   — the FastAPI service implementation
+      2. tests.py — pytest contract tests against app.py
+
+    Why split: a single combined call regularly exceeds the provider's
+    max_tokens cap on non-trivial healthcare services (caught on the SBM
+    cardiology PRD — sonnet-4-6 + haiku-4-5 both truncated at ~8K tokens
+    mid-string-literal, producing an unparseable Python file).
+
+    Splitting also lets each call run with a tighter contract:
+    impl knows it's producing a single FastAPI module; tests know they're
+    pytest cases that exercise the impl. Earlier single-shot prompt produced
+    a hybrid file with classes + fixtures + tests stuffed together,
+    forcing the deliver stage to dump it into src/main.py while tests/
+    got the markdown test plan.
+    """
     yield _ev(run, Stage.CODEGEN, "started", "Generating code")
     # Pull both architecture + test plan from prior events for full context.
     arch = ""
-    tests = ""
+    tests_md = ""
     for e in run.events:
         p = (e.payload or {}) if hasattr(e, "payload") else {}
         if "architecture" in p:
             arch = str(p["architecture"])
         if "test_plan" in p:
-            tests = str(p["test_plan"])
-    res = await _call(
-        run=run, stage_key="codegen", agent_name="codegen",
+            tests_md = str(p["test_plan"])
+
+    # Call 1: implementation
+    impl_res = await _call(
+        run=run, stage_key="codegen", agent_name="codegen-impl",
         system_prompt=(
-            "You are the CodeGen agent. Produce a working Python module that makes the "
-            "given contract tests pass. Output a single complete code file. Include "
-            "type hints, docstrings, and minimal error handling. Be concrete; no TODOs."
+            "You are the CodeGen agent producing a deployable FastAPI service. "
+            "Output ONE complete Python module ready to deploy as `app.py` on "
+            "Azure Container Apps. Include FastAPI app instantiation, route "
+            "handlers, Pydantic models, and `if __name__ == \"__main__\": "
+            "uvicorn.run(...)`. Include type hints, docstrings, and minimal "
+            "error handling. Use stub/in-memory implementations for external "
+            "dependencies (FHIR endpoint, Service Bus, blob, Cosmos) so the "
+            "module starts up locally. Be concrete; no TODOs. NO test code "
+            "in this file — tests come in a separate call."
         ),
         user_prompt=(
-            f"Architecture:\n{arch[:1500]}\n\nContract tests:\n{tests[:2000]}\n\n"
-            "Output the module code only — no prose, no markdown fences."
+            f"Architecture:\n{arch}\n\n"
+            f"Contract tests (markdown spec to satisfy):\n{tests_md}\n\n"
+            "Output the FastAPI module code only — no prose, no markdown fences. "
+            "Start with imports and end with the uvicorn block."
         ),
     )
-    run.total_tokens += res.prompt_tokens + res.completion_tokens
-    run.total_cost_usd += res.usd
-    yield _ev(run, Stage.CODEGEN, "completed", "Code generated", code=res.text[:4000])
+    run.total_tokens += impl_res.prompt_tokens + impl_res.completion_tokens
+    run.total_cost_usd += impl_res.usd
+
+    # Call 2: pytest tests against the impl
+    test_res = await _call(
+        run=run, stage_key="codegen", agent_name="codegen-tests",
+        system_prompt=(
+            "You are the CodeGen agent producing pytest contract tests. "
+            "Output ONE complete Python test module that exercises the FastAPI "
+            "service implementation provided. Use `from fastapi.testclient import "
+            "TestClient` and `from app import app`. Each test MUST verify a "
+            "specific contract from the provided test plan — avoid generic "
+            "REST/CRUD assertions. Include synthetic-only test data; never "
+            "real PHI. Be concrete; no TODOs."
+        ),
+        user_prompt=(
+            f"Implementation (app.py):\n{impl_res.text}\n\n"
+            f"Test plan (markdown spec):\n{tests_md}\n\n"
+            "Output the pytest module code only — no prose, no markdown fences."
+        ),
+    )
+    run.total_tokens += test_res.prompt_tokens + test_res.completion_tokens
+    run.total_cost_usd += test_res.usd
+
+    # Emit both as separate payload keys so the deliver stage can route them
+    # to the right files. Keep the legacy `code` key for backwards compat
+    # with anything reading the old single-output shape.
+    yield _ev(run, Stage.CODEGEN, "completed",
+              f"Code generated: app={len(impl_res.text)} chars, "
+              f"tests={len(test_res.text)} chars",
+              code=impl_res.text,
+              app_code=impl_res.text,
+              test_code=test_res.text)
 
 
 # --- 6. REVIEW / SCAN ---------------------------------------------------------
