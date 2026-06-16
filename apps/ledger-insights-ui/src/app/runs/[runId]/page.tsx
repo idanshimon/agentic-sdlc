@@ -15,7 +15,7 @@ import { ResolverGate } from "@/components/domain/resolver-gate";
 import { RunArtifactsPanel } from "@/components/domain/run-artifacts-panel";
 import { RunSummaryPanel } from "@/components/domain/run-summary-panel";
 import { PageHeader } from "@/components/layout/page-header";
-import { relativeTime, shortId, fmtUsd } from "@/lib/utils";
+import { relativeTime, shortId, fmtUsd, eventTimeLabel } from "@/lib/utils";
 import type { Stage, StageEvent } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 
@@ -186,7 +186,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
                               {e.status.replace("_", " ")}
                             </span>
                             <span className="text-[11px] tabular text-[var(--text-tertiary)] ml-auto">
-                              {new Date(e.timestamp).toLocaleTimeString()}
+                              {eventTimeLabel(e)}
                             </span>
                           </div>
                           {e.message && (

@@ -25,9 +25,13 @@ export type RunMode = "auto" | "guided" | "dry_run";
 
 export interface StageEvent {
   stage: Stage;
-  status: "started" | "in_progress" | "awaiting_gate" | "completed" | "failed";
+  status: "started" | "in_progress" | "awaiting_gate" | "completed" | "failed" | "progress" | "gate_open";
   message?: string;
-  timestamp: string;
+  /** ISO timestamp. Orchestrator emits as `ts` (StageEvent.ts in models.py);
+   *  Demo Mode used to emit as `timestamp`. Always read via the
+   *  `eventTimestamp()` helper in lib/utils.ts to handle both shapes. */
+  timestamp?: string;
+  ts?: string;
   payload?: Record<string, unknown>;
 }
 
