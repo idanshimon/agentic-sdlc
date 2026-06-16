@@ -787,6 +787,44 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
     return {"ok": True, "decisions_count": len(run.decisions), "resolution_text": final_text}
 
 
+@app.post("/api/admin/runs/{run_id}/mark_failed")
+async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
+    """Admin: force a run to status=failed durably in Cosmos.
+
+    Phase 6.2 (2026-06-16): one-off cleanup for runs zombified by
+    pod restarts before the per-event save_run fix landed. The /runs
+    table showed 8 of these with "running · 0 dec · $0.0000" for hours.
+    Marking them failed honestly clears the table.
+
+    Body:
+      { "reason": "..." }   optional cancellation reason recorded on the run
+
+    Returns the updated run state.
+    """
+    body = body or {}
+    reason = body.get("reason", "marked failed by admin cleanup")
+    # Pull from Cosmos (may not be in-memory after restart)
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    doc = await _ledger.get_run(run_id)
+    if doc is None:
+        raise HTTPException(404, "run not found in Cosmos")
+    try:
+        run = RunState.model_validate(doc)
+    except Exception as exc:
+        raise HTTPException(500, f"failed to re-hydrate run doc: {exc}") from exc
+    run.status = RunStatus.FAILED
+    # Append a synthetic event so the audit trail records the cleanup.
+    run.events.append(StageEvent(
+        run_id=run_id,
+        stage=run.current_stage,
+        status="failed",
+        message=f"Admin cleanup: {reason}",
+    ))
+    await _ledger.save_run(run)
+    return {"ok": True, "run_id": run_id, "status": "failed", "reason": reason}
+
+
 @app.post("/api/runs/{run_id}/finalize")
 async def finalize_gate(run_id: str, body: dict | None = None) -> dict:
     """Close the open Resolver gate explicitly after the human reviews all decisions.
