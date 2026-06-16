@@ -4,7 +4,9 @@ import type { Stage } from "@/lib/types";
 const stageMeta: Record<Stage, { label: string; abbr: string }> = {
   ingest: { label: "Ingest", abbr: "IN" },
   assessor: { label: "Assessor", abbr: "AS" },
+  resolver: { label: "Resolver", abbr: "RE" },
   architect: { label: "Architect", abbr: "AR" },
+  design_review: { label: "Design Review", abbr: "DR" },
   test_plan: { label: "Test Plan", abbr: "TP" },
   codegen: { label: "CodeGen", abbr: "CG" },
   review_scan: { label: "Review/Scan", abbr: "RS" },

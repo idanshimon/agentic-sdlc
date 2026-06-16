@@ -66,14 +66,21 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
-  // Pull the most-recent assessor `awaiting_gate` event payload.
+  // Pull the most-recent gate_open event payload. The orchestrator emits
+  //   { stage: "resolver", status: "gate_open", payload: { gating: [...] } }
+  // — NOT { stage: "assessor", status: "awaiting_gate" } as a previous
+  // version of this code assumed. That mismatch caused the gating array
+  // to read as [] and the warning card to claim "could not parse" while
+  // the JSON sat right there in the event stream (caught 2026-06-16 on
+  // run 66ce4cb5). We accept either shape defensively so a future
+  // backend rename doesn't silently break the page again.
   const gating = useMemo<GatingCard[]>(() => {
     const ev = [...events]
       .reverse()
       .find(
         (e) =>
-          e.stage === "assessor" &&
-          e.status === "awaiting_gate" &&
+          ((e.stage === "resolver" && e.status === "gate_open") ||
+            (e.stage === "assessor" && e.status === "awaiting_gate")) &&
           e.payload &&
           Array.isArray((e.payload as { gating?: unknown }).gating),
       );
@@ -100,25 +107,60 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
     });
   };
 
+  // Phase 3.2 (2026-06-16): per-card approval flow. Orchestrator's
+  // GateDecision schema accepts per-card payloads, then /finalize closes
+  // the gate. Sending a bulk { decision, rationale } shape gets HTTP 422.
   const approveAll = async () => {
     setSubmitting(true);
+    let approved = 0;
     try {
-      // Synthesize a single composite approval payload — the live API
-      // expects { decision, rationale }. Demo runs ignore the body and
-      // replay the canned decision set anyway.
-      await orchestrator.approve(runId, {
-        decision: "approve_all_recommended",
-        rationale: `Approved all ${recommendedCount} recommended options in one batch.`,
-      });
-      toast.success("Gate approved", {
-        description: "Pipeline resuming with recommended decisions",
+      for (const c of gating) {
+        if (!c.card_id) continue;
+        const recIdx = c.options.findIndex((o) => o.recommended);
+        await orchestrator.approve(runId, {
+          card_id: c.card_id,
+          decision_kind: "accept",
+          option_index: recIdx >= 0 ? recIdx : 0,
+          actor: "operator@dashboard",
+          confidence_source: "human",
+        });
+        approved += 1;
+      }
+      // Close the gate so the pipeline advances to architect.
+      await orchestrator.finalizeGate(runId);
+      toast.success(`Approved ${approved} ${approved === 1 ? "card" : "cards"}`, {
+        description: "Resolver gate closed — pipeline advancing to Architect.",
       });
       onApproved();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to approve gate";
-      toast.error("Approve failed", { description: msg });
+      toast.error(
+        approved > 0 ? `Partial approve (${approved} of ${gating.length})` : "Approve failed",
+        { description: msg },
+      );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Single-card approve — used by per-card Accept buttons inside expanded rows.
+  const approveOne = async (card: GatingCard, optionIndex: number) => {
+    if (!card.card_id) return;
+    try {
+      await orchestrator.approve(runId, {
+        card_id: card.card_id,
+        decision_kind: "accept",
+        option_index: optionIndex,
+        actor: "operator@dashboard",
+        confidence_source: "human",
+      });
+      toast.success(`Card decided: ${card.options[optionIndex].label}`, {
+        description: "Decision pinned to ledger with full prompt chain.",
+      });
+      onApproved();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to approve card";
+      toast.error("Approve card failed", { description: msg });
     }
   };
 
@@ -298,7 +340,23 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
                               RECOMMENDED
                             </Badge>
                           )}
-                          <div className="text-sm font-medium leading-snug">{o.label}</div>
+                          <div className="text-sm font-medium leading-snug flex-1">{o.label}</div>
+                          {/* Phase 3.2: per-card "use this option" button.
+                              Sends a single GateDecision for this card+option
+                              and stays on the page so operator can decide the
+                              remaining cards individually. */}
+                          <Button
+                            size="sm"
+                            variant={o.recommended ? "primary" : "secondary"}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              void approveOne(c, oi);
+                            }}
+                            disabled={submitting}
+                            className="shrink-0 text-[11px] h-6 px-2"
+                          >
+                            Use this
+                          </Button>
                         </div>
                         <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
                           {o.resolution}

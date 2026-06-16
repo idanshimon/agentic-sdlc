@@ -34,6 +34,23 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
    Do NOT change these without re-checking the OpenAPI at /openapi.json. */
 
 /**
+ * Phase 3.2 — payload shape for per-card resolver gate approval.
+ * Matches the orchestrator's GateDecision pydantic model in
+ * apps/orchestrator/models.py. The previous bulk shape
+ *   { decision: "approve_all_recommended", rationale: "..." }
+ * triggered HTTP 422 because the backend has no such fields.
+ */
+export interface ApproveBody {
+  card_id: string;
+  decision_kind: "accept" | "swap" | "reject";
+  option_index?: number;
+  resolution_text?: string;
+  actor: string;
+  confidence_source?: "human" | "autopilot";
+  gate?: string;
+}
+
+/**
  * Phase 3 — prompt catalog (YAML-backed, persona-owned, versioned).
  *
  * Shape verified against deployed orchestrator's GET /api/prompts/catalog
@@ -222,7 +239,19 @@ export const orchestrator = {
     }
     return req<RunState>(`/api/runs/${runId}/resume`, { method: "POST" });
   },
-  approve(runId: string, body: { decision: string; rationale: string }) {
+  // Phase 3.2 wiring (2026-06-16): orchestrator expects per-card
+  // GateDecision payload — NOT a bulk { decision, rationale } shape.
+  // The previous approveAll body returned HTTP 422 (Unprocessable
+  // Entity) on every click — confirmed on run 66ce4cb5.
+  //
+  // Per-card: POST /api/runs/<id>/approve with
+  //   { card_id, decision_kind, option_index, actor, confidence_source }
+  // Then close the gate: POST /api/runs/<id>/finalize
+  //
+  // We loop the approves so each one writes its own LedgerEntry with
+  // the prompt_resolution_path pinned (Phase 2.6 work). Operator sees
+  // per-card progress via the submitting flag + toast.
+  approve(runId: string, body: ApproveBody) {
     if (isDemoRun(runId)) {
       // Demo gate approval triggers the local replay engine to fire the
       // architect → deliver chain. The body is accepted for API parity but
@@ -232,10 +261,20 @@ export const orchestrator = {
       if (!r) throw new ApiError(404, `Demo run ${runId} not found`);
       return Promise.resolve(r);
     }
-    return req<RunState>(`/api/runs/${runId}/approve`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    return req<{ ok: boolean; decisions_count: number; resolution_text: string }>(
+      `/api/runs/${runId}/approve`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  finalizeGate(runId: string) {
+    if (isDemoRun(runId)) {
+      // Demo runs auto-close gates inside approveDemoRun; finalize is a no-op.
+      return Promise.resolve({ ok: true });
+    }
+    return req<{ ok: boolean; gate_closed: boolean; decisions_count: number; next_stage: string }>(
+      `/api/runs/${runId}/finalize`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
   },
   reject(runId: string, body: { reason: string }) {
     if (isDemoRun(runId)) {
