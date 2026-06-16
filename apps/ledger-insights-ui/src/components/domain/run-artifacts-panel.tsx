@@ -187,23 +187,149 @@ export function RunArtifactsPanel({ runId, status }: Props) {
 }
 
 function ArtifactView({ content, kind }: { content: string; kind: "md" | "py" }) {
-  const lines = content.split("\n").length;
-  const chars = content.length;
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const lines = content.split("\n");
+
+  // Phase 6 (2026-06-16): operator-grade artifact viewer.
+  // Three improvements over the old plain <pre>:
+  //   1. Line numbers — operator can reference specific lines in flag/replay
+  //   2. Copy + Download buttons — no more "select all + paste into editor"
+  //   3. Collapsible — long codegen output (>200 lines) hides by default
+  //      with "show all N lines" affordance
+  // Light syntax color (no external dep): Python keywords + comments,
+  // markdown headers/quotes. Adding shiki/prism would be 100KB+ for very
+  // marginal UX gain on this surface; the regex approach is good enough
+  // for a 30-line FastAPI route handler glance-check.
+  const PYTHON_KEYWORDS = new Set([
+    "def","class","import","from","return","if","elif","else","for","while",
+    "try","except","finally","with","as","in","not","and","or","is","None",
+    "True","False","async","await","yield","raise","pass","break","continue",
+    "lambda","global","nonlocal",
+  ]);
+
+  function highlightLine(line: string, idx: number): React.ReactNode {
+    if (kind === "py") {
+      // Comments first (rest of line)
+      const hashIdx = line.indexOf("#");
+      const inString = /['"]/.test(line.slice(0, hashIdx));
+      if (hashIdx >= 0 && !inString) {
+        return (
+          <>
+            {highlightPython(line.slice(0, hashIdx))}
+            <span className="text-[var(--text-tertiary)] italic">{line.slice(hashIdx)}</span>
+          </>
+        );
+      }
+      return highlightPython(line);
+    }
+    if (kind === "md") {
+      if (line.startsWith("# ")) return <span className="text-blue-500 dark:text-blue-300 font-semibold">{line}</span>;
+      if (line.startsWith("## ")) return <span className="text-blue-500 dark:text-blue-300">{line}</span>;
+      if (line.startsWith("### ")) return <span className="text-blue-500 dark:text-blue-300 opacity-80">{line}</span>;
+      if (line.startsWith("> ")) return <span className="text-[var(--text-tertiary)] italic">{line}</span>;
+      if (line.startsWith("- ") || line.startsWith("* ") || /^\d+\.\s/.test(line)) {
+        return <><span className="text-[var(--success)]">{line.slice(0, line.indexOf(" ") + 1)}</span>{line.slice(line.indexOf(" ") + 1)}</>;
+      }
+    }
+    return line || " "; // empty lines need a space to keep row height
+  }
+
+  function highlightPython(text: string): React.ReactNode {
+    // Tokenize on word boundaries; preserve whitespace by splitting with capture
+    const tokens = text.split(/(\s+|[(){}[\],:;.])/);
+    return tokens.map((t, i) => {
+      if (PYTHON_KEYWORDS.has(t)) {
+        return <span key={i} className="text-purple-500 dark:text-purple-300">{t}</span>;
+      }
+      // String literals (very rough)
+      if (/^["'].*["']$/.test(t)) {
+        return <span key={i} className="text-green-500 dark:text-green-300">{t}</span>;
+      }
+      // Decorators
+      if (t.startsWith("@") && t.length > 1 && /[a-zA-Z]/.test(t[1])) {
+        return <span key={i} className="text-orange-500 dark:text-orange-300">{t}</span>;
+      }
+      return <span key={i}>{t}</span>;
+    });
+  }
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+  const handleDownload = () => {
+    const ext = kind === "py" ? "py" : "md";
+    const filename = `artifact.${ext}`;
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const LONG_THRESHOLD = 200;
+  const isLong = lines.length > LONG_THRESHOLD;
+  const visibleLines = isLong && !expanded ? lines.slice(0, LONG_THRESHOLD) : lines;
+
   return (
     <div className="space-y-2">
-      <div className="text-[10px] tabular text-[var(--text-tertiary)] flex items-center gap-3">
-        <span>{lines} lines · {chars.toLocaleString()} chars</span>
-        <span className="mono">{kind}</span>
+      <div className="flex items-center gap-3">
+        <div className="text-[10px] tabular text-[var(--text-tertiary)] flex items-center gap-3 flex-1">
+          <span>{lines.length} lines · {content.length.toLocaleString()} chars</span>
+          <span className="mono">{kind}</span>
+        </div>
+        <button
+          onClick={handleCopy}
+          className="text-[10px] px-2 py-0.5 rounded border border-[var(--border-muted)] hover:bg-[var(--surface-2)] transition-colors"
+        >
+          {copied ? "✓ copied" : "Copy"}
+        </button>
+        <button
+          onClick={handleDownload}
+          className="text-[10px] px-2 py-0.5 rounded border border-[var(--border-muted)] hover:bg-[var(--surface-2)] transition-colors"
+        >
+          Download
+        </button>
       </div>
-      <pre
+      <div
         className={cn(
-          "mono text-[11px] leading-relaxed whitespace-pre-wrap break-words",
-          "bg-[var(--bg)] border border-[var(--border-muted)] rounded p-3",
-          "max-h-[500px] overflow-auto",
+          "bg-[var(--bg)] border border-[var(--border-muted)] rounded overflow-auto",
+          expanded ? "max-h-[1200px]" : "max-h-[500px]",
         )}
       >
-        {content}
-      </pre>
+        <table className="w-full text-[11px] mono leading-relaxed">
+          <tbody>
+            {visibleLines.map((line, i) => (
+              <tr key={i} className="hover:bg-[var(--surface-2)]/40">
+                <td className="text-[var(--text-tertiary)] tabular text-right pr-3 pl-2 select-none w-10 align-top">
+                  {i + 1}
+                </td>
+                <td className="pr-3 pb-px whitespace-pre-wrap break-words">
+                  {highlightLine(line, i)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] underline"
+        >
+          {expanded
+            ? `Collapse to first ${LONG_THRESHOLD} lines`
+            : `Show all ${lines.length} lines (currently showing ${LONG_THRESHOLD})`}
+        </button>
+      )}
     </div>
   );
 }
