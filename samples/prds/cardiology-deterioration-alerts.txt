@@ -1,0 +1,101 @@
+# Cardiology Deterioration Alert Service — Sample PRD
+
+**Title:** Cardiology Deterioration Alert Service
+
+**Goal:** Detect mechanical-circulatory-support (MCS) and post-CT-surgery patient
+deterioration in near-real-time from bedside FHIR Observation streams. Notify the
+on-call cardiology fellow within 60 seconds of a threshold breach. Reduce
+unrecognized-deterioration time-to-rescue. Customer pain: today's reports lag 3
+months and the night-shift fellow has no phone-class signal.
+
+**In-scope (Phase 1):**
+- Consume FHIR R4 Observation resources (LOINC vitals + SCAI hemodynamic markers)
+  from the EHR's bulk-export + REST poll combination. NOT a streaming firehose.
+- Compute composite deterioration score per encounter: SCAI 2022 stage (A→E),
+  CardShock score, VIS (vasoactive-inotropic score), lactate clearance trend.
+  Pure functions; same inputs → same outputs; return `criteria_met[]` so the
+  fellow can read why the alert fired off the result envelope.
+- Threshold-based alert routing v1 (rule engine, NOT predictive ML). Phone-class
+  alert means SMS / push / dashboard ping — NOT auto-dial.
+- Alert dashboard (web): triage queue + per-patient timeline + "why did this fire"
+  drill-in. Synthetic data only in non-prod; airgap from any DUA-restricted dataset.
+
+**Out-of-scope (Phase 1, deferred):**
+- Predictive ML (Phase 2 — needs labeled outcome dataset, not yet available)
+- Outpatient device monitoring (separate POC, different SaMD posture)
+- Auto-paging to patient (SaMD threshold; HITL gate required when in scope)
+- Cerner ServiceRequest write-back (read-only docs are public; write path is
+  per-tenant, parked behind a separate decision with the customer's IT)
+- Registry abstraction (separate POC slice — customer ask #5)
+
+**Compliance:**
+- PHI in transit and at rest. HIPAA minimum-necessary; Safe Harbor 18 identifiers
+  redacted from any non-clinical surface (telemetry, logs, audit trails).
+- US Core STU 6.1.0 conformance for FHIR Observation queries.
+- HITRUST is in scope as a procurement artifact for the customer's IT, NOT as a
+  legal floor (NIST 800-53 + the BAA + CMS contract terms are the actual teeth).
+- PHI classification gate is INVARIANT in the pipeline — agent decisions on PHI
+  handling are non-overridable per AGENTS.md hard rules.
+
+**SLA / Latency tier discipline (load-bearing — do not collapse to "real-time"):**
+- Phone-class alerts: sub-60-second p95 from EHR Subscription event → fellow
+  notification. Delivered via FHIR R4 Subscription resource where the EHR
+  supports it; HL7 v2 ORU/ADT message bus where it doesn't.
+- Live cohort dashboard: near-real-time, polled `GET /Encounter?status=in-progress`
+  every 30s. Live-enough for clinical operations, NOT a stream.
+- Retro / scheduled: nightly bulk export `$bulk-data` (`/Group/$export` → NDJSON)
+  for cost reconciliation, surgeon-rollup, and 30-day mortality. (You can't
+  compute 30-day mortality on cases <30 days old anyway.)
+
+**External integrations:**
+- EHR FHIR endpoint. The customer is a Cerner Millennium / Oracle Health shop
+  (NOT Epic). Read coverage is solid for Patient, Encounter, Observation,
+  Condition, MedicationRequest, DocumentReference, Practitioner, Organization,
+  AllergyIntolerance, Procedure with US Core STU 6.1.0 conformance.
+- Cerner-specific portability tax: terminology bindings use per-tenant code-set
+  URIs `https://fhir.cerner.com/{EHR source ID}/codeSet/N`. Code-mapping table
+  must carry both the standard terminology AND the customer-specific Cerner URI.
+- SMART-on-FHIR v2 scope grammar — `system/Observation.rs`, `system/Encounter.rs`,
+  `system/Patient.rs`. v1 verbs (`.read` / `.write`) are rejected by production
+  endpoints. Backend-services tokens are 5 minutes per spec; cache aggressively
+  per-tenant per-scope-set, NOT per-process-lifetime.
+- ICD-10-CM (US clinical modification) URI: `http://hl7.org/fhir/sid/icd-10-cm`.
+  Plain international `http://hl7.org/fhir/sid/icd-10` gets warned-on or rejected.
+
+**Identifier format:** Encounter and Patient internal identifiers are TBD.
+Authoring teams have variously proposed (a) raw EHR MRN (rejected — PHI), (b)
+HMAC-SHA256 token with rotating secret per encounter (resilient to identifier
+leakage), (c) opaque UUID with side-table in Cosmos. The pipeline must pick
+one and stamp it in the architecture decision.
+
+**Authorization / vendor egress policy:** TBD. Some recent POCs have
+connected MCS device telemetry to unapproved external visualization tools
+without a Security Architecture review. The pipeline must surface this gap
+and propose a resolution (BAA-gated mTLS + OAuth scope `vitals:subscribe`,
+or NO external egress in Phase 1).
+
+**Data retention:** TBD. HIPAA defers to state law; the customer is in NY
+(state law is 6-22 years depending on adult vs. pediatric). The pipeline
+should propose a default and surface the regulatory citation.
+
+**Naming convention:** TBD for the deployed Container Apps + storage
+accounts. Existing customer convention (if any) is unknown to the pipeline.
+
+**Stakeholders:**
+- Chief of CT Surgery (exec sponsor, customer ask #2 owner)
+- LVAD program lead (clinical co-sponsor)
+- Cardiology fellow on-call (Phase 1 alert recipient — primary user)
+- Privacy office (PHI review)
+- Security architecture (egress + auth review)
+- IT director (Cerner FHIR endpoint owner; SMART scope grant)
+
+**Demo deliverable:**
+- Web dashboard: live cohort tile + per-patient timeline + alert triage queue
+- API: POST `/alerts/score` (FHIR Bundle in → score envelope with criteria_met[]
+  out), GET `/alerts/active`, GET `/encounters/{id}/timeline`
+- Synthetic data only in the demo environment. Provenance banner on every
+  dollar value if cost-model is in scope (deferred for this slice).
+- Deployable to Azure Container Apps with the existing `acragentic*` registry.
+
+**Estimated launch:** Phase 1 demo = 2 weeks of agentic-pipeline iteration.
+Phase 2 (predictive ML, outcome ingestion) = scoped after Phase 1 demo.

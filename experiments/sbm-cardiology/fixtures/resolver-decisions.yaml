@@ -1,0 +1,43 @@
+# Fixed resolver decisions for the SBM Cardiology Deterioration Alert PRD.
+#
+# Applied positionally: i-th gating card from the Assessor receives the i-th
+# entry below. Identical across every model run so the comparison isolates
+# Architect/TestPlan/CodeGen quality, not resolver quality.
+#
+# The PRD is intentionally TBD-heavy (vendor egress, identifier format,
+# retention, naming). We expect the Assessor to surface ~5 gating cards
+# touching: PHI handling, vendor egress / auth policy, identifier format,
+# retention, and either SLA latency tier or naming. The 5 entries below are
+# ordered to map plausibly to that, with permissive defaults so the run
+# completes deterministically.
+#
+# Note on swap entries: the SLA decision is intentionally written as a
+# concrete swap so we exercise the human-authored resolution path. Track B
+# follow-up will flag this exact decision and verify findPrecedent skips it
+# on the next run for the same team.
+
+decisions:
+  - decision_kind: accept   # Card 1: typically PHI / phi-classification
+    option_index: 0         # accept the recommended PHI redaction option
+    actor: experiment@sbm-cardiology
+
+  - decision_kind: accept   # Card 2: typically vendor / auth-policy
+    option_index: 0         # BAA-gated mTLS + OAuth scope `vitals:subscribe`
+    actor: experiment@sbm-cardiology
+
+  - decision_kind: swap     # Card 3: SLA / latency tier — author concrete
+    resolution_text: >-
+      Phone-class alerts: sub-60s p95 from FHIR Subscription notification to
+      fellow phone notification. Live cohort dashboard: polled
+      GET /Encounter?status=in-progress every 30s. Retro / cost / 30-day
+      mortality: nightly $bulk-data NDJSON export. Each tier carries its
+      own SLO; do NOT collapse to a single 'real-time' SLO.
+    actor: experiment@sbm-cardiology
+
+  - decision_kind: accept   # Card 4: typically identifier-format
+    option_index: 0         # HMAC-SHA256 token with rotating per-encounter secret
+    actor: experiment@sbm-cardiology
+
+  - decision_kind: accept   # Card 5: typically retention / data-retention
+    option_index: 0         # default to 7-year HIPAA + NY-state-law alignment
+    actor: experiment@sbm-cardiology

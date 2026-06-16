@@ -1,0 +1,4 @@
+# Run artifacts are large (1K+ LOC generated code per model run) and
+# regenerable. Keep the namespace + scaffolding in git but not the runs.
+runs/
+results/
