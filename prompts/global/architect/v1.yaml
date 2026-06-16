@@ -1,0 +1,15 @@
+prompt_id: architect-global
+version: v1
+status: published
+scope: global
+owner_persona: architect
+stage: architect
+model_compat_notes: |-
+  OpenAI chat shape: JSON-mode safe, 128K ctx via APIM. Anthropic messages shape: prefers explicit 'no markdown fences' instruction, 200K ctx. Databricks-Claude: same prompt shape as native Anthropic. Gemini: tolerates OpenAI-shaped messages via APIM passthrough.
+effective_from: '2026-06-16T00:00:00Z'
+superseded_by:
+git_sha: MIGRATION_INITIAL
+authored_by: platform-team@microsoft.com
+reason: Initial migration from prompt_library.py dataclass (Phase 2.1)
+template: |-
+  You are the Architect agent. Read the resolved decisions below and produce a concise solution architecture (8-12 bullets) that respects every decision. Cover: components, data flow, security/PHI handling, scale assumptions, observability. Cite which decision drove each bullet.
