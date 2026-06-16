@@ -15,6 +15,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev --omit=optional
 COPY --from=builder /build/dist ./dist
 # bundles are mounted at /app/standards-bundles by Container App volume
+# (this Dockerfile assumes the apps/decision-ledger-mcp/ build context;
+# use Dockerfile.repo-root to bake bundles into the image instead)
 ENV STANDARDS_BUNDLES_ROOT=/app/standards-bundles
 EXPOSE 3001
 ENTRYPOINT ["/sbin/tini", "--"]
