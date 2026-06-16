@@ -6,7 +6,9 @@ export type Plane = "standards" | "pipeline" | "ledger" | "agenthq";
 export type Stage =
   | "ingest"
   | "assessor"
+  | "resolver"        // gate stage emitted by orchestrator when /api/runs/<id>/stream fires gate_open
   | "architect"
+  | "design_review"   // second gate stage
   | "test_plan"
   | "codegen"
   | "review_scan"
