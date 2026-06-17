@@ -814,6 +814,11 @@ async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
     except Exception as exc:
         raise HTTPException(500, f"failed to re-hydrate run doc: {exc}") from exc
     run.status = RunStatus.FAILED
+    # Bump updated_at so the /runs list re-sorts the cleaned run to reflect
+    # the cleanup time, and so read-after-write verification can confirm the
+    # write landed by comparing timestamps (not just trusting the 200).
+    from datetime import datetime, timezone
+    run.updated_at = datetime.now(timezone.utc).isoformat()
     # Append a synthetic event so the audit trail records the cleanup.
     run.events.append(StageEvent(
         run_id=run_id,
