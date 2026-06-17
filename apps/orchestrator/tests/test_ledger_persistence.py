@@ -113,15 +113,28 @@ def test_save_run_failure_is_logged_not_raised(caplog):
 
 def test_save_run_then_get_run_round_trips():
     """End-to-end: persistence shape produced by save_run must be readable
-    back into a valid RunState by get_run."""
+    back by get_run.
+
+    Note: get_run returns the raw Cosmos dict (NOT a re-hydrated RunState).
+    Callers that need a RunState validate it themselves (e.g.
+    main.py::admin_mark_failed does RunState.model_validate(doc)). This
+    test pins the dict contract so the round-trip keys are guaranteed.
+    """
     fake = _FakeLedger()
     run = _sample_run()
     _run(fake.save_run(run))
     loaded = _run(fake.get_run("run-abc-123"))
     assert loaded is not None
-    assert loaded.run_id == "run-abc-123"
-    assert loaded.team_id == "cardiology"
-    assert loaded.status == RunStatus.AWAITING_GATE
-    assert loaded.current_stage == Stage.RESOLVER
-    assert loaded.mode == RunMode.HYBRID
-    assert loaded.total_cost_usd == 0.42
+    assert loaded["run_id"] == "run-abc-123"
+    assert loaded["team_id"] == "cardiology"
+    # Enums round-trip as their string values (model_dump(mode="json"))
+    assert loaded["status"] == "awaiting_gate"
+    assert loaded["current_stage"] == "resolver"
+    assert loaded["mode"] == "hybrid"
+    assert loaded["total_cost_usd"] == 0.42
+    # And the dict re-hydrates into a valid RunState for callers that need it
+    rehydrated = RunState.model_validate(loaded)
+    assert rehydrated.run_id == "run-abc-123"
+    assert rehydrated.status == RunStatus.AWAITING_GATE
+    assert rehydrated.current_stage == Stage.RESOLVER
+    assert rehydrated.mode == RunMode.HYBRID
