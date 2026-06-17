@@ -219,16 +219,51 @@ class LedgerClient:
         return None
 
     # ---- run state --------------------------------------------------------
-    async def save_run(self, doc: dict) -> None:
-        """Save a serialized run state. Caller passes a dict (e.g. RunState.model_dump)."""
+    async def save_run(self, doc) -> None:
+        """Save a serialized run state. Accepts a dict OR a pydantic model.
+
+        Phase 6.3 fix (2026-06-17): callers were passing RunState pydantic
+        objects directly. dict(model) returns a dict but values stay as
+        pydantic objects + enums + datetimes, which the Cosmos SDK can
+        serialize partially but fails on nested pydantic objects
+        (StageEvent inside events list) with "Object of type X is not
+        JSON serializable". The save_run() except-Exception then swallows
+        the error silently, leaving the appearance of success while the
+        Cosmos doc stays at its original state.
+
+        This was responsible for:
+          - 8 zombie runs that "cleanup" failed to fix (admin endpoint
+            silently no-op'd the upsert)
+          - Phase 6.1 per-event saves never actually landed in Cosmos
+            (every event "saved" but the doc stayed at the ingest snapshot)
+          - The /api/runs list showing 0 runs after pod restart because
+            in-memory _runs was empty and Cosmos had no fresh writes
+
+        Fix: detect pydantic models and call model_dump(mode="json")
+        which serializes enums to their string values + datetimes to
+        ISO strings + nested pydantic objects to plain dicts. Dicts
+        passed in continue to work unchanged.
+
+        Also: log the actual error message (not just "Run save failed: %s")
+        so future silent-failure regressions surface in App Insights.
+        """
         try:
-            doc = dict(doc)
+            # Auto-serialize pydantic models (RunState in particular)
+            if hasattr(doc, "model_dump"):
+                doc = doc.model_dump(mode="json")
+            else:
+                doc = dict(doc)
             doc["id"] = doc.get("run_id") or doc.get("id")
             if not doc["id"]:
                 raise ValueError("save_run: doc must have run_id or id")
             await self._runs.upsert_item(doc)
         except Exception as exc:
-            _logger.warning("Run save failed: %s", exc)
+            _logger.warning(
+                "Run save failed (id=%s): %s: %s",
+                (doc.get("id") if isinstance(doc, dict) else "?"),
+                type(exc).__name__,
+                exc,
+            )
 
     async def get_run(self, run_id: str) -> Optional[dict]:
         try:
