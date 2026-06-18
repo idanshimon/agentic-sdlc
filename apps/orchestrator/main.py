@@ -882,18 +882,25 @@ async def _write_heal_ledger(
     precedent_refs: list[str] | None = None, pr_url: str | None = None,
     stage: str | None = None,
 ) -> None:
-    """Pin one link of the heal chain to the ledger. No-op if ledger absent."""
+    """Pin one link of the heal chain to the ledger. No-op if ledger absent.
+
+    Uses the orchestrator's LedgerEntry with the heal fields (runtime_kind,
+    heal_id, decision, rationale, actor_kind/id, pr_url, stage). card_id /
+    ambiguity_class / decision_kind take benign defaults — heal entries are not
+    card decisions.
+    """
     if not _ledger:
         return
-    from ledger_core.models import Actor
     try:
         await _ledger.write_decision(LedgerEntry(
             team_id=team_id, run_id=run_id, heal_id=heal_id,
             runtime_kind=runtime_kind,  # heal_proposed | heal_decided | heal_executed
-            actor=Actor(kind=actor_kind, id=actor_id),
             decision=decision, rationale=rationale,
+            actor_kind=actor_kind, actor_id=actor_id,
+            created_by=actor_id,
             precedent_refs=precedent_refs or [],
             pr_url=pr_url, stage=stage,
+            resolution_text=decision,  # mirror into the legacy field for UI back-compat
         ))
     except Exception as exc:  # never crash the heal flow on a ledger blip
         _logger.warning("heal ledger write failed (heal_id=%s, kind=%s): %s",

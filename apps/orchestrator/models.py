@@ -123,11 +123,11 @@ class LedgerEntry(BaseModel):
     entry_type: str = "runtime"  # ledger-core write_entry() reads this
     team_id: str  # partition key
     run_id: str
-    card_id: str
-    ambiguity_class: AmbiguityClass
+    card_id: str = Field(default_factory=_uuid)  # default for non-card entries (e.g. heal)
+    ambiguity_class: AmbiguityClass = "other"    # default for non-card entries
     slot_value_hash: str = ""
     resolution_text: str = ""
-    decision_kind: DecisionKind
+    decision_kind: DecisionKind = "accept"       # default for non-card entries
     status: LedgerStatus = "suggest"  # v1: writes only ever land as `suggest` (no promotion)
     sample_count: int = 1
     accuracy_score: float = 0.0
@@ -135,6 +135,19 @@ class LedgerEntry(BaseModel):
     created_by: str = "unknown"
     precedent_id: Optional[str] = None  # for back-trace index (design.md §4 demote)
     confidence_source: Literal["human", "autopilot"] = "human"
+    # self-heal cowork (add-self-heal-cowork): heal entries reuse this LedgerEntry
+    # with runtime_kind in {heal_proposed, heal_decided, heal_executed} and a
+    # shared heal_id tying the chain. These are optional so non-heal entries are
+    # unaffected.
+    runtime_kind: Optional[str] = None           # heal_proposed | heal_decided | heal_executed | ...
+    heal_id: Optional[str] = None                # ties the 3-entry heal chain
+    decision: Optional[str] = None               # one-line summary (heal entries)
+    rationale: Optional[str] = None              # full reasoning (heal entries)
+    actor_kind: Optional[str] = None             # "human" | "agent" (heal entries)
+    actor_id: Optional[str] = None               # m365 upn or agent principal (heal entries)
+    stage: Optional[str] = None                  # stage the heal targets
+    pr_url: Optional[str] = None                 # PR / re-run ref on heal_executed
+    precedent_refs: list[str] = Field(default_factory=list)  # cited prior heal ids
     # Phase 2.5: full prompt inheritance chain that produced this decision.
     # Populated by stages that have completed migration to prompt_library_v2;
     # None for legacy entries and for any entry not associated with a
