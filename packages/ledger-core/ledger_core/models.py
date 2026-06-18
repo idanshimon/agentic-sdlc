@@ -43,6 +43,9 @@ RuntimeKind = Literal[
     "delivered",            # deliver stage success (PR opened)
     "plan_proposed",        # Plan Mode capture
     "phi_block",            # pre-tool-use hook blocked a write
+    "heal_proposed",        # self-heal cowork: agent proposed a heal (add-self-heal-cowork)
+    "heal_decided",         # self-heal cowork: human approved/declined a heal
+    "heal_executed",        # self-heal cowork: executor landed the heal (PR/re-run)
 ]
 MetaKind = Literal[
     "bundle_change_merged",
