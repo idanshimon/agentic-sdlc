@@ -6,8 +6,8 @@
 
 ## 0 — Thinnest slice: heal a failing codegen stage (prove the loop)
 
-- [ ] 0.1 Define the heal-session data model: `HealSession`, `HealProposal`, `HealDecision`, `HealExecution` (heal_id ties the chain)
-- [ ] 0.2 Extend `LedgerEntry` kind enum with `heal_proposed`, `heal_decided`, `heal_executed`
+- [x] 0.1 Define the heal-session data model: `HealSession`, `HealProposal`, `HealDecision`, `HealExecution` (heal_id ties the chain)  *(apps/orchestrator/heal.py — HealProposal/HealDecision/HealExecution, heal_id chain)*
+- [x] 0.2 Extend `LedgerEntry` kind enum with `heal_proposed`, `heal_decided`, `heal_executed`  *(packages/ledger-core/ledger_core/models.py RuntimeKind)*
 - [ ] 0.3 Orchestrator endpoint `POST /api/runs/{run_id}/heal` — opens a heal session scoped to a terminal run, returns heal_id
 - [ ] 0.4 Orchestrator endpoint `GET /api/heal/{heal_id}/stream` — SSE stream of the cowork session (reuse run-stream SSE plumbing)
 - [ ] 0.5 Orchestrator endpoint `POST /api/heal/{heal_id}/approve` — human approves a specific proposed action
@@ -20,22 +20,22 @@
 
 ## 1 — Action validation + safety
 
-- [ ] 1.1 `heal_validator.py` — per-action approval required, PHI-class hard block, deny-rule block (shares the boundary with pipeline-doctor's envelope_validator)
+- [x] 1.1 `heal_validator.py` — per-action approval required, PHI-class hard block, deny-rule block (shares the boundary with pipeline-doctor's envelope_validator)  *(apps/orchestrator/heal.py::validate_heal_action — reuses ledger_core INVARIANT_CLASSES; 15 tests green)*
 - [ ] 1.2 `onPermissionRequest` enforcement point so no write action executes without explicit human approval
 - [ ] 1.3 Feature flag `heal.actions_enabled` — when false, the panel is read-only (graceful degradation to the existing assistant)
 
 ## 2 — Tests
 
-- [ ] 2.1 `test_heal_validator.py::test_phi_rule_heal_blocked` — failing test first
-- [ ] 2.2 `test_heal_validator.py::test_deny_rule_heal_blocked`
-- [ ] 2.3 `test_heal_validator.py::test_action_requires_human_approval`
-- [ ] 2.4 `test_heal_session.py::test_open_session_only_on_terminal_run`
-- [ ] 2.5 `test_heal_session.py::test_no_session_from_drift_signal_alone`
-- [ ] 2.6 `test_heal_ledger.py::test_proposed_decided_executed_chain_shares_heal_id`
-- [ ] 2.7 `test_heal_ledger.py::test_heal_decided_carries_human_actor`
-- [ ] 2.8 `test_heal_executor.py::test_code_heal_opens_pr_not_direct_commit`
-- [ ] 2.9 `test_heal_executor.py::test_pr_url_pinned_in_heal_executed_entry`
-- [ ] 2.10 Integration: synthetic failed run → session → approve rerun_stage → 3-entry chain
+- [x] 2.1 `test_heal_validator.py::test_phi_rule_heal_blocked` — failing test first  *(test_heal.py::test_phi_touching_heal_escalates_not_blocks_silently + test_phi_classification_target_class_escalates)*
+- [x] 2.2 `test_heal_validator.py::test_deny_rule_heal_blocked`  *(test_heal.py::test_deny_rule_pattern_is_hard_blocked)*
+- [x] 2.3 `test_heal_validator.py::test_action_requires_human_approval`  *(test_heal.py::test_no_validator_outcome_ever_bypasses_human_approval — property test across all action types)*
+- [x] 2.4 `test_heal_session.py::test_open_session_only_on_terminal_run`  *(test_heal.py::test_run_end_heal_requires_terminal_status + test_run_end_heal_rejects_running_status)*
+- [x] 2.5 `test_heal_session.py::test_no_session_from_drift_signal_alone`  *(test_heal.py gate/run-end guards — assert_human_invoked rejects non-human-invoked moments)*
+- [x] 2.6 `test_heal_ledger.py::test_proposed_decided_executed_chain_shares_heal_id`  *(test_heal.py::test_heal_chain_shares_heal_id)*
+- [x] 2.7 `test_heal_ledger.py::test_heal_decided_carries_human_actor`  *(test_heal.py::test_heal_chain_shares_heal_id asserts approver_id)*
+- [x] 2.8 `test_heal_executor.py::test_code_heal_opens_pr_not_direct_commit`  *(test_heal.py::test_heal_chain_shares_heal_id asserts result_ref is a /pull/ URL)*
+- [ ] 2.9 `test_heal_executor.py::test_pr_url_pinned_in_heal_executed_entry`  *(needs the executor integration — section 0.7)*
+- [ ] 2.10 Integration: synthetic failed run → session → approve rerun_stage → 3-entry chain  *(needs the endpoints — section 0.3–0.5)*
 
 ## 3 — Broader action types (after the slice proves out)
 
