@@ -25,6 +25,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from .decisions_md import write_decisions_md
+from .heal import (
+    HealDecision, HealProposal, HealTrigger, HealValidationOutcome,
+    assert_human_invoked, validate_heal_action,
+)
+from .heal_runtime import get_brain, get_executor
+from . import heal_runtime as _heal_rt
 from .ledger import InvariantWriteBlocked, Ledger
 from .models import (
     GateDecision, INVARIANT_CLASSES, LedgerEntry, RunMode, RunState, RunStatus,
@@ -857,6 +863,203 @@ async def finalize_gate(run_id: str, body: dict | None = None) -> dict:
         "gate_closed": True,
         "decisions_count": len(run.decisions),
         "next_stage": "architect",
+    }
+
+
+# ========================================================================
+# Self-heal cowork (add-self-heal-cowork) — gate/run-end triggered, both
+# brain + executor are config-selected (azure | github | stub), no lock-in.
+# ========================================================================
+# In-memory heal-session store. heal_id -> {"proposal": HealProposal,
+# "validation": HealValidationResult, "decision": HealDecision|None,
+# "execution": HealExecution|None}. Mirrors the _runs dict pattern.
+_heal_sessions: dict[str, dict] = {}
+
+
+async def _write_heal_ledger(
+    *, team_id: str, run_id: str, heal_id: str, runtime_kind: str,
+    decision: str, rationale: str, actor_kind: str, actor_id: str,
+    precedent_refs: list[str] | None = None, pr_url: str | None = None,
+    stage: str | None = None,
+) -> None:
+    """Pin one link of the heal chain to the ledger. No-op if ledger absent."""
+    if not _ledger:
+        return
+    from ledger_core.models import Actor
+    try:
+        await _ledger.write_decision(LedgerEntry(
+            team_id=team_id, run_id=run_id, heal_id=heal_id,
+            runtime_kind=runtime_kind,  # heal_proposed | heal_decided | heal_executed
+            actor=Actor(kind=actor_kind, id=actor_id),
+            decision=decision, rationale=rationale,
+            precedent_refs=precedent_refs or [],
+            pr_url=pr_url, stage=stage,
+        ))
+    except Exception as exc:  # never crash the heal flow on a ledger blip
+        _logger.warning("heal ledger write failed (heal_id=%s, kind=%s): %s",
+                        heal_id, runtime_kind, exc)
+
+
+@app.post("/api/runs/{run_id}/heal")
+async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
+    """Open a heal session for a run. HUMAN-INVOKED ONLY — at a gate
+    (awaiting_gate) or at run end (completed/failed). Never a daemon.
+
+    The brain diagnoses + proposes ONE action; the validator gates it; the
+    proposal is returned for the human to approve. Nothing executes here.
+    """
+    if not _heal_rt.heal_settings.actions_enabled:
+        raise HTTPException(403, "heal actions are disabled (HEAL_ACTIONS_ENABLED=false)")
+    body = body or {}
+    run = _runs.get(run_id)
+    # Allow healing Cosmos-resident terminal runs too (not just in-memory).
+    run_summary: dict
+    if run is not None:
+        run_summary = {"status": run.status.value if hasattr(run.status, "value") else run.status,
+                       "current_stage": getattr(run.current_stage, "value", run.current_stage),
+                       "team_id": run.team_id}
+        team_id = run.team_id
+    elif _ledger:
+        doc = await _ledger.get_run(run_id)
+        if not doc:
+            raise HTTPException(404, "run not found")
+        run_summary = {"status": doc.get("status"),
+                       "current_stage": doc.get("current_stage"),
+                       "team_id": doc.get("team_id")}
+        team_id = doc.get("team_id", "unknown")
+    else:
+        raise HTTPException(404, "run not found")
+
+    # Determine the trigger from run status + enforce human-invoked-only.
+    status = run_summary.get("status")
+    trigger = HealTrigger.AT_GATE if status == "awaiting_gate" else HealTrigger.AT_RUN_END
+    try:
+        assert_human_invoked(trigger, status)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
+
+    # Brain diagnoses + proposes (config-selected: azure | github | stub).
+    brain = get_brain()
+    precedent: list[dict] = []  # TODO(slice-2): query prior heal_executed entries
+    proposal = await brain.diagnose(
+        run_id=run_id, team_id=team_id, trigger=trigger,
+        run_summary=run_summary, precedent=precedent,
+    )
+
+    # Validate the proposed action through the safety kernel.
+    validation = validate_heal_action(proposal.action)
+
+    _heal_sessions[proposal.heal_id] = {
+        "proposal": proposal, "validation": validation,
+        "decision": None, "execution": None,
+        "brain": brain.name,
+    }
+
+    # Pin heal_proposed to the ledger (agent actor).
+    await _write_heal_ledger(
+        team_id=team_id, run_id=run_id, heal_id=proposal.heal_id,
+        runtime_kind="heal_proposed",
+        decision=proposal.action.summary, rationale=proposal.diagnosis,
+        actor_kind="agent", actor_id=f"heal-brain:{brain.name}",
+        precedent_refs=proposal.precedent_refs, stage=proposal.action.stage,
+    )
+
+    return {
+        "heal_id": proposal.heal_id,
+        "trigger": trigger.value,
+        "brain": brain.name,
+        "diagnosis": proposal.diagnosis,
+        "action": proposal.action.model_dump(),
+        "validation": validation.model_dump(),
+        "requires_human_approval": True,
+        "can_execute": validation.outcome == HealValidationOutcome.ALLOW_WITH_APPROVAL,
+    }
+
+
+@app.get("/api/heal/{heal_id}")
+async def get_heal_session(heal_id: str) -> dict:
+    """Fetch the current state of a heal session."""
+    sess = _heal_sessions.get(heal_id)
+    if not sess:
+        raise HTTPException(404, "heal session not found")
+    proposal: HealProposal = sess["proposal"]
+    return {
+        "heal_id": heal_id,
+        "brain": sess.get("brain"),
+        "diagnosis": proposal.diagnosis,
+        "action": proposal.action.model_dump(),
+        "validation": sess["validation"].model_dump(),
+        "decision": sess["decision"].model_dump() if sess["decision"] else None,
+        "execution": sess["execution"].model_dump() if sess["execution"] else None,
+    }
+
+
+@app.post("/api/heal/{heal_id}/approve")
+async def approve_heal(heal_id: str, body: dict | None = None) -> dict:
+    """Human approves (or declines) the proposed heal. On approval, the
+    config-selected executor lands the heal and the chain is pinned.
+
+    Body: { "approver_id": "<m365 upn>", "approved": true, "note": "..." }
+    """
+    sess = _heal_sessions.get(heal_id)
+    if not sess:
+        raise HTTPException(404, "heal session not found")
+    body = body or {}
+    approver_id = body.get("approver_id", "unknown@local")
+    approved = bool(body.get("approved", True))
+    note = body.get("note", "")
+
+    proposal: HealProposal = sess["proposal"]
+    validation = sess["validation"]
+
+    # Hard safety: a BLOCK/ESCALATE outcome can never be executed, even if the
+    # human clicks approve. This is the kernel boundary the spec mandates.
+    if validation.outcome != HealValidationOutcome.ALLOW_WITH_APPROVAL and approved:
+        raise HTTPException(
+            403,
+            f"heal cannot be executed: {validation.outcome.value} — {validation.reason}"
+            + (f" (escalate via: {validation.escalation_path})" if validation.escalation_path else ""),
+        )
+
+    decision = HealDecision(heal_id=heal_id, approver_id=approver_id,
+                            approved=approved, note=note)
+    sess["decision"] = decision
+
+    # Pin heal_decided (human actor).
+    await _write_heal_ledger(
+        team_id=proposal.team_id, run_id=proposal.run_id, heal_id=heal_id,
+        runtime_kind="heal_decided",
+        decision=f"{'approved' if approved else 'declined'} heal: {proposal.action.summary}",
+        rationale=note or ("approved by operator" if approved else "declined by operator"),
+        actor_kind="human", actor_id=approver_id,
+        stage=proposal.action.stage,
+    )
+
+    if not approved:
+        return {"heal_id": heal_id, "approved": False, "executed": False}
+
+    # Execute via the config-selected executor (github | azure | stub).
+    executor = get_executor()
+    execution = await executor.execute(proposal)
+    sess["execution"] = execution
+
+    # Pin heal_executed (executor as agent actor) with the PR/re-run ref.
+    await _write_heal_ledger(
+        team_id=proposal.team_id, run_id=proposal.run_id, heal_id=heal_id,
+        runtime_kind="heal_executed",
+        decision=f"executed {proposal.action.action_type.value}: {execution.detail}",
+        rationale=execution.detail,
+        actor_kind="agent", actor_id=f"heal-executor:{executor.name}",
+        pr_url=execution.result_ref or None, stage=proposal.action.stage,
+    )
+
+    return {
+        "heal_id": heal_id,
+        "approved": True,
+        "executed": execution.success,
+        "executor": executor.name,
+        "result_ref": execution.result_ref,
+        "detail": execution.detail,
     }
 
 
