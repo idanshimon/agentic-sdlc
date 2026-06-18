@@ -137,6 +137,9 @@ class LedgerEntry(BaseModel):
     precedent_id: Optional[str] = None
     confidence_source: Optional[Literal["human", "autopilot"]] = None
     pr_url: Optional[str] = None  # set on `delivered` runtime entries
+    # self-heal cowork (add-self-heal-cowork): ties heal_proposed → heal_decided
+    # → heal_executed into one queryable chain. Null on non-heal entries.
+    heal_id: Optional[str] = None
 
     # ------------- meta-only fields -------------------------
     meta_kind: Optional[MetaKind] = None
