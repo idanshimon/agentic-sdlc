@@ -166,6 +166,29 @@ def _hash(s: str) -> str:
     return hashlib.sha1(s.encode()).hexdigest()[:12]
 
 
+def _slot_key(ambiguity_class: str, prd_section: str = "") -> str:
+    """Stable precedent key for findPrecedent matching.
+
+    THE TEACHING-LOOP FIX (2026-06-20): slot_value_hash was previously
+    _hash(title + detail), but title/detail come from the LLM assessor's prose
+    output, which varies run-to-run even for the SAME PRD. That made the
+    precedent key unstable, so an operator's swap on run A never matched the
+    same ambiguity on run B — findPrecedent (exact match on team + class +
+    slot_value_hash) could never fire. Verified empirically: the same PRD
+    produced a different slot hash for every class across two runs.
+
+    The fix: key on the STABLE semantic identity of the ambiguity — its class
+    plus the PRD section it came from (normalized) — NOT the LLM's wording.
+    The PRD section is a stable anchor (same PRD → same sections); the class is
+    the assessor's stable taxonomy field. When no section is available we fall
+    back to class-only, which is how the hardcoded demo cards already key
+    (e.g. _hash("default-scope")). This makes an operator's teaching signal on
+    one run match the same ambiguity bucket on the next run, for the same team.
+    """
+    norm_section = " ".join(prd_section.lower().split()) if prd_section else ""
+    return _hash(f"{ambiguity_class}|{norm_section}")
+
+
 # --- 1. INGEST ----------------------------------------------------------------
 async def stage_ingest(run: RunState, prd_text: str) -> AsyncIterator[StageEvent]:
     """Normalize work-item input into a canonical spec-package (design.md §2)."""
@@ -274,7 +297,7 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
                     ))
                 cards.append(AmbiguityCard(
                     ambiguity_class=klass,  # type: ignore[arg-type]
-                    slot_value_hash=_hash(title + detail),
+                    slot_value_hash=_slot_key(klass, str(item.get("prd_section", ""))),
                     title=title[:140],
                     detail=detail[:400],
                     prd_quote=str(item.get("prd_quote", ""))[:300],
@@ -309,7 +332,7 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
                 klass = "other"
             cards.append(AmbiguityCard(
                 ambiguity_class=klass,  # type: ignore[arg-type]
-                slot_value_hash=_hash(title + detail),
+                slot_value_hash=_slot_key(klass),
                 title=title[:140], detail=detail[:400],
                 blast_radius_cost_usd=blast, re_run_cost_usd=round(res.usd, 4),
             ))
@@ -319,14 +342,14 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
         cards = [
             AmbiguityCard(
                 ambiguity_class="scope-resolution",
-                slot_value_hash=_hash("default-scope"),
+                slot_value_hash=_slot_key("scope-resolution"),
                 title="Scope of 'patient access' is undefined",
                 detail="PRD references patient access without naming the scope (care-team vs account-holder).",
                 blast_radius_cost_usd=120.0, re_run_cost_usd=2.5,
             ),
             AmbiguityCard(
                 ambiguity_class="phi-classification",
-                slot_value_hash=_hash("default-phi"),
+                slot_value_hash=_slot_key("phi-classification"),
                 title="Logging policy for MRN field unclear",
                 detail="It is not stated whether MRN may appear in application logs.",
                 blast_radius_cost_usd=400.0, re_run_cost_usd=2.5,
