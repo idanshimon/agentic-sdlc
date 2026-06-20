@@ -174,9 +174,18 @@ class LedgerClient:
         ambiguity_class: str,
         slot_value_hash: str,
     ) -> Optional[LedgerEntry]:
-        """Most recent precedent matching (team, class, slot_hash). Used by autopilot."""
+        """Most recent precedent matching (team, class, slot_hash). Used by autopilot.
+
+        NOTE (2026-06-20): the query intentionally does NOT use `SELECT TOP 1`.
+        Empirically (debug probe against live Cosmos), `SELECT TOP 1 ... ORDER BY`
+        with a partition-scoped async `query_items` returned an EMPTY iterator
+        even when matching rows existed — the same WHERE + ORDER BY without TOP
+        returned the rows fine. This silently killed the teaching loop: an
+        operator's swap precedent was never matched, so autopilot always re-gated.
+        We fetch ordered rows and take the first (most recent) in Python instead.
+        """
         q = (
-            "SELECT TOP 1 * FROM c "
+            "SELECT * FROM c "
             "WHERE c.team_id=@t "
             "AND c.ambiguity_class=@k "
             "AND c.slot_value_hash=@s "
@@ -192,7 +201,7 @@ class LedgerClient:
             async for item in self._ledger.query_items(
                 query=q, parameters=params, partition_key=team_id
             ):
-                return from_legacy_v06_dict(item)
+                return from_legacy_v06_dict(item)  # first row = most recent
         except Exception as exc:
             _logger.warning("Precedent lookup failed: %s", exc)
         return None
