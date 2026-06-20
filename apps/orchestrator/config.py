@@ -68,6 +68,29 @@ class Settings:
 settings = Settings()
 
 
+# --- Tier-2 governance: hard-gate classes -------------------------------------
+# Ambiguity classes that can NEVER be auto-resolved (tier-0) OR bulk/soft-
+# approved (tier-1) — each must be an explicit, attributed, individual human
+# decision (tier-2). Defaults to INVARIANT_CLASSES (phi-classification,
+# auth-policy), which the autopilot path already refuses. The env var EXTENDS
+# the floor (never shrinks it): PHI + auth are an immovable baseline that
+# cannot be un-gated via env — removing them requires a standards-change.
+def _hard_gate_classes() -> set[str]:
+    from .models import INVARIANT_CLASSES
+    extra = {c.strip() for c in os.getenv("HARD_GATE_CLASSES", "").split(",") if c.strip()}
+    return set(INVARIANT_CLASSES) | extra
+
+
+HARD_GATE_CLASSES: set[str] = _hard_gate_classes()
+
+
+def reload_hard_gate_classes() -> set[str]:
+    """Re-read the env (tests use this after monkeypatching os.environ)."""
+    global HARD_GATE_CLASSES
+    HARD_GATE_CLASSES = _hard_gate_classes()
+    return HARD_GATE_CLASSES
+
+
 # --- Stage provider routing --------------------------------------------------
 # Python defaults — matches the demo deployment today (May 2026): AOAI for
 # ingest/assessor/test_plan/review_scan; Databricks-Anthropic for architect/codegen.

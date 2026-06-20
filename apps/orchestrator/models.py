@@ -88,6 +88,13 @@ class AmbiguityCard(BaseModel):
     re_run_cost_usd: float = 0.0
     is_gating: bool = True  # False = Bootstrap-Mode auto-deferred (design.md §3)
     is_eligible_for_promotion: bool = False  # True = anti-nudge UX: hide per-card cost
+    # Tier-2 governance: True = this card's ambiguity_class is hard-gated
+    # (PHI/auth by default) and can NEVER be bulk/soft-approved. Stamped by
+    # the orchestrator at card-build time from HARD_GATE_CLASSES so the UI can
+    # render the lock badge + exclude it from "Approve all" without a second
+    # round-trip. The server independently enforces this (does not trust the
+    # flag) — see the /approve handler's bulk-path guard.
+    is_hard_gated: bool = False
 
 
 class LedgerEntry(BaseModel):
@@ -182,6 +189,12 @@ class GateDecision(BaseModel):
     gate: Optional[str] = None
     actor: str = "demo-user@hca"
     confidence_source: Literal["human", "autopilot"] = "human"
+    # Tier-2 governance (hard-gate): how this decision reached the server.
+    # "individual" = operator explicitly decided this one card.
+    # "bulk" = swept in by an "Approve all recommended" click. The server
+    # REJECTS bulk decisions on hard-gated classes (PHI/auth) with 409 so a
+    # client cannot rubber-stamp a class that must be owned explicitly.
+    approval_path: Literal["bulk", "individual"] = "individual"
 
 
 class RunState(BaseModel):
