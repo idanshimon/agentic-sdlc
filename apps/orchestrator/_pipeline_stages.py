@@ -335,8 +335,12 @@ async def stage_assessor(run: RunState, prd_text: str) -> AsyncIterator[StageEve
 
     # Bootstrap Mode: only top-K by blast-radius-cost are gating (design.md §3).
     cards.sort(key=lambda c: c.blast_radius_cost_usd, reverse=True)
+    from .config import HARD_GATE_CLASSES
     for i, c in enumerate(cards):
         c.is_gating = i < settings.bootstrap_top_k
+        # Tier-2 governance: stamp hard-gate status so the UI can lock these
+        # out of bulk-approve. The server still enforces independently.
+        c.is_hard_gated = c.ambiguity_class in HARD_GATE_CLASSES
     run.cards = cards
     yield _ev(run, Stage.ASSESSOR, "completed",
               f"{len(cards)} cards ({sum(c.is_gating for c in cards)} gating, "

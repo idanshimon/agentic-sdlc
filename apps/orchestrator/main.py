@@ -31,6 +31,7 @@ from .heal import (
 )
 from .heal_runtime import get_brain, get_executor
 from . import heal_runtime as _heal_rt
+from . import config as _config
 from .ledger import InvariantWriteBlocked, Ledger
 from .models import (
     GateDecision, INVARIANT_CLASSES, LedgerEntry, RunMode, RunState, RunStatus,
@@ -299,6 +300,27 @@ def _release_gate(run_id: str) -> None:
 async def healthz() -> dict:
     """Liveness probe (no external deps touched)."""
     return {"status": "ok", "runs_in_memory": len(_runs)}
+
+
+@app.get("/api/config/hard-gate-classes")
+async def get_hard_gate_classes() -> dict:
+    """Tier-2 governance posture: which ambiguity classes can never be
+    auto-resolved or bulk/soft-approved (each requires an explicit, attributed,
+    individual human decision). PHI + auth are an immovable floor; the set may
+    be extended via the HARD_GATE_CLASSES env (never shrunk). Read-only — the
+    Settings/Governance UI renders this; changing the posture is a
+    standards-change PR.
+    """
+    return {
+        "hard_gate_classes": sorted(_config.HARD_GATE_CLASSES),
+        "floor": sorted(INVARIANT_CLASSES),
+        "explainer": (
+            "These classes can never be auto-resolved (tier-0) or bulk/soft-"
+            "approved (tier-1) — each requires an explicit, attributed human "
+            "decision (tier-2). PHI and auth are an immovable floor. Changing "
+            "this set is a standards-change PR."
+        ),
+    }
 
 
 @app.post("/api/run")
@@ -745,6 +767,23 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
             "resolver gate is closed; cannot accept per-card decisions. "
             "Use /rerun to start a new run if the decision needs to take effect.",
         )
+
+    # Tier-2 governance: hard-gated classes (PHI/auth by default) can NEVER be
+    # bulk/soft-approved. The server enforces this independently of the UI —
+    # a client cannot rubber-stamp a hard-gated card by sweeping it into an
+    # "Approve all" batch. Only an explicit, individual decision is accepted.
+    if decision.card_id:
+        _card = next((c for c in run.cards if c.card_id == decision.card_id), None)
+        if (
+            _card is not None
+            and _card.ambiguity_class in _config.HARD_GATE_CLASSES
+            and decision.approval_path == "bulk"
+        ):
+            raise HTTPException(
+                409,
+                f"'{_card.ambiguity_class}' is hard-gated and cannot be bulk-approved; "
+                f"this card must be decided individually with an explicit operator action.",
+            )
 
     # Resolve the actual resolution_text from the chosen option
     final_text = decision.resolution_text
