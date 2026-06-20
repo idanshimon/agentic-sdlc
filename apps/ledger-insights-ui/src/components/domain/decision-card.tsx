@@ -84,6 +84,48 @@ function teachingSignalIcon(kind: LedgerEntry["runtime_kind"]) {
   }
 }
 
+/**
+ * Human-readable summary for a teaching-signal entry. The raw ledger stores
+ * these as runtime_kind + references_entry_id, which renders as
+ * "thumbs_up on <uuid>" — meaningless to a human. This turns each kind into a
+ * plain-English sentence an operator can scan.
+ */
+function teachingSignalSummary(entry: LedgerEntry): {
+  title: string;
+  detail: string | null;
+} | null {
+  const who = entry.actor?.id && entry.actor.id !== "unknown" ? entry.actor.id : "An operator";
+  switch (entry.runtime_kind) {
+    case "feedback_thumbs":
+      return entry.feedback_kind === "thumbs_down"
+        ? { title: "Marked “not helpful”", detail: `${who} gave this decision a thumbs-down.` }
+        : { title: "Marked “helpful”", detail: `${who} gave this decision a thumbs-up.` };
+    case "decision_flagged":
+      return {
+        title: "Flagged as wrong",
+        detail:
+          entry.rationale?.trim()
+            ? `${who} flagged this — it won’t be reused as precedent. Reason: ${entry.rationale.trim()}`
+            : `${who} flagged this decision — it won’t be reused as precedent.`,
+      };
+    case "replay_requested":
+      return {
+        title: "Replay requested",
+        detail: `${who} asked to re-run this against the current rules.`,
+      };
+    case "class_paused":
+      return {
+        title: `Autopilot paused${entry.paused_class ? ` for “${entry.paused_class}”` : ""}`,
+        detail:
+          entry.rationale?.trim()
+            ? `${who} paused auto-resolution for this class. Reason: ${entry.rationale.trim()}`
+            : `${who} paused auto-resolution for this whole class.`,
+      };
+    default:
+      return null;
+  }
+}
+
 export function DecisionCard({ entry: raw }: { entry: LedgerEntry }) {
   const entry = normalize(raw as RawEntry);
   const phiIcon =
@@ -103,6 +145,10 @@ export function DecisionCard({ entry: raw }: { entry: LedgerEntry }) {
   const isThumbsUp =
     entry.runtime_kind === "feedback_thumbs" && entry.feedback_kind === "thumbs_up";
   const ThumbsIcon = isThumbsUp ? ThumbsUp : isThumbsDown ? ThumbsDown : null;
+
+  // Plain-English summary so teaching-signal rows don't read as
+  // "thumbs_up on <uuid>". Null for ordinary stage_decision entries.
+  const tsSummary = teachingSignalSummary(entry);
 
   return (
     <Card className="p-4 space-y-3">
@@ -128,20 +174,25 @@ export function DecisionCard({ entry: raw }: { entry: LedgerEntry }) {
               />
             )}
             {entry.stage && <StagePill stage={entry.stage} status="completed" />}
-            <span className="mono text-[11px] text-[var(--text-tertiary)]">
-              {shortId(entry.id, 10)}
-            </span>
           </div>
-          <p className="text-sm text-[var(--text)] leading-snug">{entry.decision}</p>
-          {entry.references_entry_id && (
-            <p className="text-[11px] text-[var(--text-tertiary)]">
-              ↳ refers to <span className="mono">{shortId(entry.references_entry_id, 10)}</span>
-            </p>
+          {tsSummary ? (
+            <>
+              <p className="text-sm font-medium text-[var(--text)] leading-snug">
+                {tsSummary.title}
+              </p>
+              {tsSummary.detail && (
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  {tsSummary.detail}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-[var(--text)] leading-snug">{entry.decision}</p>
           )}
         </div>
         <PhiIcon className="h-4 w-4 shrink-0 mt-0.5" style={{ color: phiColor }} aria-label={`PHI ${entry.phi_class}`} />
       </div>
-      {entry.rationale && (
+      {entry.rationale && !tsSummary && (
         <p className="text-xs text-[var(--text-secondary)] leading-relaxed line-clamp-3">
           {entry.rationale}
         </p>
@@ -158,8 +209,11 @@ export function DecisionCard({ entry: raw }: { entry: LedgerEntry }) {
             </span>
           ))}
         </div>
-        <span className="tabular">
-          {fmtUsd(entry.cost_usd)} · {relativeTime(entry.created_at)}
+        <span className="tabular flex items-center gap-2">
+          <span className="mono text-[10px] text-[var(--text-tertiary)]/70" title={`Ledger entry ${entry.id}`}>
+            {shortId(entry.id, 8)}
+          </span>
+          <span>{fmtUsd(entry.cost_usd)} · {relativeTime(entry.created_at)}</span>
         </span>
       </div>
       {/* Phase 5: prompt-chain attribution. Closes the audit loop by

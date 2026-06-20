@@ -17,7 +17,6 @@
  * Click on the matched prompt → /prompts page filtered to that prompt_id.
  * Hover on git_sha → tooltip with the full SHA (truncated to 16 in display).
  */
-import Link from "next/link";
 import { GitBranch, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -66,14 +65,13 @@ export function PromptChainBadge({ chain, variant = "card", className }: Props) 
 
   const matched = chain.find((s) => s.matched);
 
-  // INLINE — table cell, one line, click-through to /prompts
+  // INLINE — table cell, one line, informational (no dead navigation)
   if (variant === "inline") {
     if (!matched) return <span className="text-[10px] text-[var(--text-tertiary)]">no match</span>;
     return (
-      <Link
-        href={`/prompts`}
+      <span
         className={cn(
-          "inline-flex items-center gap-1 text-[10px] font-mono hover:underline group",
+          "inline-flex items-center gap-1 text-[10px] font-mono",
           className,
         )}
         title={`Prompt: ${matched.prompt_id} ${matched.version} · git_sha ${matched.git_sha}`}
@@ -91,11 +89,14 @@ export function PromptChainBadge({ chain, variant = "card", className }: Props) 
             · {matched.owner_persona}
           </span>
         )}
-      </Link>
+      </span>
     );
   }
 
-  // CARD — DecisionCard footer, two lines, fuller info
+  // CARD — DecisionCard footer, two lines, fuller info.
+  // Informational only (no navigation): the /prompts page isn't deep-linkable
+  // to a single prompt yet, so a click-through just dumped operators on the
+  // bare catalog with no context. Render as plain text instead of a dead link.
   if (variant === "card") {
     if (!matched) {
       return (
@@ -105,17 +106,18 @@ export function PromptChainBadge({ chain, variant = "card", className }: Props) 
       );
     }
     return (
-      <Link
-        href={`/prompts`}
+      <div
         className={cn(
-          "inline-flex items-start gap-2 text-[11px] hover:bg-[var(--surface-2)] -m-1 p-1 rounded transition-colors group",
+          "inline-flex items-start gap-2 text-[11px]",
           className,
         )}
+        title={`Prompt ${matched.prompt_id} ${matched.version}${matched.git_sha ? ` · git_sha ${matched.git_sha}` : ""}`}
       >
         <GitBranch className="h-3 w-3 mt-0.5 text-[var(--text-tertiary)] shrink-0" />
         <div className="leading-tight">
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
+            <span className="text-[10px] text-[var(--text-tertiary)]">Prompt:</span>
+            <span className="font-mono text-[var(--text-secondary)]">
               {matched.prompt_id}
             </span>
             <span className="font-mono text-[var(--text-tertiary)]">{matched.version}</span>
@@ -137,7 +139,7 @@ export function PromptChainBadge({ chain, variant = "card", className }: Props) 
             matched at <span className="capitalize">{matched.scope}</span> scope
           </div>
         </div>
-      </Link>
+      </div>
     );
   }
 
