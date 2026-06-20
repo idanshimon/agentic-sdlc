@@ -38,6 +38,7 @@ interface GatingCard {
   prd_section?: string;
   options: ResolverOption[];
   blast_radius_cost_usd?: number;
+  is_hard_gated?: boolean;
 }
 
 const CLASS_LABELS: Record<string, string> = {
@@ -56,6 +57,29 @@ function classifyClass(c: string): "compliance" | "security" | "ops" | "default"
   return "default";
 }
 
+// Soft PHI guard for the free-text resolution box — warns (never blocks) if the
+// operator's text looks like it contains raw PHI, since resolutions land in the
+// audit ledger. SSN, MRN, and DOB-style patterns. Exported for unit tests.
+export function phiSoftWarn(s?: string): boolean {
+  if (!s) return false;
+  return (
+    /\b\d{3}-\d{2}-\d{4}\b/.test(s) || // SSN
+    /\bMRN[:#]?\s*\d+/i.test(s) || // MRN
+    /\b\d{2}\/\d{2}\/(19|20)\d{2}\b/.test(s) // DOB mm/dd/yyyy
+  );
+}
+
+// Which cards a bulk "Approve all" should actually submit: gating cards that
+// are NOT hard-gated and NOT already decided. Exported + pure for unit tests —
+// this is the tier-2 governance filter that keeps PHI/auth out of bulk approve.
+export function bulkApprovableCards<
+  T extends { card_id?: string; is_hard_gated?: boolean },
+>(gating: T[], decided: Record<string, unknown>): T[] {
+  return gating.filter(
+    (c) => c.card_id && !c.is_hard_gated && !decided[c.card_id],
+  );
+}
+
 interface Props {
   runId: string;
   events: StageEvent[];
@@ -65,6 +89,13 @@ interface Props {
 export function ResolverGate({ runId, events, onApproved }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
+  // Tier-2 + operator-agency: track per-card decided state so the page gives
+  // real feedback (not just a transient toast). cardId -> chosen summary.
+  const [decided, setDecided] = useState<
+    Record<string, { label: string; custom: boolean }>
+  >({});
+  // Draft text for the "edit recommendation / write your own" textareas.
+  const [draft, setDraft] = useState<Record<string, string>>({});
 
   // Pull the most-recent gate_open event payload. The orchestrator emits
   //   { stage: "resolver", status: "gate_open", payload: { gating: [...] } }
@@ -107,31 +138,54 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
     });
   };
 
-  // Phase 3.2 (2026-06-16): per-card approval flow. Orchestrator's
-  // GateDecision schema accepts per-card payloads, then /finalize closes
-  // the gate. Sending a bulk { decision, rationale } shape gets HTTP 422.
+  // Bulk soft-approve. Tier-2: SKIPS hard-gated cards (PHI/auth) — those must
+  // be decided individually. Also skips already-decided cards. Sends
+  // approval_path:"bulk" so the server can enforce the hard-gate rule even if
+  // the UI filter is bypassed. Finalizes only when every gating card is decided.
   const approveAll = async () => {
     setSubmitting(true);
     let approved = 0;
     try {
-      for (const c of gating) {
-        if (!c.card_id) continue;
+      const toApprove = bulkApprovableCards(gating, decided);
+      const nextDecided: Record<string, { label: string; custom: boolean }> = {};
+      for (const c of toApprove) {
         const recIdx = c.options.findIndex((o) => o.recommended);
+        const idx = recIdx >= 0 ? recIdx : 0;
         await orchestrator.approve(runId, {
-          card_id: c.card_id,
+          card_id: c.card_id!,
           decision_kind: "accept",
-          option_index: recIdx >= 0 ? recIdx : 0,
+          option_index: idx,
           actor: "operator@dashboard",
           confidence_source: "human",
+          approval_path: "bulk",
         });
+        nextDecided[c.card_id!] = { label: c.options[idx]?.label ?? "Recommended", custom: false };
         approved += 1;
       }
-      // Close the gate so the pipeline advances to architect.
-      await orchestrator.finalizeGate(runId);
-      toast.success(`Approved ${approved} ${approved === 1 ? "card" : "cards"}`, {
-        description: "Resolver gate closed — pipeline advancing to Architect.",
-      });
-      onApproved();
+      const merged = { ...decided, ...nextDecided };
+      setDecided(merged);
+
+      // How many gating cards still need an explicit individual decision?
+      const remaining = gating.filter((c) => c.card_id && !merged[c.card_id]);
+      if (remaining.length === 0) {
+        await orchestrator.finalizeGate(runId);
+        toast.success(`Approved ${approved} ${approved === 1 ? "card" : "cards"}`, {
+          description: "Resolver gate closed — pipeline advancing to Architect.",
+        });
+        onApproved();
+      } else {
+        const hardCount = remaining.filter((c) => c.is_hard_gated).length;
+        toast.warning(
+          `${remaining.length} card${remaining.length === 1 ? "" : "s"} need your explicit decision`,
+          {
+            description:
+              hardCount > 0
+                ? `${hardCount} hard-gated (PHI/auth) card${hardCount === 1 ? "" : "s"} cannot be bulk-approved — decide each one individually below.`
+                : "Decide the remaining cards individually, then finalize.",
+          },
+        );
+        onApproved();
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to approve gate";
       toast.error(
@@ -143,7 +197,8 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
     }
   };
 
-  // Single-card approve — used by per-card Accept buttons inside expanded rows.
+  // Single-card approve from a per-option "Use this" button. Marks the card
+  // decided IN-PAGE (the fix for "Use this gives a toast but nothing changes").
   const approveOne = async (card: GatingCard, optionIndex: number) => {
     if (!card.card_id) return;
     try {
@@ -153,14 +208,49 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
         option_index: optionIndex,
         actor: "operator@dashboard",
         confidence_source: "human",
+        approval_path: "individual",
       });
-      toast.success(`Card decided: ${card.options[optionIndex].label}`, {
+      setDecided((d) => ({
+        ...d,
+        [card.card_id!]: { label: card.options[optionIndex]?.label ?? "Selected", custom: false },
+      }));
+      toast.success(`Card decided: ${card.options[optionIndex]?.label ?? "option"}`, {
         description: "Decision pinned to ledger with full prompt chain.",
       });
       onApproved();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to approve card";
       toast.error("Approve card failed", { description: msg });
+    }
+  };
+
+  // Operator writes their own / edits the recommended resolution. Sends a
+  // swap with free-form text. Because the swap entry lands with the card's
+  // slot_value_hash, findPrecedent quotes this operator's wording back on the
+  // next run in the same ambiguity bucket — the teaching loop.
+  const approveCustom = async (card: GatingCard, text: string) => {
+    if (!card.card_id || !text.trim()) return;
+    try {
+      await orchestrator.approve(runId, {
+        card_id: card.card_id,
+        decision_kind: "swap",
+        resolution_text: text.trim(),
+        actor: "operator@dashboard",
+        confidence_source: "human",
+        approval_path: "individual",
+      });
+      setDecided((d) => ({
+        ...d,
+        [card.card_id!]: { label: "Your resolution", custom: true },
+      }));
+      toast.success("Custom resolution recorded", {
+        description:
+          "Pinned to the ledger as a human teaching signal — future runs in this class will quote it back.",
+      });
+      onApproved();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to record custom resolution";
+      toast.error("Custom resolution failed", { description: msg });
     }
   };
 
@@ -204,7 +294,12 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
             <Badge variant="warning" className="text-[10px]">
               {gating.length} GATING
             </Badge>
-            {recommendedCount === gating.length && (
+            {Object.keys(decided).length > 0 && (
+              <Badge variant="success" className="text-[10px]">
+                {Object.keys(decided).length} OF {gating.length} DECIDED
+              </Badge>
+            )}
+            {recommendedCount === gating.length && Object.keys(decided).length === 0 && (
               <Badge variant="success" className="text-[10px]">
                 {recommendedCount} RECOMMENDED
               </Badge>
@@ -283,6 +378,11 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
                     >
                       {CLASS_LABELS[c.ambiguity_class] ?? c.ambiguity_class}
                     </Badge>
+                    {c.is_hard_gated && (
+                      <Badge variant="danger" className="text-[10px]">
+                        🔒 EXPLICIT DECISION REQUIRED
+                      </Badge>
+                    )}
                     {c.blast_radius_cost_usd !== undefined && c.blast_radius_cost_usd > 0 && (
                       <span className="text-[10px] text-[var(--text-tertiary)] tabular">
                         blast-radius ${c.blast_radius_cost_usd.toFixed(0)}
@@ -298,9 +398,22 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
                     </p>
                   )}
                 </div>
-                <div className="shrink-0 flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)] pt-1">
-                  <CheckCircle2 className="h-3 w-3 text-[var(--success)]" />
-                  <span>recommended ready</span>
+                <div className="shrink-0 flex items-center gap-1.5 text-[10px] pt-1">
+                  {decided[cardId] ? (
+                    <>
+                      <CheckCircle2 className="h-3 w-3 text-[var(--success)]" />
+                      <span className="text-[var(--success)]">
+                        {decided[cardId].custom ? "your resolution" : "decided"}
+                      </span>
+                    </>
+                  ) : c.is_hard_gated ? (
+                    <span className="text-[var(--danger)]">needs your decision</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3 w-3 text-[var(--success)]" />
+                      <span className="text-[var(--text-tertiary)]">recommended ready</span>
+                    </>
+                  )}
                 </div>
               </button>
 
@@ -381,14 +494,78 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
                     ))}
                   </div>
 
-                  {recommended && (
+                  {/* Edit the recommendation, or write your own. Sends a swap
+                      with free-form text → becomes a precedent (teaching loop). */}
+                  <div className="space-y-1.5 rounded-md border border-[var(--border-default)] bg-[var(--bg)] p-3">
+                    <div className="text-[10px] uppercase tracking-wider font-medium text-[var(--text-tertiary)]">
+                      Edit the recommendation, or write your own
+                    </div>
+                    <textarea
+                      value={draft[cardId] ?? recommended?.resolution ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, [cardId]: e.target.value }))
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="Edit the recommended resolution above, or type your own policy-level resolution…"
+                      className="w-full text-xs rounded-md border border-[var(--border-default)] bg-[var(--surface)] p-2 min-h-[72px] leading-relaxed"
+                    />
+                    {phiSoftWarn(draft[cardId]) && (
+                      <p className="text-[11px] text-[var(--warning)] flex items-start gap-1">
+                        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                        <span>
+                          Looks like it may contain PHI. Resolutions are stored in
+                          the audit ledger — keep this policy-level, not patient-level.
+                        </span>
+                      </p>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        void approveCustom(c, draft[cardId] ?? recommended?.resolution ?? "");
+                      }}
+                      disabled={submitting}
+                      className="text-[11px] h-6 px-2"
+                    >
+                      Use my version
+                    </Button>
+                  </div>
+
+                  {decided[cardId] ? (
+                    <div className="text-[10px] text-[var(--success)] flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>
+                        Decided:{" "}
+                        <span className="font-medium">{decided[cardId].label}</span>
+                        {" — "}
+                        <button
+                          className="underline hover:text-[var(--text-secondary)]"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            setDecided((d) => {
+                              const next = { ...d };
+                              delete next[cardId];
+                              return next;
+                            });
+                          }}
+                        >
+                          change
+                        </button>
+                      </span>
+                    </div>
+                  ) : recommended && !c.is_hard_gated ? (
                     <div className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-1.5">
                       <CheckCircle2 className="h-3 w-3 text-[var(--success)]" />
                       <span>
                         On approve all: <span className="text-[var(--text-secondary)] font-medium">{recommended.label}</span>
                       </span>
                     </div>
-                  )}
+                  ) : c.is_hard_gated ? (
+                    <div className="text-[10px] text-[var(--danger)] flex items-center gap-1.5">
+                      <span>🔒 Hard-gated — excluded from bulk approve. Decide this one explicitly above.</span>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>

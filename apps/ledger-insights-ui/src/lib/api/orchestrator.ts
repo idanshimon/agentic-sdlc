@@ -48,6 +48,10 @@ export interface ApproveBody {
   actor: string;
   confidence_source?: "human" | "autopilot";
   gate?: string;
+  // Tier-2 governance: "bulk" = swept in by "Approve all recommended";
+  // "individual" = explicit per-card decision. The server rejects "bulk" on
+  // hard-gated classes (PHI/auth) with 409. Defaults to "individual" server-side.
+  approval_path?: "bulk" | "individual";
 }
 
 /**
