@@ -37,6 +37,7 @@ from .models import (
     GateDecision, INVARIANT_CLASSES, LedgerEntry, RunMode, RunState, RunStatus,
     Stage, StageEvent,
 )
+from .agent_bundles import bundles_for_stage
 from .stages import (
     stage_architect, stage_assessor, stage_codegen, stage_deliver,
     stage_ingest, stage_review_scan, stage_test_plan,
@@ -191,6 +192,12 @@ async def _run_autopilot(run: RunState) -> None:
                 decision_kind="accept",
                 created_by=auto_decision.actor,
                 confidence_source="autopilot",
+                # Wire (2026-06-21): stamp the bundles the deciding agent
+                # subscribes to. Ambiguity cards come out of the assessor stage,
+                # so the assessor's bundle subscriptions (security, privacy)
+                # govern this decision. Makes the agent→bundle relationship a
+                # queryable fact on the decision, not display-only card metadata.
+                bundle_refs=bundles_for_stage("assessor"),
                 # Phase 2.6: pin the prompt chain that produced this
                 # auto-decision. Cards come out of the assessor stage,
                 # so the assessor's chain is the right one to capture.
@@ -814,6 +821,10 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
                 resolution_text=final_text,
                 decision_kind=decision.decision_kind, created_by=decision.actor,
+                # Wire (2026-06-21): same as the autopilot path — cards come from
+                # the assessor, so stamp the assessor agent's bundle subscriptions
+                # so a human decision is governed-attributed to the same bundles.
+                bundle_refs=bundles_for_stage("assessor"),
                 # Phase 2.6: same as the autopilot path — the assessor's
                 # resolved prompt chain is the audit trail for which prompt
                 # produced the ambiguity card the operator just decided on.

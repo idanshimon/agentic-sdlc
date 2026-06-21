@@ -142,6 +142,12 @@ class LedgerEntry(BaseModel):
     created_by: str = "unknown"
     precedent_id: Optional[str] = None  # for back-trace index (design.md §4 demote)
     confidence_source: Literal["human", "autopilot"] = "human"
+    # Wire (2026-06-21): bundles the deciding agent subscribes to, resolved from
+    # .github/agents/<agent>.agent.md bundle_subscriptions at write time. Closes
+    # the agent→bundle gap — previously this was empty and the relationship was
+    # display-only. ledger-core's LedgerEntry already has bundle_refs; the
+    # orchestrator-local model was missing it (the recurring two-model drift).
+    bundle_refs: list[str] = Field(default_factory=list)
     # self-heal cowork (add-self-heal-cowork): heal entries reuse this LedgerEntry
     # with runtime_kind in {heal_proposed, heal_decided, heal_executed} and a
     # shared heal_id tying the chain. These are optional so non-heal entries are
