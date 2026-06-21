@@ -70,7 +70,7 @@ const planeColor: Record<string, string> = {
 
 export function Sidebar() {
   return (
-    <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-[var(--border-default)] bg-[var(--surface)]">
+    <aside className="hidden lg:flex sticky top-0 h-screen w-60 shrink-0 flex-col border-r border-[var(--border-default)] bg-[var(--surface)]">
       <SidebarBody />
     </aside>
   );

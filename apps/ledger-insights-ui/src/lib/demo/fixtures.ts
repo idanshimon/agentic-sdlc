@@ -397,6 +397,29 @@ export const VITALS_LEDGER = [
     "created_by": "experiment@local",
     "precedent_id": null,
     "confidence_source": "human"
+  },
+  {
+    // --- Teaching-loop cluster (demo of the closed loop) -------------------
+    // A LATER run (phase-a-run-2) hits the SAME data-retention ambiguity
+    // (slot c59873c2ca91) that the human SWAPPED above (5952e4fa). findPrecedent
+    // returns that human resolution → autopilot AUTO-RESOLVES instead of gating.
+    // This is what lights up the "taught · reused 1×" + "auto · from precedent"
+    // lineage badges and the non-zero "Autonomy earned" KPI on /decisions.
+    "id": "b1ee77a0-2c41-4d58-9f0a-7d2b6c9a1f30",
+    "team_id": "experiment-phase-a-run-1",
+    "run_id": "9d2a4f17-66b1-4e0c-9a3e-2f1c8e54aa02",
+    "card_id": "c0ffee11-2222-4333-8444-555566667777",
+    "ambiguity_class": "data-retention",
+    "slot_value_hash": "c59873c2ca91",
+    "resolution_text": "99.95% monthly uptime; <100ms p95 ingest latency measured at the WebSocket boundary, excluding upstream vendor latency.",
+    "decision_kind": "accept",
+    "status": "suggest",
+    "sample_count": 1,
+    "accuracy_score": 0.0,
+    "created_at": "2026-06-09T14:12:08.500000+00:00",
+    "created_by": "autopilot:experiment-phase-a-run-1",
+    "precedent_id": "986a885a-cc9e-484a-9094-80b353d810a2",
+    "confidence_source": "autopilot"
   }
 ] as const;
 
