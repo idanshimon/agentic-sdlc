@@ -19,8 +19,10 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, FileText, GitBranch, Users, Layers } from "lucide-react";
+import { ExternalLink, FileText, GitBranch, Users, Layers, Pencil, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
+import { VersionedEditor } from "@/components/domain/versioned-editor";
 import { orchestrator, type PromptCatalogEntry, type PromptDetailResponse } from "@/lib/api/orchestrator";
 
 const GITHUB_REPO = "idanshimon/agentic-sdlc";
@@ -91,10 +93,41 @@ function KPIStrip({ entries }: { entries: PromptCatalogEntry[] }) {
   );
 }
 
+function nextVersion(current: string): string {
+  // "v1" → "v2", "v12" → "v13"; falls back to appending "-next".
+  const m = /^v(\d+)$/.exec(current);
+  return m ? `v${parseInt(m[1], 10) + 1}` : `${current}-next`;
+}
+
+/**
+ * Compose a full prompt YAML file from the edited template, carrying forward the
+ * existing metadata and stamping a new version + draft status. This is the file
+ * the PR writes to prompts/<scope>/<stage>/<newVersion>.yaml; the catalog's
+ * inheritance walker resolves the published one until this draft is promoted.
+ */
+function buildPromptYaml(detail: PromptDetailResponse, newVersion: string, template: string): string {
+  return [
+    `prompt_id: ${detail.prompt_id ?? `${detail.owner_persona}-${detail.scope}`}`,
+    `version: ${newVersion}`,
+    `status: draft`,
+    `scope: ${detail.scope}`,
+    `owner_persona: ${detail.owner_persona}`,
+    `stage: ${detail.stage}`,
+    `supersedes: ${detail.version}`,
+    `effective_from: '${new Date().toISOString()}'`,
+    `authored_by: ledger-insights-ui`,
+    `reason: |-`,
+    `  Edited via the in-app prompt editor (new draft version).`,
+    `template: |-`,
+    ...template.split("\n").map((line) => `  ${line}`),
+  ].join("\n") + "\n";
+}
+
 function PromptDrawer({ promptId, onClose }: { promptId: string; onClose: () => void }) {
   const [detail, setDetail] = useState<PromptDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -191,12 +224,55 @@ function PromptDrawer({ promptId, onClose }: { promptId: string; onClose: () => 
             )}
 
             <div>
-              <div className="text-xs uppercase tracking-wider text-[var(--text-tertiary)] mb-1">
-                Template ({detail.template.length.toLocaleString()} chars)
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">
+                  Template ({detail.template.length.toLocaleString()} chars)
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => setEditing((v) => !v)}
+                >
+                  {editing
+                    ? <><X className="h-3 w-3 mr-1" /> Close editor</>
+                    : <><Pencil className="h-3 w-3 mr-1" /> Edit (new version)</>}
+                </Button>
               </div>
-              <pre className="text-xs leading-relaxed bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4 overflow-x-auto whitespace-pre-wrap text-[var(--text-primary)]">
-                {detail.template}
-              </pre>
+              {editing ? (
+                <div className="space-y-2">
+                  <div className="text-[11px] text-[var(--text-secondary)] p-2 rounded bg-[var(--overlay)]/50 border border-[var(--border-muted)]">
+                    Saving creates <code className="font-mono text-[var(--text-primary)]">{nextVersion(detail.version)}</code> as a
+                    {" "}<span className="text-[var(--text-primary)]">draft</span> and opens a PR on{" "}
+                    <code className="font-mono">prompts/{detail.scope}/{detail.scope === "global" ? "" : `${detail.owner_persona}/`}{detail.stage}/{nextVersion(detail.version)}.yaml</code>.
+                    The pipeline keeps using the published version until this draft is promoted + merged.
+                  </div>
+                  <VersionedEditor
+                    kind="prompt"
+                    id={`${detail.scope}-${detail.stage}-${detail.version}`}
+                    seed={detail.template}
+                    displayName={`${detail.stage} prompt`}
+                    onPullRequest={async (content, commitMessage) => {
+                      const newVer = nextVersion(detail.version);
+                      const yaml = buildPromptYaml(detail, newVer, content);
+                      const res = await orchestrator.savePromptConfig({
+                        scope: detail.scope,
+                        stage: detail.stage,
+                        version: newVer,
+                        persona: detail.scope === "global" ? undefined : detail.owner_persona,
+                        content: yaml,
+                        commit_message: commitMessage,
+                        pr_title: `New ${detail.stage} prompt ${newVer} (${detail.scope})`,
+                      });
+                      return res.pr_url;
+                    }}
+                  />
+                </div>
+              ) : (
+                <pre className="text-xs leading-relaxed bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4 overflow-x-auto whitespace-pre-wrap text-[var(--text-primary)]">
+                  {detail.template}
+                </pre>
+              )}
             </div>
 
             {detail.versions.length > 1 && (

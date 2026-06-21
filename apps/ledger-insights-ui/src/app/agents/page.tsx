@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PlaneBadge } from "@/components/domain/plane-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { VersionedEditor } from "@/components/domain/versioned-editor";
+import { orchestrator } from "@/lib/api/orchestrator";
 import { AGENT_SEEDS } from "@/lib/versioning/seeds";
 import { useAssistantContext, type ApplyAction } from "@/lib/assist/context";
 import { saveVersion, getCurrentContent, getEntry, ensureSeeded } from "@/lib/versioning/store";
@@ -103,6 +104,15 @@ export default function AgentsPage() {
             id={selectedAgent.id}
             seed={selectedAgent.content}
             displayName={`${selectedAgent.display_name} agent`}
+            onPullRequest={async (content, commitMessage) => {
+              const res = await orchestrator.saveAgentConfig({
+                name: selectedAgent.id,
+                content,
+                commit_message: commitMessage,
+                pr_title: `Edit ${selectedAgent.display_name} agent`,
+              });
+              return res.pr_url;
+            }}
             meta={
               <div className="space-y-1.5 mt-1">
                 <p className="text-xs text-[var(--text-secondary)]">

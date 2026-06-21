@@ -37,11 +37,20 @@ interface Props {
   meta?: React.ReactNode;
   /** Display name for toasts/buttons (e.g. "Architect agent"). */
   displayName: string;
+  /**
+   * Optional governed-save hook. When provided, "Save new version" ALSO opens
+   * a PR on the underlying config file (via the page-supplied closure, which
+   * knows the path fields). Returns the PR URL (or null in dry-run / on a
+   * handled failure). The local version history is saved regardless — the PR
+   * is the durable, governed source of truth. When omitted, the editor is
+   * local-only (legacy behaviour).
+   */
+  onPullRequest?: (content: string, commitMessage: string) => Promise<string | null>;
 }
 
 type TabKey = "edit" | "preview" | "history" | "diff";
 
-export function VersionedEditor({ kind, id, seed, meta, displayName }: Props) {
+export function VersionedEditor({ kind, id, seed, meta, displayName, onPullRequest }: Props) {
   // Seed on mount; never overwrite existing edits.
   useEffect(() => {
     ensureSeeded(kind, id, seed);
@@ -117,17 +126,53 @@ export function VersionedEditor({ kind, id, seed, meta, displayName }: Props) {
         "you",
         seed,
       );
+      const savedMsg = commitMsg || `edit ${displayName}`;
       toast.success(`Saved v${v.version_id}`, {
         description: `${displayName} · ${v.message}`,
       });
       setCommitMsg("");
       refresh();
+
+      // Governed save: also open a PR on the real config file (if wired).
+      // Local version history is the operator's scratchpad; the PR is the
+      // durable, committee-reviewed source of truth the pipeline reads.
+      if (onPullRequest) {
+        const draftAtSave = draft;
+        toast.loading("Opening pull request…", { id: "pr-save" });
+        onPullRequest(draftAtSave, savedMsg)
+          .then((prUrl) => {
+            if (prUrl) {
+              toast.success("Pull request opened", {
+                id: "pr-save",
+                description: prUrl,
+                action: {
+                  label: "Open",
+                  onClick: () => window.open(prUrl, "_blank", "noreferrer"),
+                },
+              });
+            } else {
+              toast.info("Saved locally — PR not opened", {
+                id: "pr-save",
+                description:
+                  "Dry-run or PR write-back unavailable in this environment. " +
+                  "Your local version is saved; merge requires a PR.",
+              });
+            }
+          })
+          .catch((e) => {
+            const msg = e instanceof Error ? e.message : "PR failed";
+            toast.error("PR write-back failed", {
+              id: "pr-save",
+              description: `${msg} — local version still saved.`,
+            });
+          });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Save failed";
       console.error("[VersionedEditor] save failed:", e);
       toast.error("Save failed", { description: msg });
     }
-  }, [isDirty, kind, id, draft, commitMsg, displayName, seed, refresh]);
+  }, [isDirty, kind, id, draft, commitMsg, displayName, seed, refresh, onPullRequest]);
 
   const handleDiscard = useCallback(() => {
     if (!isDirty) return;
