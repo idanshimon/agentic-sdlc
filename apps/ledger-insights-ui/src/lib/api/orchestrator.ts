@@ -319,7 +319,49 @@ export const orchestrator = {
   streamUrl(runId: string) {
     return `${apiConfig.orchestratorUrl}/api/runs/${runId}/stream`;
   },
+
+  // ── Editing plane (#3): governed PR write-back ──────────────────────────
+  // Each save opens a PR on the config file the pipeline reads (CODEOWNERS
+  // review), returning the PR URL. Bundles are PR-only by governance design.
+  saveAgentConfig(body: {
+    name: string; content: string; commit_message: string;
+    pr_title?: string; pr_body?: string;
+  }) {
+    return req<ConfigSaveResponse>("/api/config/agents/save", {
+      method: "POST", body: JSON.stringify(body),
+    });
+  },
+  saveBundleConfig(body: {
+    dept: string; version: string; file?: string; content: string;
+    commit_message: string; pr_title?: string; pr_body?: string;
+  }) {
+    return req<ConfigSaveResponse>("/api/config/bundles/save", {
+      method: "POST", body: JSON.stringify(body),
+    });
+  },
+  savePromptConfig(body: {
+    scope: string; stage: string; version: string; persona?: string;
+    content: string; commit_message: string; pr_title?: string; pr_body?: string;
+  }) {
+    return req<ConfigSaveResponse>("/api/config/prompts/save", {
+      method: "POST", body: JSON.stringify(body),
+    });
+  },
+  reloadConfig() {
+    return req<{ ok: boolean; reloaded: string[] }>("/api/config/reload", {
+      method: "POST",
+    });
+  },
 };
+
+export interface ConfigSaveResponse {
+  ok: boolean;
+  pr_url: string | null;
+  branch: string;
+  path: string;
+  dry_run: boolean;
+  message: string;
+}
 
 /** Browser-fetch a same-origin sample PRD file (lives under public/samples). */
 export async function fetchSample(url: string): Promise<string> {
