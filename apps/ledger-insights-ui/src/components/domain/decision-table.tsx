@@ -28,6 +28,7 @@ import { TeachingSignalBar } from "./teaching-signal-bar";
 import { StagePill } from "./stage-pill";
 import { relativeTime, shortId, fmtUsd, cn } from "@/lib/utils";
 import { PromptChainBadge } from "./prompt-chain-badge";
+import { buildLineageIndex, lineageBadge, type LineageInfo } from "@/lib/lineage";
 import type { LedgerEntry } from "@/lib/types";
 
 type RawEntry = Partial<LedgerEntry> & {
@@ -87,6 +88,7 @@ interface Filters {
   phi: "" | "none" | "low" | "high";
   runtimeKind: string;
   hasTeachingSignal: "" | "yes" | "no";
+  lineage: "" | "taught" | "reused" | "flagged" | "heal";
 }
 
 const DEFAULT_FILTERS: Filters = {
@@ -97,10 +99,16 @@ const DEFAULT_FILTERS: Filters = {
   phi: "",
   runtimeKind: "",
   hasTeachingSignal: "",
+  lineage: "",
 };
 
 export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
   const normalized = useMemo(() => entries.map((e) => normalize(e as RawEntry)), [entries]);
+
+  // Reconstruct the teaching-loop relationship graph (taught / reused / flagged
+  // / heal) once, shared by the Lineage column, the lineage filter, and the
+  // expanded detail panel. See lib/lineage.ts.
+  const lineageIndex = useMemo(() => buildLineageIndex(normalized), [normalized]);
 
   // Build a Set of references_entry_id values that DO have at least one
   // teaching signal pointing at them — used for the hasTeachingSignal filter
@@ -153,6 +161,7 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
       if (filters.runtimeKind && e.runtime_kind !== filters.runtimeKind) return false;
       if (filters.hasTeachingSignal === "yes" && !teachingSignalsByTarget.has(e.id)) return false;
       if (filters.hasTeachingSignal === "no" && teachingSignalsByTarget.has(e.id)) return false;
+      if (filters.lineage && lineageIndex.byId.get(e.id)?.role !== filters.lineage) return false;
       if (q) {
         const hay = [
           e.decision, e.rationale, e.actor.id, e.model_used,
@@ -163,7 +172,7 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
       }
       return true;
     });
-  }, [normalized, filters, teachingSignalsByTarget]);
+  }, [normalized, filters, teachingSignalsByTarget, lineageIndex]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -212,7 +221,8 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
     (filters.actorKind ? 1 : 0) +
     (filters.phi ? 1 : 0) +
     (filters.runtimeKind ? 1 : 0) +
-    (filters.hasTeachingSignal ? 1 : 0);
+    (filters.hasTeachingSignal ? 1 : 0) +
+    (filters.lineage ? 1 : 0);
 
   return (
     <div className="space-y-3">
@@ -241,12 +251,13 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
                 <SortableTh keyName="cost_usd" label="Cost" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} className="w-20 text-right" align="right" />
                 <SortableTh keyName="created_at" label="When" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} className="w-24" />
                 <th className="px-3 py-2 text-left w-28">Signals</th>
+                <th className="px-3 py-2 text-left w-36">Lineage</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-muted)]">
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-[var(--text-tertiary)]">
+                  <td colSpan={10} className="px-4 py-12 text-center text-[var(--text-tertiary)]">
                     No decisions match the current filters.
                     {filterCount > 0 && (
                       <button
@@ -267,6 +278,7 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
                     expanded={expanded.has(entry.id)}
                     onToggle={() => toggleExpanded(entry.id)}
                     teachingSignals={teachingSignalsByTarget.get(entry.id) ?? []}
+                    lineage={lineageIndex.byId.get(entry.id)}
                   />
                 ))
               )}
@@ -386,6 +398,17 @@ function FilterBar({
           onChange={(v) => onChange({ ...filters, hasTeachingSignal: v as Filters["hasTeachingSignal"] })}
           options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
         />
+        <Select
+          label="Lineage"
+          value={filters.lineage}
+          onChange={(v) => onChange({ ...filters, lineage: v as Filters["lineage"] })}
+          options={[
+            { value: "taught", label: "Taught (human swap)" },
+            { value: "reused", label: "Reused (auto from precedent)" },
+            { value: "flagged", label: "Flagged" },
+            { value: "heal", label: "Heal chain" },
+          ]}
+        />
 
         {filterCount > 0 && (
           <button
@@ -443,13 +466,36 @@ function Select({
   );
 }
 
+function LineageCell({ lineage }: { lineage?: LineageInfo }) {
+  const badge = lineage ? lineageBadge(lineage) : null;
+  if (!badge) return <span className="text-[var(--text-tertiary)] text-[11px]">—</span>;
+  const toneClass: Record<string, string> = {
+    success: "bg-[var(--success)]/15 text-[var(--success)]",
+    info: "bg-[var(--secondary)]/15 text-[var(--secondary)]",
+    warning: "bg-[var(--warning)]/15 text-[var(--warning)]",
+    secondary: "bg-[var(--overlay)] text-[var(--text-secondary)]",
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap",
+        toneClass[badge.tone] ?? "bg-[var(--overlay)] text-[var(--text-secondary)]",
+      )}
+      title={badge.title}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 function DecisionRow({
-  entry, expanded, onToggle, teachingSignals,
+  entry, expanded, onToggle, teachingSignals, lineage,
 }: {
   entry: LedgerEntry;
   expanded: boolean;
   onToggle: () => void;
   teachingSignals: LedgerEntry[];
+  lineage?: LineageInfo;
 }) {
   const PhiIcon =
     entry.phi_class === "high" ? ShieldAlert :
@@ -545,11 +591,14 @@ function DecisionRow({
             )}
           </div>
         </td>
+        <td className="px-3 py-2 align-top">
+          <LineageCell lineage={lineage} />
+        </td>
       </tr>
       {expanded && (
         <tr className="bg-[var(--overlay)]/20">
-          <td colSpan={9} className="px-4 py-3">
-            <DecisionDetail entry={entry} teachingSignals={teachingSignals} />
+          <td colSpan={10} className="px-4 py-3">
+            <DecisionDetail entry={entry} teachingSignals={teachingSignals} lineage={lineage} />
           </td>
         </tr>
       )}
@@ -558,13 +607,37 @@ function DecisionRow({
 }
 
 function DecisionDetail({
-  entry, teachingSignals,
+  entry, teachingSignals, lineage,
 }: {
   entry: LedgerEntry;
   teachingSignals: LedgerEntry[];
+  lineage?: LineageInfo;
 }) {
+  const badge = lineage ? lineageBadge(lineage) : null;
   return (
     <div className="space-y-3 text-xs">
+      {badge && (
+        <Section title="Lineage">
+          <div className="space-y-1.5">
+            <LineageCell lineage={lineage} />
+            <p className="text-[var(--text-secondary)] leading-relaxed">{badge.title}</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
+              {lineage?.slotKey && (
+                <span>ambiguity bucket <span className="mono text-[var(--text-secondary)]">{lineage.slotKey.slice(0, 12)}</span></span>
+              )}
+              {lineage && lineage.bucketSize > 0 && (
+                <span><span className="text-[var(--text-secondary)] tabular">{lineage.bucketSize}</span> other decision{lineage.bucketSize === 1 ? "" : "s"} in this bucket</span>
+              )}
+              {lineage && lineage.reusedByCount > 0 && (
+                <span><span className="text-[var(--success)] tabular">{lineage.reusedByCount}</span> autopilot reuse{lineage.reusedByCount === 1 ? "" : "s"}</span>
+              )}
+              {lineage && lineage.healChainIds.length > 0 && (
+                <span><span className="text-[var(--text-secondary)] tabular">{lineage.healChainIds.length + 1}</span> entries in heal chain</span>
+              )}
+            </div>
+          </div>
+        </Section>
+      )}
       {entry.rationale && (
         <Section title="Rationale">
           <p className="text-[var(--text)] leading-relaxed whitespace-pre-wrap">{entry.rationale}</p>

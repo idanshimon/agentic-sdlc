@@ -149,6 +149,26 @@ export interface LedgerEntry {
   paused_class?: string;
   /** Original ambiguity class — set on stage_decision entries by the assessor. */
   ambiguity_class?: string;
+  /**
+   * Lineage edges (teaching loop + heal chain). These let the Decisions
+   * surface reconstruct the relationship graph the flat table can't show:
+   *   - slot_value_hash: groups decisions of the SAME ambiguity bucket
+   *     (team + class + slot). A human swap and the later autopilot
+   *     auto-resolutions that reused it share this hash — the teaching cluster.
+   *   - precedent_id / precedent_refs: explicit pointer(s) to the prior entry
+   *     a decision was resolved from (autopilot writes these when it auto-
+   *     resolves from a found precedent).
+   *   - decision_kind: accept | swap | reject — "swap" marks a human override
+   *     that becomes precedent (the teaching event).
+   *   - confidence_source: human | autopilot — who actually made the call
+   *     (distinct from actor.kind for plan_proposed-style entries).
+   *   - heal_id: ties the 3-entry self-heal chain (proposed → decided → executed).
+   */
+  slot_value_hash?: string;
+  precedent_id?: string | null;
+  decision_kind?: "accept" | "swap" | "reject";
+  confidence_source?: "human" | "autopilot";
+  heal_id?: string | null;
   created_at: string;
 }
 
