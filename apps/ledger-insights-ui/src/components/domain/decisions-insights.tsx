@@ -17,8 +17,9 @@
 
 import type { LedgerEntry } from "@/lib/types";
 import { Card } from "@/components/ui/card";
-import { Bot, User, ShieldAlert, DollarSign, MessageSquare } from "lucide-react";
+import { Bot, User, ShieldAlert, DollarSign, Sprout } from "lucide-react";
 import { fmtUsd } from "@/lib/utils";
+import { buildLineageIndex } from "@/lib/lineage";
 
 const TEACHING_KINDS = new Set([
   "feedback_thumbs", "decision_flagged", "replay_requested", "class_paused",
@@ -29,9 +30,6 @@ export function DecisionsInsights({ entries }: { entries: LedgerEntry[] }) {
   // and cost math — those are operator events, not pipeline decisions).
   const stageDecisions = entries.filter(
     (e) => !e.runtime_kind || !TEACHING_KINDS.has(e.runtime_kind),
-  );
-  const teachingSignals = entries.filter(
-    (e) => e.runtime_kind && TEACHING_KINDS.has(e.runtime_kind),
   );
 
   const total = stageDecisions.length;
@@ -45,18 +43,10 @@ export function DecisionsInsights({ entries }: { entries: LedgerEntry[] }) {
 
   const totalCost = stageDecisions.reduce((s, e) => s + (e.cost_usd || 0), 0);
 
-  // Coverage: how many stage decisions have at least one teaching signal
-  // pointing at them.
-  const referenced = new Set(
-    teachingSignals
-      .map((e) => e.references_entry_id)
-      .filter((id): id is string => !!id),
-  );
-  const coveredCount = stageDecisions.filter((e) => referenced.has(e.id)).length;
-  const coveragePct = total ? Math.round((coveredCount / total) * 100) : 0;
-
-  const flagged = teachingSignals.filter((e) => e.runtime_kind === "decision_flagged").length;
-  const paused = teachingSignals.filter((e) => e.runtime_kind === "class_paused").length;
+  // Teaching-loop autonomy: human swaps that became precedent + the later
+  // autopilot decisions that reused them. This is the headline that proves
+  // the loop is working — the agent earns autonomy from real human calls.
+  const { metrics } = buildLineageIndex(entries);
 
   return (
     <div className="grid gap-2.5 grid-cols-2 md:grid-cols-4 xl:grid-cols-5">
@@ -85,15 +75,15 @@ export function DecisionsInsights({ entries }: { entries: LedgerEntry[] }) {
         icons={[DollarSign]}
       />
       <Stat
-        label="Teaching coverage"
-        value={`${coveragePct}%`}
+        label="Autonomy earned"
+        value={`${metrics.autonomyEarnedPct}%`}
         sub={
-          teachingSignals.length === 0
-            ? "no operator signals yet"
-            : `${flagged} flagged · ${paused} paused class${paused === 1 ? "" : "es"}`
+          metrics.taughtCount === 0
+            ? "no human-taught precedent yet"
+            : `${metrics.reusedCount} auto-resolved from ${metrics.taughtCount} taught · ${metrics.bucketsTaught} bucket${metrics.bucketsTaught === 1 ? "" : "s"}`
         }
-        accent={flagged > 0 ? "warning" : undefined}
-        icons={[MessageSquare]}
+        accent={metrics.reusedCount > 0 ? "success" : undefined}
+        icons={[Sprout]}
       />
     </div>
   );
@@ -105,12 +95,13 @@ function Stat({
   label: string;
   value: string | number;
   sub: string;
-  accent?: "danger" | "warning";
+  accent?: "danger" | "warning" | "success";
   icons?: React.ComponentType<{ className?: string }>[];
 }) {
   const valueColor =
     accent === "danger" ? "text-[var(--danger)]" :
     accent === "warning" ? "text-[var(--warning)]" :
+    accent === "success" ? "text-[var(--success)]" :
     "text-[var(--text)]";
   return (
     <Card className="p-3 space-y-1">
