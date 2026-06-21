@@ -212,15 +212,29 @@ def from_legacy_v06_dict(d: Dict[str, Any]) -> LedgerEntry:
     # entry_type default
     d.setdefault("entry_type", "runtime")
 
+    # Cross-model write compatibility (2026-06-21): the orchestrator's OWN
+    # LedgerEntry model (apps/orchestrator/models.py) serializes its optional
+    # heal fields `decision` and `rationale` as explicit JSON null when they're
+    # unset (which is every non-heal stage_decision / swap entry). ledger_core's
+    # LedgerEntry requires `decision` to be a non-null string and `rationale` to
+    # be a string. A present-but-null value bypasses `setdefault`/`not in`
+    # backfills below, so `LedgerEntry(**d)` raised ValidationError — which
+    # find_precedent swallowed in its except, returning None. THAT silently
+    # killed the teaching loop: every operator swap was unreadable as precedent.
+    # Drop null-valued keys so the synthesis/defaults below take over.
+    for _k in ("decision", "rationale"):
+        if _k in d and d[_k] is None:
+            del d[_k]
+
     # synthesize actor from legacy created_by + confidence_source
-    if "actor" not in d:
+    if not d.get("actor"):
         legacy_id = d.get("created_by", "unknown")
         legacy_conf = d.get("confidence_source", "human")
         kind: ActorKind = "agent" if legacy_conf == "autopilot" else "human"
         d["actor"] = {"kind": kind, "id": legacy_id, "display_name": None}
 
     # required: decision (synthesize from resolution_text or decision_kind)
-    if "decision" not in d:
+    if not d.get("decision"):
         if d.get("resolution_text"):
             d["decision"] = d["resolution_text"][:120]
         elif d.get("decision_kind"):
