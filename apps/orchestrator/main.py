@@ -18,10 +18,11 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from .decisions_md import write_decisions_md
@@ -328,6 +329,131 @@ async def get_hard_gate_classes() -> dict:
             "this set is a standards-change PR."
         ),
     }
+
+
+# ── Editing plane (#3): governed PR write-back ────────────────────────────────
+# The Agents / Bundles / Prompts editors save real config files the pipeline
+# reads. Per the four-plane governance model, an edit opens a PR (committee /
+# CODEOWNERS review) rather than silently mutating running behaviour. All three
+# call the shared config_writer core, which confines writes to the config roots.
+
+class _ConfigSaveBase(BaseModel):
+    content: str
+    commit_message: str
+    pr_title: Optional[str] = None
+    pr_body: str = ""
+
+
+class AgentSaveBody(_ConfigSaveBase):
+    name: str  # agent name → .github/agents/<name>.agent.md
+
+
+class BundleSaveBody(_ConfigSaveBase):
+    dept: str          # security | privacy | architect | finops
+    version: str       # e.g. v0.1.0
+    file: str = "rules.yaml"  # rules.yaml | envelope.yaml | reviewers.yaml
+
+
+class PromptSaveBody(_ConfigSaveBase):
+    scope: str         # global | persona | team
+    stage: str         # assessor | architect | test_plan | codegen | review_scan
+    version: str       # vN (the editor picks the next version)
+    persona: Optional[str] = None  # required for persona/team scope
+
+
+def _safe_seg(s: str) -> str:
+    """Reject path-segment injection (slashes, dots) in user-supplied ids."""
+    if not s or "/" in s or "\\" in s or ".." in s:
+        raise HTTPException(400, f"invalid identifier: {s!r}")
+    return s
+
+
+async def _do_config_save(rel_path: str, body: _ConfigSaveBase, labels: list[str]) -> dict:
+    from .config_writer import write_config_pr, ConfigWriteError
+    try:
+        result = await write_config_pr(
+            rel_path=rel_path,
+            content=body.content,
+            commit_message=body.commit_message,
+            pr_title=body.pr_title or body.commit_message,
+            pr_body=body.pr_body,
+            labels=labels,
+        )
+    except ConfigWriteError as exc:
+        raise HTTPException(422, f"config write failed: {exc}") from exc
+    return {
+        "ok": result.ok,
+        "pr_url": result.pr_url,
+        "branch": result.branch,
+        "path": result.path,
+        "dry_run": result.dry_run,
+        "message": result.message,
+    }
+
+
+@app.post("/api/config/agents/save")
+async def save_agent(body: AgentSaveBody) -> dict:
+    """Edit a custom agent (.github/agents/<name>.agent.md) → opens a PR.
+
+    Prompts/agents may additionally hot-reload via /api/config/reload so a demo
+    sees the effect before merge; the PR remains the durable source of truth.
+    """
+    name = _safe_seg(body.name)
+    return await _do_config_save(
+        f".github/agents/{name}.agent.md", body,
+        labels=["config-edit", "agent", f"agent/{name}"],
+    )
+
+
+@app.post("/api/config/bundles/save")
+async def save_bundle(body: BundleSaveBody) -> dict:
+    """Edit a standards bundle file → opens a PR. PR-ONLY (no live apply):
+    live-editing the compliance standards would bypass committee review, which
+    is the entire governance story. The bundle takes effect only after merge."""
+    dept = _safe_seg(body.dept)
+    version = _safe_seg(body.version)
+    file = _safe_seg(body.file)
+    return await _do_config_save(
+        f"standards-bundles/{dept}/{version}/{file}", body,
+        labels=["config-edit", "standards-change", f"dept/{dept}"],
+    )
+
+
+@app.post("/api/config/prompts/save")
+async def save_prompt(body: PromptSaveBody) -> dict:
+    """Save a new prompt version (prompts/<scope>/<persona>/<stage>/v<N>.yaml)
+    → opens a PR. The editor picks the next version; the YAML carries
+    status/superseded_by so the catalog resolves the right one."""
+    scope = _safe_seg(body.scope)
+    stage = _safe_seg(body.stage)
+    version = _safe_seg(body.version)
+    if scope == "global":
+        rel = f"prompts/global/{stage}/{version}.yaml"
+    else:
+        if not body.persona:
+            raise HTTPException(400, f"persona required for scope={scope!r}")
+        persona = _safe_seg(body.persona)
+        rel = f"prompts/{scope}/{persona}/{stage}/{version}.yaml"
+    return await _do_config_save(
+        rel, body, labels=["config-edit", "prompt", f"stage/{stage}"],
+    )
+
+
+@app.post("/api/config/reload")
+async def reload_config() -> dict:
+    """Hot-reload the running orchestrator's agent-bundle + prompt caches so an
+    edit takes effect in THIS session without redeploy. Prompts/agents only —
+    bundles are PR-only. The durable source of truth is still the merged PR."""
+    from .agent_bundles import reload_agent_bundles
+    reload_agent_bundles()
+    reloaded = ["agent_bundles"]
+    try:
+        from .prompt_library_v2 import reload_prompt_catalog  # type: ignore
+        reload_prompt_catalog()
+        reloaded.append("prompt_catalog")
+    except Exception:
+        pass  # prompt catalog reload is best-effort
+    return {"ok": True, "reloaded": reloaded}
 
 
 @app.post("/api/run")
