@@ -1,0 +1,7 @@
+prompt_id: architect-global
+version: v97
+status: draft
+scope: global
+stage: architect
+template: |-
+  LIVE editing-plane verification from the deployed container via REST. Safe to close.
