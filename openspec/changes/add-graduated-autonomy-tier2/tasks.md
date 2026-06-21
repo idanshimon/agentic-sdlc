@@ -40,12 +40,17 @@
 - [x] 3.4 LAYER 2 FIX: `find_precedent` drops `SELECT TOP 1` (partition-scoped async TOP+ORDER BY returned empty); takes first ordered row in Python  *(cosmos.py)*
 - [x] 3.5 Removed the temporary `/api/debug/find-precedent` diagnostic endpoint  *(main.py; clean image teaching-loop-v18)*
 
-## 4 — Teaching loop: end-to-end proof — NOT DONE
+## 4 — Teaching loop: end-to-end proof — ✅ DONE (proven live 2026-06-21)
 
-- [ ] 4.1 Run a CORRECT end-to-end test: teach a class present in BOTH runs (e.g. sla-binding or scope-resolution, which appear reliably), confirm the precedent persisted, then verify run B AUTO-RESOLVES that exact card
-- [ ] 4.2 If still gating with v18 live + matching card + persisted precedent → there is a THIRD layer; re-diagnose (the find_precedent fix is necessary but maybe not sufficient)
-- [x] 4.3 Add a regression test for find_precedent against a fake ledger that asserts a known row is returned + guards against TOP-1 reintroduction  *(packages/ledger-core/tests/test_find_precedent.py — 5 tests)*
-- [ ] 4.4 Consider a seeded/deterministic demo PRD path so the LLM doesn't vary WHICH classes it emits per run (makes the loop reliably demonstrable)
+- [x] 4.1 Correct end-to-end test: taught sla-binding (present in both runs), confirmed precedent persisted, run B AUTO-RESOLVED that exact card  *(live: team teachFINAL-017155, run A 495892ab → run B c24c6794, autopilot_decisions=1 on the taught card; PHI stayed hard-gated)*
+- [x] 4.2 The THIRD layer found + fixed: NOT a query bug. The orchestrator's LedgerEntry serializes optional heal fields `decision`/`rationale` as null; `from_legacy_v06_dict` → ledger_core.LedgerEntry rejected null (required strings), threw, find_precedent swallowed it → None. Fixed in from_legacy_v06_dict (drop null keys, treat null as absent)  *(commit 3ca4db6)*
+- [x] 4.3 Regression test for find_precedent against a fake ledger + the null-decision/rationale stored shape  *(test_find_precedent.py — 6 tests incl. test_find_precedent_tolerates_orchestrator_null_decision_rationale)*
+- [ ] 4.4 Consider a seeded/deterministic demo PRD path so the LLM doesn't vary WHICH classes it emits per run (loop fired on attempt 1 here, but LLM class-set variance can need run-B retries — a seeded path makes demos deterministic)
+
+> **CORRECTION (2026-06-21):** the `SELECT TOP 1` fix (commit ca56916) was correct
+> hygiene but was NOT the teaching-loop killer — the loop still failed after it.
+> The actual root cause was the cross-model null-field deserialization throw above.
+> Earlier wording crediting TOP-1 as "the killer" is corrected here and in CHANGELOG.
 
 ## 5 — Deferred (not blocking)
 
@@ -59,4 +64,4 @@
 - [x] Tier-2 hard-gate proven live (bulk→409, individual→200)
 - [x] Operator agency (decided-state, edit/write-your-own) deployed
 - [x] Decisions-page readability deployed
-- [ ] Teaching loop proven end-to-end (a taught card auto-resolves on the next run) — **OPEN**
+- [x] Teaching loop proven end-to-end (a taught card auto-resolves on the next run) — **DONE 2026-06-21, live**
