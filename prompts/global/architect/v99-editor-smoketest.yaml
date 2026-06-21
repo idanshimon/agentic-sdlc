@@ -1,0 +1,7 @@
+prompt_id: architect-global
+version: v99
+status: draft
+scope: global
+stage: architect
+template: |-
+  SMOKE TEST from config_writer REST path — safe to close.
