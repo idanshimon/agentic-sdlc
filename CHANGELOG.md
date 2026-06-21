@@ -2,6 +2,50 @@
 
 All notable changes to the v0.7 reference design.
 
+## [0.7.21] — 2026-06-20 — graduated-autonomy tier-2 (hard-gate) + operator agency + self-heal MVP
+
+Two threads shipped this session. (1) The **self-heal cowork MVP** — a pluggable,
+config-selectable brain + executor (both GitHub-Copilot and Azure-native paths,
+no lock-in) with a decision-independent safety kernel; the 3-entry heal chain
+(proposed → decided → executed) persists to Cosmos and was verified live. (2) The
+**3-tier graduated-autonomy model** completed at the resolver gate: operators can
+now accept / swap / write-their-own resolutions with immediate on-page feedback,
+and PHI/auth classes are hard-gated — server-refused (409) from any bulk
+soft-approve. Plus two teaching-loop bug fixes and a decisions-page readability
+pass.
+
+### Added — Self-heal cowork MVP (openspec: `add-self-heal-cowork`)
+
+- `apps/orchestrator/heal.py` — `HealSession`/`HealProposal`/`HealDecision`/`HealExecution` (heal_id ties the chain) + `validate_heal_action()` safety kernel: PHI/auth → ESCALATE, deny → BLOCK, else ALLOW_WITH_APPROVAL (nothing auto-applies)
+- `apps/orchestrator/heal_runtime.py` — pluggable `HealBrain` + `HealExecutor` protocols, config-selected via `HEAL_BRAIN` / `HEAL_EXECUTOR` (azure | github | stub). GitHubExecutor (gh→PR), AzureExecutor (real rerun + honest code-PR gap), Stub (works offline). Brain and executor independently swappable — **both paths kept, configurable, no lock-in**
+- `POST /api/runs/{id}/heal`, `GET /api/heal/{id}`, `POST /api/heal/{id}/approve` — human-invoked only; approve hard-refuses BLOCK/ESCALATE even when approved=true
+- `LedgerEntry.heal_id` — ties the `heal_proposed → heal_decided → heal_executed` chain; verified persisting to Cosmos live
+- `HEAL_ACTIONS_ENABLED` master flag (false → read-only). 15 kernel tests + 9 loop tests
+- Fixed: orchestrator was writing heal entries against the wrong `LedgerEntry` model (missing card_id/ambiguity_class/decision_kind) — added heal fields + defaults so the chain persists
+
+### Added — Graduated-autonomy tier-2 + operator agency (openspec: `add-graduated-autonomy-tier2`)
+
+- **Tier-2 hard-gate (server-enforced):** `HARD_GATE_CLASSES` (config.py) defaults to `INVARIANT_CLASSES`; env extends but can never shrink the PHI/auth floor. `/approve` returns **409** on `approval_path: "bulk"` for a hard-gated card — a curl cannot rubber-stamp PHI. `GateDecision.approval_path`, `AmbiguityCard.is_hard_gated` (stamped at assessor time), `GET /api/config/hard-gate-classes`. Verified live: bulk→409, individual→200. 8 tests
+- **Operator agency (resolver-gate.tsx):** "Use this" now visibly locks the card to a "Decided — change" row + "N of M decided" counter (fixes the "toast but nothing changes" bug); edit-recommendation + write-your-own textarea → `decision_kind: swap` + verbatim text, with a PHI soft-warn; "Approve all" skips hard-gated + decided cards and shows the remaining-count; 🔒 EXPLICIT DECISION REQUIRED badge on hard-gated cards. 9 logic tests
+- Completes the **3-tier model**: Tier 0 autopilot (refuses invariants) · Tier 1 soft-approve (now skips hard-gated) · Tier 2 hard-gate (individual, attributed, on the record)
+
+### Fixed — Teaching loop (two stacked bugs)
+
+- **Unstable slot key:** `slot_value_hash` was `_hash(title + detail)` (LLM prose, varies run-to-run) → precedent never matched across runs. New `_slot_key(class, prd_section)` keys on stable semantic identity. Verified: same PRD → same hash across runs. 6 tests
+- **`SELECT TOP 1 ... ORDER BY` returned empty** under partition-scoped async `query_items` (the identical query without TOP 1 returned rows — proven via a live debug probe). `find_precedent` now drops TOP 1 and takes the first ordered row in Python. 5 regression tests (incl. a no-TOP-1 guard)
+- **Known issue:** the end-to-end loop (swap on run A auto-resolves on run B) is NOT yet proven green — both layer-fixes are verified individually but the last E2E test was flawed (taught one class, checked another; LLM varies WHICH classes it emits per run). See `add-graduated-autonomy-tier2` tasks §4
+
+### Fixed — Decisions-page readability
+
+- Teaching-signal rows read as "thumbs_up on <uuid>" → `teachingSignalSummary()` renders plain-English title+detail per kind ("Marked 'helpful' — operator@demo …", "Flagged as wrong — Reason: …", "Autopilot paused for '<class>'")
+- Removed the dead `↳ refers to <uuid>` line and the dead `<Link href="/prompts">` wrappers (catalog isn't deep-linkable) → informational text
+
+### Infra / ops
+
+- **Cosmos `publicNetworkAccess` auto-reverts to Disabled** — root-caused to Microsoft Defender for Cloud (`ASC DataProtection` policy set), not a fluke. Documented; the durable fix is `add-cosmos-private-endpoint-v07` (VNET + private endpoint). Writes during a Disabled window are silently lost (failure-tolerant ledger writes)
+- Deploys: `orchestrator:teaching-loop-v18` (rev 0000018), `ledger-insights-ui:4838231` (rev 0000024)
+- Commits: `498b7dc` `518576a` `2e5f549` `0071b56` `7550dfa` `2a20e72` `97bcc45` `4838231` `ca56916`
+
 ## [0.7.20] — 2026-06-16 — operator-grade pipeline workflow + multi-persona prompt library
 
 Two openspec changes shipped end-to-end in a single session (20 commits, 4 service
