@@ -123,3 +123,50 @@ async def test_find_precedent_returns_none_when_no_match():
     client = _client_with([])
     result = await client.find_precedent("team-cardiology", "sla-binding", "nomatch")
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_find_precedent_tolerates_orchestrator_null_decision_rationale():
+    """THE REAL teaching-loop bug (2026-06-21): the orchestrator's own
+    LedgerEntry model serializes its optional heal fields `decision` and
+    `rationale` as explicit null on every non-heal swap/stage_decision write.
+    find_precedent reads the row and calls from_legacy_v06_dict → ledger_core
+    LedgerEntry, which requires those to be non-null strings. A present-but-null
+    value used to bypass the backfill, raise ValidationError, get swallowed by
+    find_precedent's except, and return None — silently killing the loop.
+
+    This pins the exact stored shape (decision=None, rationale=None) and asserts
+    find_precedent returns it, not None.
+    """
+    orch_swap_row = {
+        "id": "swap-1",
+        "entry_type": "runtime",
+        "team_id": "team-cardiology",
+        "run_id": "run-a",
+        "card_id": "c1",
+        "ambiguity_class": "sla-binding",
+        "slot_value_hash": "b1a8260738e3",
+        "resolution_text": "Retain 45 days per team policy CO-99.",
+        "decision_kind": "swap",
+        "status": "suggest",
+        "sample_count": 1,
+        "accuracy_score": 0.0,
+        "created_at": "2026-06-21T04:26:33.200424+00:00",
+        "created_by": "operator@dashboard",
+        "confidence_source": "human",
+        # the poison pills — orchestrator serializes these optional heal fields as null:
+        "decision": None,
+        "rationale": None,
+        "runtime_kind": None,
+        "heal_id": None,
+        "precedent_id": None,
+    }
+    client = _client_with([orch_swap_row])
+    result = await client.find_precedent("team-cardiology", "sla-binding", "b1a8260738e3")
+    assert result is not None, "find_precedent dropped a null-decision swap row (the real teaching-loop bug)"
+    assert result.decision_kind == "swap"
+    assert result.resolution_text == "Retain 45 days per team policy CO-99."
+    # decision synthesized from resolution_text; rationale defaulted to ""
+    assert result.decision
+    assert result.rationale == ""
+
