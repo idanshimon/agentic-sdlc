@@ -29,11 +29,15 @@ pass.
 - **Operator agency (resolver-gate.tsx):** "Use this" now visibly locks the card to a "Decided — change" row + "N of M decided" counter (fixes the "toast but nothing changes" bug); edit-recommendation + write-your-own textarea → `decision_kind: swap` + verbatim text, with a PHI soft-warn; "Approve all" skips hard-gated + decided cards and shows the remaining-count; 🔒 EXPLICIT DECISION REQUIRED badge on hard-gated cards. 9 logic tests
 - Completes the **3-tier model**: Tier 0 autopilot (refuses invariants) · Tier 1 soft-approve (now skips hard-gated) · Tier 2 hard-gate (individual, attributed, on the record)
 
-### Fixed — Teaching loop (two stacked bugs)
+### Fixed — Teaching loop (now PROVEN end-to-end, live 2026-06-21)
+
+The operator teaching loop (swap a resolution on run A → autopilot auto-resolves
+the same ambiguity on run B) is closed and proven live. It took THREE stacked fixes:
 
 - **Unstable slot key:** `slot_value_hash` was `_hash(title + detail)` (LLM prose, varies run-to-run) → precedent never matched across runs. New `_slot_key(class, prd_section)` keys on stable semantic identity. Verified: same PRD → same hash across runs. 6 tests
-- **`SELECT TOP 1 ... ORDER BY` returned empty** under partition-scoped async `query_items` (the identical query without TOP 1 returned rows — proven via a live debug probe). `find_precedent` now drops TOP 1 and takes the first ordered row in Python. 5 regression tests (incl. a no-TOP-1 guard)
-- **Known issue:** the end-to-end loop (swap on run A auto-resolves on run B) is NOT yet proven green — both layer-fixes are verified individually but the last E2E test was flawed (taught one class, checked another; LLM varies WHICH classes it emits per run). See `add-graduated-autonomy-tier2` tasks §4
+- **`SELECT TOP 1` hygiene:** `find_precedent` dropped `SELECT TOP 1 … ORDER BY` for `SELECT *` + take-first-in-Python. Correct hygiene — but NOT the actual killer (the loop still failed after it). 5 query-shape tests
+- **THE real killer — cross-model null deserialization throw:** the orchestrator's `LedgerEntry` gained optional heal fields `decision`/`rationale` (`Optional[str]=None`), so every swap serialized them as JSON null. `find_precedent` reads the row → `from_legacy_v06_dict` → `ledger_core.LedgerEntry`, which requires non-null strings → ValidationError → swallowed by `find_precedent`'s except → returned None. Every operator swap was silently unreadable as precedent. Fixed in `from_legacy_v06_dict` (drop null `decision`/`rationale`, treat null as absent). Same bug-class as the heal-chain persistence bug — two competing `LedgerEntry` models with different field contracts. +1 regression test pinning the exact null shape
+- **Proven live:** team `teachFINAL-017155`, run A `495892ab` (operator swaps sla-binding) → run B `c24c6794` auto-resolved that exact card (`autopilot_decisions=1`) while PHI stayed hard-gated. The full graduated-autonomy story in one run: agent auto-resolves what a human taught it; PHI never auto-resolves regardless
 
 ### Fixed — Decisions-page readability
 
