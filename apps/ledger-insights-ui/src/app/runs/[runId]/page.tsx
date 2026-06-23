@@ -1,7 +1,7 @@
 "use client";
 import { use, useMemo } from "react";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, GitPullRequest, ExternalLink, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRun } from "@/lib/hooks/use-runs";
 import { useRunStream } from "@/lib/hooks/use-run-stream";
@@ -256,16 +256,56 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
                               {e.message}
                             </p>
                           )}
-                          {e.payload && Object.keys(e.payload).length > 0 && (
-                            <details className="mt-1.5">
-                              <summary className="text-[10px] text-[var(--text-tertiary)] cursor-pointer hover:text-[var(--text-secondary)]">
-                                Payload
-                              </summary>
-                              <pre className="mono text-[10px] mt-1 bg-[var(--bg)] p-2 rounded border border-[var(--border-muted)] overflow-x-auto">
-                                {JSON.stringify(e.payload, null, 2)}
-                              </pre>
-                            </details>
-                          )}
+                          {(() => {
+                            const pl = (e.payload ?? {}) as {
+                              pr_url?: string | null;
+                              delivery_status?: string;
+                              delivery_reason?: string;
+                              artifact_files?: string[];
+                            };
+                            // Delivery events get a first-class, honest render:
+                            // a real PR link, or a clear "not opened + why" — never
+                            // a raw fabricated URL dump.
+                            if (pl.pr_url) {
+                              return (
+                                <a
+                                  href={pl.pr_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs text-[var(--primary)] hover:underline mt-0.5"
+                                >
+                                  <GitPullRequest className="h-3.5 w-3.5" />
+                                  View pull request
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              );
+                            }
+                            if (pl.delivery_status === "not_delivered") {
+                              return (
+                                <p className="text-[11px] leading-snug mt-0.5 inline-flex items-start gap-1.5 text-[var(--warning)]">
+                                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                                  <span>
+                                    PR not opened
+                                    {pl.delivery_reason ? ` — ${pl.delivery_reason}` : ""}
+                                  </span>
+                                </p>
+                              );
+                            }
+                            return null;
+                          })()}
+                          {e.payload &&
+                            Object.keys(e.payload).length > 0 &&
+                            !(e.payload as { pr_url?: string }).pr_url &&
+                            (e.payload as { delivery_status?: string }).delivery_status !== "not_delivered" && (
+                              <details className="mt-1.5">
+                                <summary className="text-[10px] text-[var(--text-tertiary)] cursor-pointer hover:text-[var(--text-secondary)]">
+                                  Payload
+                                </summary>
+                                <pre className="mono text-[10px] mt-1 bg-[var(--bg)] p-2 rounded border border-[var(--border-muted)] overflow-x-auto">
+                                  {JSON.stringify(e.payload, null, 2)}
+                                </pre>
+                              </details>
+                            )}
                         </div>
                       </div>
                     </div>
