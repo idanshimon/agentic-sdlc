@@ -583,14 +583,14 @@ export function approveDemoRun(runId: string) {
     appendEvent(runId, {
       stage: "deliver",
       status: "completed",
-      message: `PR opened: https://github.com/idanshimon/agentic-sdlc-demo/pull/${
-        Math.floor(Math.random() * 900) + 100
-      }`,
+      message:
+        "Artifacts ready — PR not opened (demo run has no delivery backend). " +
+        "Real runs open a real PR when DELIVER_TARGET_REPO is configured.",
       timestamp: nowIso(),
       payload: {
-        pr_url: `https://github.com/idanshimon/agentic-sdlc-demo/pull/${
-          Math.floor(Math.random() * 900) + 100
-        }`,
+        delivery_status: "not_delivered",
+        delivery_reason: "demo run — no delivery backend configured",
+        // No pr_url: never fabricate a link. A real run sets this to a real PR.
       },
     });
     patchStore(runId, {

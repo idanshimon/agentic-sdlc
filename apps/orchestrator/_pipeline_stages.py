@@ -583,12 +583,17 @@ async def stage_review_scan(run: RunState) -> AsyncIterator[StageEvent]:
 
 # --- 7. DELIVER ---------------------------------------------------------------
 async def stage_deliver(run: RunState) -> AsyncIterator[StageEvent]:
-    """Push PR to ADO via MCP tools service (§2 Deliver, §10 MCP gateway pattern)."""
-    yield _ev(run, Stage.DELIVER, "started", "Calling MCP push-PR tool")
-    import httpx
-    mcp_url = os.environ.get("MCP_TOOLS_URL", "").rstrip("/")
+    """Open a REAL GitHub PR with the run's generated artifacts (§2 Deliver).
+
+    No fakes: opens a real PR via the GitHub Git Data API when delivery is
+    configured (DELIVER_TARGET_REPO + GH_TOKEN), or emits an honest
+    "not configured / failed" event with pr_url=None. Never fabricates a URL.
+    The optional MCP push path is still honoured first when MCP_TOOLS_URL is set.
+    """
+    from .deliver_pr import open_delivery_pr
+
+    yield _ev(run, Stage.DELIVER, "started", "Preparing delivery PR")
     branch = f"agentic/{run.run_id[:8]}"
-    repo = os.environ.get("ADO_REPO", "agentic-sdlc-target")
     # Build files list from generated artifacts in run state
     code_text = ""
     test_text = ""
@@ -607,15 +612,20 @@ async def stage_deliver(run: RunState) -> AsyncIterator[StageEvent]:
         {"path": "docs/architecture.md", "content": arch_text or "# architecture\n"},
         {"path": "decisions.md", "content": _decisions_summary(run)},
     ]
+
     pr_url = None
+
+    # 1. Optional MCP push path (when an MCP tools service is wired).
+    mcp_url = os.environ.get("MCP_TOOLS_URL", "").rstrip("/")
     if mcp_url:
+        import httpx
+        repo = os.environ.get("ADO_REPO", "agentic-sdlc-target")
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                r1 = await client.post(f"{mcp_url}/push_files", json={
+                await client.post(f"{mcp_url}/push_files", json={
                     "files": files, "branch": branch, "repo": repo,
                     "commit_message": f"agentic-sdlc run {run.run_id[:8]}",
                 })
-                push_data = r1.json() if r1.status_code < 400 else {}
                 r2 = await client.post(f"{mcp_url}/create_pr", json={
                     "repo": repo, "source_branch": branch, "target_branch": "main",
                     "title": f"Agentic SDLC run {run.run_id[:8]}",
@@ -624,10 +634,34 @@ async def stage_deliver(run: RunState) -> AsyncIterator[StageEvent]:
                 pr_data = r2.json() if r2.status_code < 400 else {}
                 pr_url = pr_data.get("pr_url") or pr_data.get("url")
         except Exception as exc:
-            _logger.exception("MCP call failed: %s", exc)
+            _logger.exception("MCP delivery call failed: %s", exc)
+
+    # 2. Real GitHub PR via the Git Data API (the production path).
     if not pr_url:
-        pr_url = f"https://dev.azure.com/hca-demo/_git/agentic-sdlc/pullrequest/{run.run_id[:8]}"
-    yield _ev(run, Stage.DELIVER, "completed", f"PR opened: {pr_url}", pr_url=pr_url)
+        result = await open_delivery_pr(
+            run_id=run.run_id,
+            team_id=run.team_id,
+            files=files,
+            title=f"Agentic SDLC run {run.run_id[:8]} — {run.team_id}",
+            body=_decisions_summary(run)[:60000],
+        )
+        if result.ok and result.pr_url:
+            pr_url = result.pr_url
+        else:
+            # Honest failure — NO fabricated URL. Surface why so the operator
+            # knows whether it's a config gap or a real error.
+            yield _ev(
+                run, Stage.DELIVER, "completed",
+                f"Artifacts ready — PR not opened: {result.reason}",
+                pr_url=None,
+                delivery_status="not_delivered",
+                delivery_reason=result.reason,
+                artifact_files=result.files,
+            )
+            return
+
+    yield _ev(run, Stage.DELIVER, "completed", f"PR opened: {pr_url}",
+              pr_url=pr_url, delivery_status="delivered")
 
 
 def _decisions_summary(run: RunState) -> str:
