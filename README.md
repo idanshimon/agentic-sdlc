@@ -68,6 +68,18 @@ The design assumes:
                                                • change-proposal PRs
 ```
 
+### Config is editable, governed by PR (v0.7.22)
+
+The Standards Bundles and Agent HQ surfaces are not just viewers. Operators edit
+agents (`.github/agents/`), standards bundles (`standards-bundles/`), and the
+prompt library (`prompts/`) directly in Ledger Insights; every save opens a
+**governed pull request** against the file the pipeline reads. Nothing mutates
+running behaviour in place — bundles are PR-only by design so a standards change
+always goes through committee review. The agent→bundle subscription drives data:
+each decision is stamped with the deciding agent's `bundle_refs`. The deliver
+stage opens a **real GitHub PR** with the run's artifacts (or an honest "PR not
+opened" — never a fabricated URL).
+
 ## Repository layout
 
 ```

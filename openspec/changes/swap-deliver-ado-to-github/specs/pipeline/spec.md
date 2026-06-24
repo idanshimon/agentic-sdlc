@@ -18,11 +18,11 @@ The pipeline's deliver stage MUST dispatch on `config.deliver_provider` to one o
 
 ### Requirement: Branch naming convention
 
-The deliver stage MUST create branches with the pattern `agentic-sdlc/run-<run_id>` (changed from v0.6's `feature/<run_id>`) so that downstream queries can filter on `branch:agentic-sdlc/*` trivially.
+The deliver stage MUST create branches with the pattern `agentic/<run_id>` so that downstream queries can filter delivery branches on `agentic/*` trivially.
 
 #### Scenario: GitHub branch naming
 - **WHEN** `deliver_github` opens a PR for run `abc-123`
-- **THEN** the source branch MUST be named `agentic-sdlc/run-abc-123`
+- **THEN** the source branch MUST be named `agentic/abc-123`
 
 ### Requirement: PR body renders decisions.md inline
 
@@ -46,17 +46,57 @@ The deliver stage MUST assign reviewers from `standards-bundles/<dept>/v<n>/revi
 
 ## ADDED Requirements
 
-### Requirement: GitHub App auth boundary
+### Requirement: GitHub delivery auth
 
-The deliver-github implementation MUST authenticate via a GitHub App. PAT-based delivery SHALL NOT be supported. App credentials MUST be stored as Container App secrets and retrieved via Managed Identity + Key Vault. App installation is per-customer-org.
+The deliver-github implementation MUST authenticate to GitHub using a token resolved from `DELIVER_GH_TOKEN` (falling back to `GH_TOKEN`), stored as a Container App secret. A repo-scoped PAT or fine-grained token with Contents + Pull-requests write is the shipped auth; GitHub App installation auth is planned future hardening, not yet implemented.
 
-#### Scenario: missing installation_id
-- **WHEN** the orchestrator starts and any team in config lacks `github_app.installation_id`
-- **THEN** the orchestrator SHALL refuse to start and log the offending team_id
+#### Scenario: token from environment
+- **WHEN** the deliver stage runs and `DELIVER_GH_TOKEN` (or `GH_TOKEN`) is set as a container secret
+- **THEN** the implementation MUST authenticate its GitHub REST calls with that token
 
-#### Scenario: PAT credential rejection
-- **WHEN** the deliver_github implementation detects a PAT in its credential bundle
-- **THEN** the deliver call MUST fail with `"PAT auth not supported; use GitHub App"`
+#### Scenario: missing token degrades honestly
+- **WHEN** the deliver stage runs and no delivery token is configured
+- **THEN** the stage MUST emit an honest "PR not opened" event with a reason and MUST NOT fabricate a PR URL
+
+### Requirement: Delivery never fabricates a PR URL
+
+The deliver stage MUST emit a real PR URL only when a PR was actually opened, and MUST otherwise emit an honest not-delivered event carrying the reason — never a randomly-generated or placeholder URL.
+
+#### Scenario: real delivery
+- **WHEN** delivery is configured and the GitHub REST calls succeed
+- **THEN** the `delivered` event MUST carry the real `pr_url` returned by GitHub and `delivery_status: delivered`
+
+#### Scenario: not configured
+- **WHEN** delivery is not configured (no target repo or no token)
+- **THEN** the event MUST carry `delivery_status: not_delivered` and a `delivery_reason`, and MUST omit `pr_url`
+
+#### Scenario: no demo fakes
+- **WHEN** any run completes, including demo-mode runs
+- **THEN** the deliver event MUST NOT contain a fabricated PR URL (no `Math.random()` PR number, no `dev.azure.com` placeholder)
+
+### Requirement: Delivery target repo resolution and bootstrap
+
+The deliver stage MUST resolve the delivery repo from `DELIVER_TARGET_REPO` when set, otherwise a convention default `<token-owner>/agentic-sdlc-delivery`, and MUST be able to create and initialize that repo when `DELIVER_AUTO_CREATE` is enabled.
+
+#### Scenario: explicit target repo
+- **WHEN** `DELIVER_TARGET_REPO` is set to `owner/repo`
+- **THEN** the deliver stage MUST open the PR against `owner/repo`
+
+#### Scenario: convention default
+- **WHEN** `DELIVER_TARGET_REPO` is unset and a valid token resolves owner `idanshimon`
+- **THEN** the deliver stage MUST target `idanshimon/agentic-sdlc-delivery`
+
+#### Scenario: empty repo is bootstrapped
+- **WHEN** the target repo exists but has no base branch (empty repo)
+- **THEN** the deliver stage MUST seed an initial commit so the PR has a base to target
+
+### Requirement: Delivery commits all run artifacts atomically
+
+The deliver stage MUST push the run's generated artifacts (code, tests, architecture, decisions) to the run branch in a single commit via the GitHub Git Data API.
+
+#### Scenario: artifacts in one commit
+- **WHEN** a run delivers `src/main.py`, `tests/test_main.py`, `docs/architecture.md`, and `decisions.md`
+- **THEN** all four files MUST appear in one commit on branch `agentic/<run-id>` referenced by the PR
 
 ### Requirement: gh_audit_xref ledger field on delivered entries
 
