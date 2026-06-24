@@ -2,6 +2,58 @@
 
 All notable changes to the v0.7 reference design.
 
+## [0.7.22] — 2026-06-23 — config editing plane + real delivery PRs (no more fakes)
+
+Four threads shipped. (1) The **config editing plane** turned three display-only
+surfaces into real editors: the agent→bundle relationship now drives data
+(`bundle_refs` on every decision), and Agents / Bundles / Prompts each open a
+**governed PR** on save instead of mutating live (bundles were read-only; the
+agents editor was localStorage-only; prompts was a GitHub deeplink). (2) The
+**deliver stage opens real GitHub PRs** — the old path emitted two `Math.random()`
+URLs at a repo that doesn't exist (demo runs) or a fabricated `dev.azure.com`
+fallback (real runs); both 404'd. Now it opens a real PR via the Git Data API or
+emits an honest "PR not opened: <reason>" — never a fake. Proven live end-to-end:
+a real autopilot run through every gate opened a real PR with all four artifacts.
+(3) **Decision lineage visualization** surfaces the teaching-loop graph in the
+decisions table. (4) The **Prompt Library** was redesigned from an admin table
+into a pipeline-flow card grid (and fixed off-system design tokens that were the
+real cause of its unpolished look).
+
+### Added — Config editing plane (openspec: `add-config-editing-plane`)
+
+- `apps/orchestrator/agent_bundles.py` — parses `.github/agents/*.agent.md`, validates declared `bundle_subscriptions` against real `standards-bundles/<dept>` dirs (strips inline comments, rejects prose like `all (read-only)`), exposes `bundles_for_stage()`. The relationship now **drives data**: `LedgerEntry.bundle_refs` is stamped at both decision write sites with the deciding agent's bundles. 9 tests
+- `apps/orchestrator/config_writer.py` — shared governed PR write-back via the **GitHub REST API** (Contents + Pulls). Path allowlist (`.github/agents`, `standards-bundles`, `prompts`); absolute + `..` escapes refused server-side. 11 tests
+- `POST /api/config/{agents,bundles,prompts}/save` → opens a PR, returns the URL. `POST /api/config/reload` → hot-reload agents/prompts only (bundles are **PR-only** — live-editing the compliance standard would bypass committee review). 8 endpoint tests
+- **REST, not git/gh subprocess:** deploy verification proved the container is a bare file tree (`COPY`, no `.git`/`git`/`gh`) — the git-subprocess version returned `[Errno 2]`. REST needs only a token. Verified end-to-end: a real PR opened + closed via the REST path
+- **Honest by default:** no token → clean 422 → UI shows "Saved locally — PR not opened". No code path fabricates a PR URL. `GH_TOKEN` wired as a Container App secret
+- UI: `VersionedEditor.onPullRequest` hook (local save + PR, honest toasts); Agents editor → `saveAgentConfig` (was localStorage); Bundles "Edit rules" editor with a governance banner (was read-only); Prompt Library in-app editor → next-version draft (`vN+1`, status: draft) → PR
+
+### Added — Real delivery PRs (openspec: `swap-deliver-ado-to-github`, reconciled)
+
+- `apps/orchestrator/deliver_pr.py` — opens a real GitHub PR via the Git Data API (blobs → tree → commit → branch → PR), all run artifacts (`src/main.py`, `tests/test_main.py`, `docs/architecture.md`, `decisions.md`) in **one atomic commit** on branch `agentic/<run-id>`. 8 tests
+- **Repeatable-demo features:** repo resolution (`DELIVER_TARGET_REPO`, else `<owner>/agentic-sdlc-delivery`), auto-create missing repo (`DELIVER_AUTO_CREATE`), self-bootstrap an empty repo (seed README so a fresh repo just works), delivery-specific `DELIVER_GH_TOKEN`. Idempotent: tolerates branch-exists (force-update) and PR-exists (returns existing)
+- `scripts/reset_deliveries.py` — closes open `agentic/*` PRs + deletes their branches for a clean slate between demos (dry-run by default)
+- **Proven live:** autopilot run `1de0f1a2` through resolver gate + design gate → opened `idanshimon/agentic-sdlc-delivery/pull/2` with all four artifacts. `delivery_status: delivered`
+- **Spec reconciliation:** the change was a DRAFT specifying GitHub App auth + forbidding PATs. Shipped reality is PAT auth via REST. Spec updated honestly (token auth + the never-fabricate-a-URL guarantee + repo bootstrap); App auth / reviewer assignment / `gh_audit_xref` / per-team overrides remain unbuilt forward design
+
+### Added — Decision lineage visualization
+
+- The decisions table surfaces the teaching-loop graph: which human decisions taught precedent and which autopilot decisions reused it (`b01b760`)
+
+### Changed — Prompt Library redesign + run-stream honesty
+
+- `prompts/page.tsx` rebuilt as a pipeline-flow card grid (one card per stage, in run order) instead of an admin table; fixed off-system design tokens (`--surface-2`, `--text-primary`) that didn't exist and were the real cause of the unpolished render. Verified via CDP screenshot + vision QA on the live deploy
+- Run event stream renders the deliver event honestly: a real "View pull request" link when `pr_url` is present, an amber "PR not opened — <reason>" when not — no raw fabricated-URL JSON dump
+
+### Fixed — UI
+
+- Sticky sidebar (nav no longer scrolls away when switching tabs); Cards-view search now filters (was showing "4 of 10" but rendering all)
+
+### Infra / ops
+
+- Deploys: `orchestrator:deliver-v22` (rev 0000026), `ledger-insights-ui:747e9a7` (rev 0000029). Secrets: `gh-config-token`, `deliver-gh-token`. Env: `DELIVER_TARGET_REPO`, `DELIVER_AUTO_CREATE=1`
+- Commits: `a965e7a` `f7c31e4` `9ec6504` `aa7df86` `b01b760` `efe02e2` `3561efd` `15d45a6` `747e9a7` `1153577`
+
 ## [0.7.21] — 2026-06-20 — graduated-autonomy tier-2 (hard-gate) + operator agency + self-heal MVP
 
 Two threads shipped this session. (1) The **self-heal cowork MVP** — a pluggable,

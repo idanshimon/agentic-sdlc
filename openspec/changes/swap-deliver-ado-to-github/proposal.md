@@ -1,8 +1,20 @@
 # Proposal: swap deliver stage from ADO to GitHub
 
-> **Status:** DRAFT
+> **Status:** PARTIALLY SHIPPED (2026-06-23) — reconciled with implementation
 > **Capability:** pipeline
-> **Related:** master-v07-four-plane-architecture
+> **Related:** master-v07-four-plane-architecture, add-config-editing-plane
+
+> **Reconciliation note (2026-06-23).** This proposal was authored as a DRAFT
+> describing a GitHub App auth design. What actually shipped is real GitHub-PR
+> delivery via the Git Data API authenticated by a **PAT** (`DELIVER_GH_TOKEN`),
+> not a GitHub App. The spec deltas have been updated to match shipped reality:
+> token auth (App is future hardening), the "never fabricate a PR URL" guarantee
+> (the core of the work — it replaced two `Math.random()` demo URLs and a
+> `dev.azure.com` fallback that all 404'd), repo resolution + empty-repo
+> bootstrap, and atomic multi-artifact commits. NOT yet shipped from the original
+> draft: GitHub App auth, reviewer assignment from `reviewers.yaml`,
+> `gh_audit_xref` on delivered entries, and per-team provider overrides — these
+> remain in the spec as forward design and their tasks stay unchecked.
 
 ## Why
 
