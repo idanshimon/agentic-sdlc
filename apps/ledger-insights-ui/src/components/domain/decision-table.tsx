@@ -34,12 +34,23 @@ import type { LedgerEntry } from "@/lib/types";
 type RawEntry = Partial<LedgerEntry> & {
   created_by?: string;
   resolution_text?: string;
+  confidence_source?: string;
 };
 
 function normalize(raw: RawEntry): LedgerEntry {
+  // Prefer a structured actor object when present. Otherwise derive the
+  // actor kind from confidence_source — the field the orchestrator writes
+  // ("human" for operator decisions, "autopilot" for agent decisions).
+  // Previously this always fell back to kind:"agent", so every human
+  // decision was mislabelled and the AUTONOMY SPLIT tile read 0%/0%.
   const actor = raw.actor && typeof raw.actor === "object" && "kind" in raw.actor
     ? raw.actor
-    : { kind: "agent" as const, id: raw.created_by ?? "unknown" };
+    : {
+        kind: (raw.confidence_source === "autopilot" ? "agent" : "human") as
+          | "agent"
+          | "human",
+        id: raw.created_by ?? "unknown",
+      };
   return {
     id: raw.id ?? "unknown",
     entry_type: raw.entry_type ?? "runtime",

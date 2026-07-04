@@ -2006,6 +2006,67 @@ async def admin_mark_failed(run_id: str, request: Request, body: dict | None = N
     return {"ok": True, "run_id": run_id, "status": "failed", "reason": reason}
 
 
+@app.delete("/api/admin/runs/{run_id}")
+async def admin_delete_run(run_id: str) -> dict:
+    """Admin: hard-delete a run doc from Cosmos pipeline-runs.
+
+    Removes the run from the /runs dashboard entirely. Used to purge
+    demo-seed / test / zombie runs. Only the pipeline-runs doc is deleted;
+    the Decision Ledger entries this run wrote live in a separate container
+    and are intentionally left intact for audit. Also drops any in-memory
+    handles so a subsequent read doesn't resurrect a partial copy.
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    deleted = await _ledger.delete_run(run_id)
+    # Drop in-memory handles regardless (idempotent cleanup).
+    _runs.pop(run_id, None)
+    _queues.pop(run_id, None)
+    _gate_events.pop(run_id, None)
+    _gate_started.pop(run_id, None)
+    _prd_cache.pop(run_id, None)
+    if not deleted:
+        raise HTTPException(404, "run not found in Cosmos")
+    return {"ok": True, "run_id": run_id, "deleted": True}
+
+
+@app.delete("/api/admin/ledger/{team_id}")
+async def admin_clear_team_ledger(team_id: str) -> dict:
+    """Admin: delete all Decision Ledger entries for a single team partition.
+
+    Dashboard/demo cleanup: purge stale seed decisions so the Decisions page
+    shows a clean set. Scoped to ONE team_id partition (the ledger's partition
+    key) — never cross-team. Returns the count deleted. The pipeline-runs
+    container is a separate concern (see admin_delete_run).
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    ids: list[str] = []
+    try:
+        # NOTE: no partition_key= kwarg. On azure-cosmos async 4.x, passing
+        # partition_key (or enable_cross_partition_query) to query_items raises
+        # TypeError from ClientSession._request — which the except below would
+        # swallow into an empty result, silently reporting "0 entries found"
+        # for a team that has thousands. The partition scope is expressed by
+        # the WHERE clause instead; the SDK auto-detects it.
+        async for item in _ledger._ledger.query_items(  # type: ignore[attr-defined]
+            query="SELECT c.id FROM c WHERE c.team_id=@t",
+            parameters=[{"name": "@t", "value": team_id}],
+        ):
+            if item.get("id"):
+                ids.append(item["id"])
+    except Exception as exc:
+        raise HTTPException(500, f"ledger query failed: {exc}") from exc
+    deleted = 0
+    for entry_id in ids:
+        try:
+            if await _ledger.delete_decision(entry_id, team_id):
+                deleted += 1
+        except Exception as exc:
+            _logger.warning("delete_decision failed for %s/%s: %s", team_id, entry_id, exc)
+    return {"ok": True, "team_id": team_id, "found": len(ids), "deleted": deleted}
+
+
 @app.post("/api/runs/{run_id}/finalize", tags=["Gates & Decisions"])
 async def finalize_gate(run_id: str, request: Request, body: dict | None = None) -> dict:
     """Close the open Resolver gate explicitly after the human reviews all decisions.
