@@ -96,7 +96,7 @@ export function CommandPalette({
             <ExternalLink className="h-4 w-4" /> Source on GitHub
           </CommandItem>
           <CommandItem
-            onSelect={() => open_("https://ca-orchestrator.whitewater-f74a5db8.eastus2.azurecontainerapps.io/docs")}
+            onSelect={() => open_("https://ca-orchestrator-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io/docs")}
           >
             <ExternalLink className="h-4 w-4" /> Orchestrator API (Swagger)
           </CommandItem>
