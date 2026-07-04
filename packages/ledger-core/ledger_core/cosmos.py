@@ -282,3 +282,17 @@ class LedgerClient:
         except Exception as exc:
             _logger.warning("Run read failed: %s", exc)
             return None
+
+    async def delete_run(self, run_id: str) -> bool:
+        """Hard-delete a run doc from the pipeline-runs container.
+
+        Partition key on pipeline-runs is /run_id (== the item id). Returns
+        True on delete, False if the run did not exist. Used by admin cleanup
+        to remove demo-seed / test runs from the dashboard — the ledger's
+        decision entries are a separate container and are NOT touched here.
+        """
+        try:
+            await self._runs.delete_item(item=run_id, partition_key=run_id)
+            return True
+        except CosmosResourceNotFoundError:
+            return False

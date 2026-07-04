@@ -947,6 +947,11 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
                 resolution_text=final_text,
                 decision_kind=decision.decision_kind, created_by=decision.actor,
+                # Honor the caller's confidence_source so a decision made by an
+                # agent (autopilot) through the gate is attributed as such — not
+                # silently recorded as human. Defaults to "human" on the model
+                # when the client omits it (the operator-decision common case).
+                confidence_source=decision.confidence_source,
                 # Wire (2026-06-21): same as the autopilot path — cards come from
                 # the assessor, so stamp the assessor agent's bundle subscriptions
                 # so a human decision is governed-attributed to the same bundles.
@@ -1010,6 +1015,62 @@ async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
     ))
     await _ledger.save_run(run)
     return {"ok": True, "run_id": run_id, "status": "failed", "reason": reason}
+
+
+@app.delete("/api/admin/runs/{run_id}")
+async def admin_delete_run(run_id: str) -> dict:
+    """Admin: hard-delete a run doc from Cosmos pipeline-runs.
+
+    Removes the run from the /runs dashboard entirely. Used to purge
+    demo-seed / test / zombie runs. Only the pipeline-runs doc is deleted;
+    the Decision Ledger entries this run wrote live in a separate container
+    and are intentionally left intact for audit. Also drops any in-memory
+    handles so a subsequent read doesn't resurrect a partial copy.
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    deleted = await _ledger.delete_run(run_id)
+    # Drop in-memory handles regardless (idempotent cleanup).
+    _runs.pop(run_id, None)
+    _queues.pop(run_id, None)
+    _gate_events.pop(run_id, None)
+    _gate_started.pop(run_id, None)
+    _prd_cache.pop(run_id, None)
+    if not deleted:
+        raise HTTPException(404, "run not found in Cosmos")
+    return {"ok": True, "run_id": run_id, "deleted": True}
+
+
+@app.delete("/api/admin/ledger/{team_id}")
+async def admin_clear_team_ledger(team_id: str) -> dict:
+    """Admin: delete all Decision Ledger entries for a single team partition.
+
+    Dashboard/demo cleanup: purge stale seed decisions so the Decisions page
+    shows a clean set. Scoped to ONE team_id partition (the ledger's partition
+    key) — never cross-team. Returns the count deleted. The pipeline-runs
+    container is a separate concern (see admin_delete_run).
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    ids: list[str] = []
+    try:
+        async for item in _ledger._ledger.query_items(  # type: ignore[attr-defined]
+            query="SELECT c.id FROM c WHERE c.team_id=@t",
+            parameters=[{"name": "@t", "value": team_id}],
+            partition_key=team_id,
+        ):
+            if item.get("id"):
+                ids.append(item["id"])
+    except Exception as exc:
+        raise HTTPException(500, f"ledger query failed: {exc}") from exc
+    deleted = 0
+    for entry_id in ids:
+        try:
+            if await _ledger.delete_decision(entry_id, team_id):
+                deleted += 1
+        except Exception as exc:
+            _logger.warning("delete_decision failed for %s/%s: %s", team_id, entry_id, exc)
+    return {"ok": True, "team_id": team_id, "found": len(ids), "deleted": deleted}
 
 
 @app.post("/api/runs/{run_id}/finalize")
