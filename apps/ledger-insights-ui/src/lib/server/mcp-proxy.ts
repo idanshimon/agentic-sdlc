@@ -11,7 +11,7 @@ function ledgerUrl(): string {
   return (
     env["LEDGER_MCP_URL"] ??
     env["NEXT_PUBLIC_LEDGER_MCP_URL"] ??
-    "https://ca-ledger-mcp.whitewater-f74a5db8.eastus2.azurecontainerapps.io"
+    "https://ca-ledger-mcp-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io"
   );
 }
 

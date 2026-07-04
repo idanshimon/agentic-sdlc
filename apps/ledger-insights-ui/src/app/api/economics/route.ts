@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
   const orchestratorUrl =
     process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ??
-    "https://ca-orchestrator.whitewater-f74a5db8.eastus2.azurecontainerapps.io";
+    "https://ca-orchestrator-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io";
 
   try {
     const res = await fetch(

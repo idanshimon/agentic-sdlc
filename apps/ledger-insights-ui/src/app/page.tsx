@@ -67,7 +67,7 @@ export default function DashboardPage() {
               </Button>
               <Button variant="ghost" asChild>
                 <a
-                  href="https://ca-orchestrator.whitewater-f74a5db8.eastus2.azurecontainerapps.io/docs"
+                  href="https://ca-orchestrator-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io/docs"
                   target="_blank"
                   rel="noreferrer"
                 >
