@@ -1041,6 +1041,38 @@ async def admin_delete_run(run_id: str) -> dict:
     return {"ok": True, "run_id": run_id, "deleted": True}
 
 
+@app.delete("/api/admin/ledger/{team_id}")
+async def admin_clear_team_ledger(team_id: str) -> dict:
+    """Admin: delete all Decision Ledger entries for a single team partition.
+
+    Dashboard/demo cleanup: purge stale seed decisions so the Decisions page
+    shows a clean set. Scoped to ONE team_id partition (the ledger's partition
+    key) — never cross-team. Returns the count deleted. The pipeline-runs
+    container is a separate concern (see admin_delete_run).
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    ids: list[str] = []
+    try:
+        async for item in _ledger._ledger.query_items(  # type: ignore[attr-defined]
+            query="SELECT c.id FROM c WHERE c.team_id=@t",
+            parameters=[{"name": "@t", "value": team_id}],
+            partition_key=team_id,
+        ):
+            if item.get("id"):
+                ids.append(item["id"])
+    except Exception as exc:
+        raise HTTPException(500, f"ledger query failed: {exc}") from exc
+    deleted = 0
+    for entry_id in ids:
+        try:
+            if await _ledger.delete_decision(entry_id, team_id):
+                deleted += 1
+        except Exception as exc:
+            _logger.warning("delete_decision failed for %s/%s: %s", team_id, entry_id, exc)
+    return {"ok": True, "team_id": team_id, "found": len(ids), "deleted": deleted}
+
+
 @app.post("/api/runs/{run_id}/finalize")
 async def finalize_gate(run_id: str, body: dict | None = None) -> dict:
     """Close the open Resolver gate explicitly after the human reviews all decisions.
