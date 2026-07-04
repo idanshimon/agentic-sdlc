@@ -947,6 +947,11 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
                 resolution_text=final_text,
                 decision_kind=decision.decision_kind, created_by=decision.actor,
+                # Honor the caller's confidence_source so a decision made by an
+                # agent (autopilot) through the gate is attributed as such — not
+                # silently recorded as human. Defaults to "human" on the model
+                # when the client omits it (the operator-decision common case).
+                confidence_source=decision.confidence_source,
                 # Wire (2026-06-21): same as the autopilot path — cards come from
                 # the assessor, so stamp the assessor agent's bundle subscriptions
                 # so a human decision is governed-attributed to the same bundles.
@@ -1010,6 +1015,30 @@ async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
     ))
     await _ledger.save_run(run)
     return {"ok": True, "run_id": run_id, "status": "failed", "reason": reason}
+
+
+@app.delete("/api/admin/runs/{run_id}")
+async def admin_delete_run(run_id: str) -> dict:
+    """Admin: hard-delete a run doc from Cosmos pipeline-runs.
+
+    Removes the run from the /runs dashboard entirely. Used to purge
+    demo-seed / test / zombie runs. Only the pipeline-runs doc is deleted;
+    the Decision Ledger entries this run wrote live in a separate container
+    and are intentionally left intact for audit. Also drops any in-memory
+    handles so a subsequent read doesn't resurrect a partial copy.
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    deleted = await _ledger.delete_run(run_id)
+    # Drop in-memory handles regardless (idempotent cleanup).
+    _runs.pop(run_id, None)
+    _queues.pop(run_id, None)
+    _gate_events.pop(run_id, None)
+    _gate_started.pop(run_id, None)
+    _prd_cache.pop(run_id, None)
+    if not deleted:
+        raise HTTPException(404, "run not found in Cosmos")
+    return {"ok": True, "run_id": run_id, "deleted": True}
 
 
 @app.post("/api/runs/{run_id}/finalize")
