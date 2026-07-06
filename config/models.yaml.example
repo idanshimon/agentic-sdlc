@@ -1,0 +1,56 @@
+# Model policy — configuration plane (Phase 4)
+#
+# Which models may run which stages, which are cleared for PHI-adjacent work,
+# and the spend ceilings a run / team must stay under. This is where a Center-
+# of-Excellence leader expresses model governance as configuration instead of
+# code. Enforced at stage dispatch: a denied / non-allowlisted model, or a
+# non-phi_eligible model on a PHI-adjacent stage, GATES-or-FAILS the run with a
+# ledger entry citing the governing rule (the audit answer the compliance query
+# reads). An over-ceiling run is refused the same way.
+#
+# Activation is OPT-IN. This file ends in .example and is a TEMPLATE — it is NOT
+# auto-discovered. A fresh deploy stays PERMISSIVE (every model allowed, no
+# ceiling — the pre-Phase-4 behaviour) until you copy it to config/models.yaml
+# and point the orchestrator at it via MODELS_PATH (see config/README.md). The
+# real config/models.yaml is git-ignored so your model policy never lands in the
+# reference repo.
+#
+# NEUTRAL demo-zero policy — permissive-safe. Swap per account at engagement time.
+# openspec: add-configuration-plane / Requirement "model policy enforcement"
+
+# If non-empty, ONLY these models may run (deny-by-default). Leave empty/omit to
+# allow any model not on the denylist.
+allowlist:
+  - gpt-4-1
+  - gpt-4-1-mini
+  - databricks-claude-sonnet-4-6
+
+# Models that may NEVER run — wins over the allowlist.
+denylist: []
+
+# Models cleared to run PHI-adjacent stages (architect / codegen / review_scan
+# by default; override with phi_stages below). A stage handling PHI content that
+# routes to a model NOT listed here is refused.
+phi_eligible:
+  - gpt-4-1
+  - databricks-claude-sonnet-4-6
+
+# Advisory per-stage default model. The pipeline may still override per-run;
+# enforcement always runs against the RESOLVED model, not this hint.
+routing:
+  assessor: gpt-4-1
+  architect: databricks-claude-sonnet-4-6
+  codegen: databricks-claude-sonnet-4-6
+  review_scan: gpt-4-1
+
+# Spend ceilings. Omit a key to leave that ceiling unset (no cap).
+cost_ceiling_usd:
+  per_run: 5.00
+  per_team_month: 500.00
+
+# Stages treated as PHI-adjacent for phi_eligible enforcement. Omit to use the
+# default (architect, codegen, review_scan).
+phi_stages:
+  - architect
+  - codegen
+  - review_scan
