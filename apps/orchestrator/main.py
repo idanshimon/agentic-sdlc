@@ -493,6 +493,16 @@ async def create_run(
                 raise HTTPException(400, f"stage_providers[{stage_key!r}] must be an object")
             overrides[stage_key] = {k: v for k, v in val.items() if k in ("provider", "model", "via_apim")}
 
+    # Configuration plane (Phase 1): resolve team_id against the org model. Once a
+    # customer has authored org.yaml, an unknown team is refused rather than
+    # written as an anonymous ledger entry (openspec: add-configuration-plane).
+    # With no org.yaml loaded (bootstrap/demo), resolution is permissive.
+    from .org_model import ORG_MODEL, UnknownTeamError
+    try:
+        ORG_MODEL.resolve_team(team_id)
+    except UnknownTeamError as exc:
+        raise HTTPException(422, str(exc))
+
     run = RunState(
         team_id=team_id, prd_blob_url=f"inline://{prd.filename}", mode=run_mode,
         stage_provider_overrides=overrides,

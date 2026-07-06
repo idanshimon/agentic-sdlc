@@ -1,0 +1,46 @@
+# Organization model — configuration plane (Phase 1, identity spine)
+#
+# NEUTRAL demo-zero topology. Swap in a real customer's department + team
+# structure at engagement time. Every ledger entry attributes to a team defined
+# here (cost_center + m365_group), so the compliance acceptance query returns
+# non-null actors and costs.
+#
+# openspec: add-configuration-plane / Requirement "COE-authored organization model"
+
+identity:
+  entra_tenant_id: "00000000-0000-0000-0000-000000000000"  # neutral placeholder
+  approver_rbac:
+    resolver_gate_approve: ["role:engineering-lead", "role:security-reviewer"]
+    standards_change_merge: ["role:department-owner", "role:security-lead", "role:privacy-dpo"]
+
+departments:
+  - id: clinical-platform
+    name: Clinical Platform Engineering
+    owner: "engineering-lead@contoso-health.example"
+    reviewer_roster:
+      security: "security-reviewer@contoso-health.example"
+      privacy: "privacy-dpo@contoso-health.example"
+      architecture: "principal-architect@contoso-health.example"
+  - id: data-platform
+    name: Data & Interoperability Platform
+    owner: "data-lead@contoso-health.example"
+    reviewer_roster:
+      security: "security-reviewer@contoso-health.example"
+      privacy: "privacy-dpo@contoso-health.example"
+
+teams:
+  - id: cardiology
+    name: Cardiology Engineering
+    department: clinical-platform
+    cost_center: "CC-4200-CARD"
+    m365_group: "grp-cardiology-eng@contoso-health.example"
+  - id: interop
+    name: Interoperability & FHIR
+    department: data-platform
+    cost_center: "CC-4310-INTEROP"
+    m365_group: "grp-interop@contoso-health.example"
+  - id: platform-core
+    name: Platform Core Services
+    department: data-platform
+    cost_center: "CC-4000-CORE"
+    m365_group: "grp-platform-core@contoso-health.example"
