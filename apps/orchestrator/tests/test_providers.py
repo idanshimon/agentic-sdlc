@@ -243,7 +243,7 @@ def test_via_apim_flag_routes_through_apim_url(monkeypatch):
 # --- 8. Stub fallback when provider raises -----------------------------------
 
 def test_stub_fallback_on_provider_error():
-    from apps.orchestrator import stages
+    from apps.orchestrator import _pipeline_stages as ps
     from apps.orchestrator.models import RunState
 
     class BoomProvider:
@@ -253,8 +253,11 @@ def test_stub_fallback_on_provider_error():
             raise RuntimeError("backend down")
 
     run = RunState(team_id="t")
-    with patch("apps.orchestrator.stages.get_provider_for_stage", return_value=BoomProvider()):
-        res = _run(stages._call(
+    # Post-refactor: _call and get_provider_for_stage both live in
+    # _pipeline_stages (the latter imported there from config.py). Patch the
+    # provider getter at that lookup site and invoke _call from the same module.
+    with patch("apps.orchestrator._pipeline_stages.get_provider_for_stage", return_value=BoomProvider()):
+        res = _run(ps._call(
             run=run, stage_key="assessor", agent_name="assessor",
             system_prompt="s", user_prompt="hello world",
         ))
