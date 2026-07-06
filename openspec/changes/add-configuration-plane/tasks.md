@@ -21,7 +21,7 @@
 - [x] Neutral demo-zero `autonomy.yaml.example`
 - [x] Opt-in activation (AUTONOMY_PATH / deploy-location; template not auto-loaded)
 - [x] 11 tests incl. opt-in guarantee + matrix-overrides-autopilot integration
-- [ ] Stamp the autonomy rule ref onto the autopilot ledger entry (follow-up)
+- [x] Stamp the autonomy rule ref onto the autopilot ledger entry (follow-up)
 
 ## Phase 3 — standards authorable (extends add-standards-bundles)  ⬜ PENDING
 - [ ] Add `blast_class` + `phi_locked` to rule schema
