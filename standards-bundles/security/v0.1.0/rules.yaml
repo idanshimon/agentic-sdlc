@@ -9,6 +9,8 @@ rules:
   - id: PHI-001
     title: Patient identifiers may not appear in cleartext logs
     phi: true
+    phi_locked: true
+    blast_class: high
     enforcement:
       pipeline_stages: [codegen, review-scan]
       ide_hooks: [pre-tool-use, post-tool-use]
@@ -24,6 +26,8 @@ rules:
   - id: PHI-002
     title: PHI in transit must be TLS 1.2+
     phi: true
+    phi_locked: true
+    blast_class: high
     enforcement:
       pipeline_stages: [architect, review-scan]
     severity: BLOCK
@@ -32,6 +36,8 @@ rules:
   - id: PHI-003
     title: PHI at rest must be encrypted with customer-managed keys
     phi: true
+    phi_locked: true
+    blast_class: high
     enforcement:
       pipeline_stages: [architect, review-scan]
     severity: BLOCK
@@ -40,6 +46,8 @@ rules:
   - id: PHI-004
     title: De-identification before analytics export
     phi: true
+    phi_locked: true
+    blast_class: high
     enforcement:
       pipeline_stages: [architect, codegen]
     severity: BLOCK
@@ -48,6 +56,8 @@ rules:
   - id: PHI-005
     title: Audit log retention 7 years for PHI access events
     phi: true
+    phi_locked: true
+    blast_class: high
     enforcement:
       pipeline_stages: [architect]
     severity: BLOCK
@@ -56,6 +66,7 @@ rules:
   - id: SECRET-001
     title: No service-principal secrets in source code
     phi: false
+    blast_class: high
     enforcement:
       pipeline_stages: [review-scan]
       ide_hooks: [pre-tool-use]
@@ -66,6 +77,7 @@ rules:
   - id: SECRET-002
     title: Connection strings must use Managed Identity
     phi: false
+    blast_class: med
     enforcement:
       pipeline_stages: [architect, review-scan]
     severity: BLOCK
@@ -74,6 +86,7 @@ rules:
   - id: SBOM-001
     title: All container images must produce an SBOM at build time
     phi: false
+    blast_class: low
     enforcement:
       pipeline_stages: [review-scan]
     severity: BLOCK
@@ -82,6 +95,8 @@ rules:
   - id: AUTH-001
     title: Authentication policy must be explicitly resolved before codegen
     phi: false
+    phi_locked: true
+    blast_class: high
     enforcement:
       pipeline_stages: [resolver, codegen]
     severity: BLOCK
