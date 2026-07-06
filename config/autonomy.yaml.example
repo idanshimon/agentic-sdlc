@@ -1,0 +1,38 @@
+# Autonomy matrix — configuration plane (Phase 2, the COE's steering wheel)
+#
+# Per (decision_class × team) autonomy policy. This is where a Center-of-
+# Excellence leader expresses "how much do we trust AI, per class, per team" as
+# configuration instead of code.
+#
+# Modes:
+#   gate                        -> always require a human decision
+#   autopilot_always            -> auto-resolve on the recommended option
+#   autopilot_above_threshold   -> auto-resolve only when ledger precedent
+#                                  confidence >= threshold; otherwise gate
+#
+# HARD RULE: phi-classification and auth-policy are invariant — hard-locked to
+# gate. Setting them to any autopilot mode here is REFUSED at load time. The
+# matrix may only tighten other classes to gate; it can never open an invariant.
+#
+# NEUTRAL demo-zero policy. Swap per account at engagement time.
+# openspec: add-configuration-plane / Requirement "autonomy matrix as configuration"
+
+teams:
+  # Default policy applied to every team unless a team overrides a class below.
+  "*":
+    naming-convention: autopilot_always
+    identifier-format: { mode: autopilot_above_threshold, threshold: 0.8 }
+    scope-resolution: gate
+    sla-binding: gate
+    data-retention: gate
+    # phi-classification / auth-policy intentionally omitted — hard-locked to gate.
+
+  # Cardiology has matured its precedent base and trusts more automation.
+  cardiology:
+    sla-binding: { mode: autopilot_above_threshold, threshold: 0.75 }
+    scope-resolution: { mode: autopilot_above_threshold, threshold: 0.9 }
+
+  # Interop stays conservative — everything non-trivial gates to a human.
+  interop:
+    identifier-format: gate
+    naming-convention: autopilot_always
