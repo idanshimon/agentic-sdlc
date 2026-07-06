@@ -43,6 +43,7 @@ from .stages import (
     stage_architect, stage_assessor, stage_codegen, stage_deliver,
     stage_ingest, stage_review_scan, stage_test_plan,
 )
+from ._pipeline_stages import ModelPolicyRefusal
 from .prompt_library import build_catalog_view, get_prompt, UnknownStageError
 from .telemetry import init_telemetry, record_gate_wall_clock, span
 from .telemetry_queries import query_classes, query_cost, query_decisions, query_recent_runs
@@ -319,6 +320,20 @@ async def _drive(run_id: str, prd_text: str) -> None:
             run_id=run_id, stage=Stage.DELIVER, status="completed",
             message=f"decisions.md written: {url}", payload={"decisions_md_url": url},
         ))
+    except ModelPolicyRefusal as refusal:
+        # Phase 4 (add-configuration-plane): a config/models.yaml refusal is a
+        # GOVERNED failure, not a crash — audit it. Write a ledger entry citing
+        # the model-policy rule (autonomy_ref=rule_ref) so the compliance query
+        # can explain WHY the run failed, then fail the run with an honest event.
+        _logger.warning("Model policy refused a stage: %s", refusal)
+        run.status = RunStatus.FAILED
+        await _write_model_refusal_entry(run, refusal)
+        await _push(run_id, StageEvent(
+            run_id=run_id, stage=run.current_stage, status="failed",
+            message=str(refusal),
+            payload={"model_policy_rule": refusal.rule_ref,
+                     "refused_model": refusal.model, "stage": refusal.stage},
+        ))
     except Exception as exc:
         _logger.exception("Pipeline crashed: %s", exc)
         run.status = RunStatus.FAILED
@@ -329,6 +344,31 @@ async def _drive(run_id: str, prd_text: str) -> None:
         if _ledger:
             await _ledger.save_run(run)
         await _push(run_id, None)  # sentinel: stream complete
+
+
+async def _write_model_refusal_entry(run: RunState, refusal: ModelPolicyRefusal) -> None:
+    """Persist a ledger entry for a model-policy refusal, citing the governing
+    rule in `autonomy_ref` (the same queryable audit field the autopilot/gate
+    paths use). Safe no-op when the ledger is disabled (tests / bootstrap)."""
+    if _ledger is None:
+        return
+    try:
+        await _ledger.write_decision(LedgerEntry(
+            team_id=run.team_id, run_id=run.run_id,
+            ambiguity_class="other",
+            resolution_text=(
+                f"model policy refused {refusal.model!r} at stage "
+                f"{refusal.stage!r}: {refusal.reason}"
+            ),
+            decision_kind="reject", created_by="model-policy@config-plane",
+            confidence_source="autopilot",
+            stage=refusal.stage,
+            # cite the governing model-policy rule — the audit answer the
+            # compliance query reads (same field the autonomy paths stamp).
+            autonomy_ref=refusal.rule_ref,
+        ))
+    except Exception as exc:  # pragma: no cover - defensive; never mask the failure
+        _logger.warning("could not write model-refusal ledger entry: %s", exc)
 
 
 async def _open_gate(run: RunState, stage: Stage) -> None:

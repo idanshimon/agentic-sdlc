@@ -32,10 +32,14 @@
 - [x] Stamp `blast_class` + `phi_locked` on shipped security bundle (PHI-* + AUTH-001 locked)
 - [x] 14 tests (11 bundle_rules incl. weaken-refused/strengthen-allowed + 3 pins endpoint)
 
-## Phase 4 — model policy  ⬜ PENDING
-- [ ] Define `config/models.yaml` schema (allowlist/denylist/phi_eligible/routing/ceilings)
-- [ ] Enforce at stage dispatch; refusal path writes ledger entry citing the rule
-- [ ] Opt-in activation (MODELS_PATH / deploy-location) + `models.yaml.example`
+## Phase 4 — model policy  ✅ SHIPPED
+- [x] Define `config/models.yaml` schema (allowlist/denylist/phi_eligible/routing/ceilings)
+      + `phi_stages` — loader `apps/orchestrator/model_policy.py` (opt-in, fail-open permissive)
+- [x] Enforce at stage dispatch (`_pipeline_stages._call` chokepoint); a denied /
+      non-allowlisted model, or a non-phi_eligible model on a PHI-adjacent stage,
+      raises ModelPolicyRefusal → run FAILED + ledger entry citing the rule (autonomy_ref)
+- [x] Opt-in activation (MODELS_PATH / deploy-location) + `models.yaml.example`
+- [x] 21 tests (13 policy + 5 dispatch enforcement + 3 refusal-ledger-audit)
 
 ## Phase 5 — the acceptance query (hero)  ⬜ PENDING
 - [ ] Query endpoint: filter phi_class, date range, actor kind, team

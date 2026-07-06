@@ -16,8 +16,12 @@ into *your* governed instance.
 |---|---|---|---|
 | `org.yaml.example` | Organization model | Departments, teams (cost_center, m365_group), Entra identity, approver RBAC. The identity spine — every ledger entry attributes to a real team. | 1 |
 | `autonomy.yaml.example` | Autonomy matrix | Per (decision_class × team): `gate` / `autopilot_always` / `autopilot_above_threshold(t)`. The COE's steering wheel. PHI + auth-policy are hard-locked to gate. | 2 |
+| `models.yaml.example` | Model policy | `allowlist` / `denylist` / `phi_eligible` / per-stage `routing` / `cost_ceiling_usd` / `phi_stages`. Enforced at stage dispatch — a denied model or a non-cleared model on a PHI-adjacent stage fails the run with a ledger entry citing the rule. | 4 |
 
-Model policy (`models.yaml`) and the unified compliance query land in Phases 4–5.
+Standards bundles (`blast_class` + `phi_locked` per rule) are authored in
+`standards-bundles/<dept>/<version>/` and edited through the governed PR flow
+(`POST /api/config/bundles/save`) — a PHI-lock-weakening edit is refused before
+the PR opens. The unified compliance query (Phase 5) reads across all of these.
 
 ## Activate in 3 steps
 
