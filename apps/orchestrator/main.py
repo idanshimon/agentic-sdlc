@@ -457,14 +457,59 @@ async def save_agent(body: AgentSaveBody) -> dict:
 async def save_bundle(body: BundleSaveBody) -> dict:
     """Edit a standards bundle file → opens a PR. PR-ONLY (no live apply):
     live-editing the compliance standards would bypass committee review, which
-    is the entire governance story. The bundle takes effect only after merge."""
+    is the entire governance story. The bundle takes effect only after merge.
+
+    Phase 3 governance teeth (add-configuration-plane): before opening the PR,
+    a rules.yaml edit to an EXISTING bundle is validated — a diff that would
+    delete, unlock, de-classify, or downgrade a `phi_locked` rule is REFUSED
+    (HTTP 409) before any PR is created. PHI controls can only be strengthened.
+    This mirrors the autonomy invariant hard-lock: even a well-formed edit
+    cannot quietly relax a PHI rule. New bundle versions (no existing file) and
+    non-rules files (envelope/reviewers) skip this check.
+    """
     dept = _safe_seg(body.dept)
     version = _safe_seg(body.version)
     file = _safe_seg(body.file)
+    if file == "rules.yaml":
+        _validate_bundle_rules_edit(dept, version, body.content)
     return await _do_config_save(
         f"standards-bundles/{dept}/{version}/{file}", body,
         labels=["config-edit", "standards-change", f"dept/{dept}"],
     )
+
+
+def _validate_bundle_rules_edit(dept: str, version: str, proposed_content: str) -> None:
+    """Refuse a rules.yaml edit that weakens a phi_locked rule. No-op when the
+    bundle version is new (nothing to protect) or the proposed YAML is malformed
+    (the PR flow / CI surfaces the parse error; we don't 500 the editor here)."""
+    from .bundle_rules import (
+        Bundle,
+        PhiLockViolation,
+        load_bundle,
+        load_bundle_from_text,
+    )
+
+    try:
+        existing = load_bundle(dept, version)
+    except FileNotFoundError:
+        return  # brand-new bundle version — no existing rule to protect
+    except Exception as exc:  # pragma: no cover - defensive
+        _logger.warning("bundle-edit validation: could not load existing %s/%s: %s",
+                        dept, version, exc)
+        return
+    try:
+        proposed = load_bundle_from_text(proposed_content)
+    except Exception as exc:
+        # Malformed proposed YAML — let the PR/CI catch it rather than block here,
+        # UNLESS it drops PHI rules by being unparseable. Treat as empty to be safe.
+        _logger.info("bundle-edit validation: proposed YAML unparseable (%s); "
+                     "treating as rule-less for lock check", exc)
+        proposed = Bundle(dept=dept, version=version)
+    try:
+        from .bundle_rules import validate_bundle_edit
+        validate_bundle_edit(existing, proposed)
+    except PhiLockViolation as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.post("/api/config/prompts/save")
@@ -485,6 +530,19 @@ async def save_prompt(body: PromptSaveBody) -> dict:
     return await _do_config_save(
         rel, body, labels=["config-edit", "prompt", f"stage/{stage}"],
     )
+
+
+@app.get("/api/config/pins")
+async def get_pins() -> dict:
+    """Bundle-version pin matrix for the config UI (Phase 3, config-plane).
+
+    Returns {defaults, teams, available} from standards-bundles/PINS.yaml plus
+    the on-disk bundle versions per department, so the UI can render the
+    team→version matrix and offer a valid pin dropdown. Read-only — changing a
+    pin goes through the governed bundles PR flow, same as any standards change.
+    """
+    from .pins import read_pins
+    return read_pins()
 
 
 @app.post("/api/config/reload")

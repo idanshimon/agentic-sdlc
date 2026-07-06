@@ -23,10 +23,14 @@
 - [x] 11 tests incl. opt-in guarantee + matrix-overrides-autopilot integration
 - [x] Stamp the autonomy rule ref onto the autopilot ledger entry (follow-up)
 
-## Phase 3 — standards authorable (extends add-standards-bundles)  ⬜ PENDING
-- [ ] Add `blast_class` + `phi_locked` to rule schema
-- [ ] Wire bundle editor → governed PR write-back (reuse config-editing-plane)
-- [ ] PINS.yaml selection surfaced in config UI
+## Phase 3 — standards authorable (extends add-standards-bundles)  ✅ SHIPPED
+- [x] Add `blast_class` + `phi_locked` to rule schema (`apps/orchestrator/bundle_rules.py`)
+- [x] Wire bundle editor → governed PR write-back (reuse config-editing-plane) + PHI-lock
+      validation: a rules.yaml edit that deletes/unlocks/de-classifies/downgrades a
+      phi_locked rule is refused HTTP 409 before the PR opens (the governance teeth)
+- [x] PINS.yaml selection surfaced in config UI (`GET /api/config/pins`, `pins.py`)
+- [x] Stamp `blast_class` + `phi_locked` on shipped security bundle (PHI-* + AUTH-001 locked)
+- [x] 14 tests (11 bundle_rules incl. weaken-refused/strengthen-allowed + 3 pins endpoint)
 
 ## Phase 4 — model policy  ⬜ PENDING
 - [ ] Define `config/models.yaml` schema (allowlist/denylist/phi_eligible/routing/ceilings)

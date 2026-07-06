@@ -36,12 +36,38 @@ def test_save_agent_dry_run_opens_no_pr_but_validates():
 
 
 def test_save_bundle_dry_run_path():
+    # Path-construction test: point at a NEW (non-existent) bundle version so
+    # there is no existing rules.yaml to protect — governance validation is
+    # skipped for a brand-new bundle, leaving this a pure routing/path check.
     r = client.post("/api/config/bundles/save", json={
-        "dept": "security", "version": "v0.1.0", "file": "rules.yaml",
-        "content": "rules: []\n", "commit_message": "relax rule X",
+        "dept": "security", "version": "v9.9.9", "file": "rules.yaml",
+        "content": "rules: []\n", "commit_message": "seed new bundle version",
     })
     assert r.status_code == 200, r.text
-    assert r.json()["path"] == "standards-bundles/security/v0.1.0/rules.yaml"
+    assert r.json()["path"] == "standards-bundles/security/v9.9.9/rules.yaml"
+
+
+def test_save_bundle_weakening_phi_rule_is_refused():
+    """Governance teeth: an edit to an EXISTING bundle that deletes/unlocks a
+    phi_locked rule is refused (HTTP 409) BEFORE any PR is opened — even in
+    dry-run. `rules: []` wipes the shipped PHI-001..PHI-005 locked rules."""
+    r = client.post("/api/config/bundles/save", json={
+        "dept": "security", "version": "v0.1.0", "file": "rules.yaml",
+        "content": "rules: []\n", "commit_message": "relax PHI rules",
+    })
+    assert r.status_code == 409, r.text
+    assert "PHI" in r.text  # cites the offending locked rule
+
+
+def test_save_bundle_non_rules_file_skips_lock_validation():
+    """envelope.yaml / reviewers.yaml carry no rules — lock validation is
+    scoped to rules.yaml, so these still route normally."""
+    r = client.post("/api/config/bundles/save", json={
+        "dept": "security", "version": "v0.1.0", "file": "envelope.yaml",
+        "content": "allowed_auto_fixes: []\n", "commit_message": "tune envelope",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["path"] == "standards-bundles/security/v0.1.0/envelope.yaml"
 
 
 def test_save_prompt_global_path():
