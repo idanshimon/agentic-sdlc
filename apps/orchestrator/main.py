@@ -150,24 +150,68 @@ async def _run_autopilot(run: RunState) -> None:
     """
     if run.mode not in (RunMode.AUTOPILOT, RunMode.HYBRID):
         return
+    from .autonomy import AUTONOMY_MATRIX, autonomy_ref
     for card in run.cards:
         if not card.is_gating:
             continue
         if card.card_id in run.autopilot_decisions or card.card_id in run.autopilot_overrides:
             continue
-        # Invariant override — always gates.
+        # Invariant override — always gates. (Belt: the matrix also returns
+        # 'gate' for invariants, but this stays as the primary hard-lock so the
+        # guarantee holds even if autonomy config is absent or bypassed.)
         if card.ambiguity_class in INVARIANT_CLASSES:
             run.autopilot_overrides.append(card.card_id)
             continue
-        # HYBRID: gate when no precedent exists.
-        if run.mode == RunMode.HYBRID:
-            if _ledger is None:
-                continue  # no ledger → can't verify precedent → gate
-            precedent = await _ledger.find_precedent(
-                run.team_id, card.ambiguity_class, card.slot_value_hash,
-            )
-            if not precedent:
+
+        # Phase 2 — autonomy matrix (config-plane). When authored, it decides
+        # per (team, class) whether to gate / autopilot-always / autopilot-above-
+        # threshold, overriding the mode-driven default below. When unloaded,
+        # rule is None and we preserve the exact pre-Phase-2 behaviour. We also
+        # capture WHY (autonomy_ref) so the decision records why it was
+        # autopiloted vs gated — the audit answer the compliance query reads.
+        rule = AUTONOMY_MATRIX.rule_for(run.team_id, card.ambiguity_class)
+        decision_ref = ""
+        if rule is not None:
+            if rule.mode == "gate":
+                run.autopilot_overrides.append(card.card_id)
                 continue
+            if rule.mode == "autopilot_above_threshold":
+                # Gate unless ledger precedent meets the configured confidence.
+                if _ledger is None:
+                    run.autopilot_overrides.append(card.card_id)
+                    continue
+                precedent = await _ledger.find_precedent(
+                    run.team_id, card.ambiguity_class, card.slot_value_hash,
+                )
+                score = getattr(precedent, "accuracy_score", 0.0) if precedent else 0.0
+                if not precedent or score < rule.threshold:
+                    run.autopilot_overrides.append(card.card_id)
+                    continue
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class,
+                    reason=f"precedent{score:g}>=t{rule.threshold:g}",
+                )
+            else:  # autopilot_always
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="autopilot-always",
+                )
+        else:
+            # HYBRID: gate when no precedent exists (legacy mode-driven path).
+            if run.mode == RunMode.HYBRID:
+                if _ledger is None:
+                    continue  # no ledger → can't verify precedent → gate
+                precedent = await _ledger.find_precedent(
+                    run.team_id, card.ambiguity_class, card.slot_value_hash,
+                )
+                if not precedent:
+                    continue
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="hybrid-precedent",
+                )
+            else:  # pure AUTOPILOT mode, no matrix rule
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="autopilot-mode",
+                )
         # Pick the recommended option (or first option if none flagged).
         if not card.options:
             run.autopilot_overrides.append(card.card_id)
@@ -199,6 +243,10 @@ async def _run_autopilot(run: RunState) -> None:
                 # govern this decision. Makes the agent→bundle relationship a
                 # queryable fact on the decision, not display-only card metadata.
                 bundle_refs=bundles_for_stage("assessor"),
+                # Config-plane Phase 2: WHY this card was auto-resolved (the
+                # autonomy rule + reason), so the decision is self-explaining in
+                # the compliance query. Computed per-branch above.
+                autonomy_ref=decision_ref,
                 # Phase 2.6: pin the prompt chain that produced this
                 # auto-decision. Cards come out of the assessor stage,
                 # so the assessor's chain is the right one to capture.
@@ -952,6 +1000,14 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
     if decision.card_id and _ledger:
         card = next((c for c in run.cards if c.card_id == decision.card_id), None)
         if card:
+            from .autonomy import autonomy_ref as _autonomy_ref
+            # Config-plane Phase 2: a human decided this card because its class
+            # was gated (invariant hard-lock, matrix `gate`, or bootstrap default).
+            # Record WHY it required a human — the same audit field the autopilot
+            # path stamps, so every decision explains its gate/autopilot origin.
+            gate_ref = _autonomy_ref(
+                run.team_id, card.ambiguity_class, reason="human-gate",
+            )
             entry = LedgerEntry(
                 team_id=run.team_id, run_id=run.run_id, card_id=card.card_id,
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
@@ -961,6 +1017,7 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
                 # the assessor, so stamp the assessor agent's bundle subscriptions
                 # so a human decision is governed-attributed to the same bundles.
                 bundle_refs=bundles_for_stage("assessor"),
+                autonomy_ref=gate_ref,
                 # Phase 2.6: same as the autopilot path — the assessor's
                 # resolved prompt chain is the audit trail for which prompt
                 # produced the ambiguity card the operator just decided on.
@@ -1331,11 +1388,17 @@ async def reject(run_id: str, decision: GateDecision) -> dict:
     if decision.card_id and _ledger:
         card = next((c for c in run.cards if c.card_id == decision.card_id), None)
         if card:
+            from .autonomy import autonomy_ref as _autonomy_ref
             await _ledger.write_decision(LedgerEntry(
                 team_id=run.team_id, run_id=run.run_id, card_id=card.card_id,
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
                 resolution_text=decision.resolution_text or "(reject)",
                 decision_kind="reject", created_by=decision.actor,
+                # Config-plane Phase 2: a reject is still a human gate decision —
+                # record WHY the card required a human (same audit field).
+                autonomy_ref=_autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="human-gate-reject",
+                ),
             ))
     _release_gate(run_id)
     return {"ok": True}

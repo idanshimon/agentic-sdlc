@@ -79,3 +79,29 @@ actor kind, and team, across all decision-producing surfaces.
   future connector)
 - **THEN** the same query returns rows from all surfaces without a surface-specific
   code path
+
+### Requirement: configuration objects are opt-in, never silently auto-loaded
+The system SHALL treat every configuration object as opt-in. The repository SHALL
+ship each object only as a non-activating template (`<name>.yaml.example`), and a
+deploy with no explicit activation SHALL remain in bootstrap behaviour identical
+to the pre-configuration system. Activation SHALL require either an explicit path
+env var (e.g. `ORG_MODEL_PATH`, `AUTONOMY_PATH`) or a file placed at a documented
+deploy location; the repository template directory SHALL NOT be auto-discovered.
+
+#### Scenario: fresh deploy stays in bootstrap
+- **WHEN** the image is deployed with no activation env var and no deploy-location
+  config file
+- **THEN** the org model resolves any team permissively and the autonomy matrix is
+  mode-driven — behaviour is identical to the pre-configuration system, and the
+  shipped template does not change any decision
+
+#### Scenario: activation is explicit
+- **WHEN** an operator sets `AUTONOMY_PATH` (or drops `/app/autonomy.yaml`)
+- **THEN** the matrix loads from that path and drives gating; without it, the repo
+  `config/*.yaml.example` template is never loaded
+
+#### Scenario: activated customer config never lands in the reference repo
+- **WHEN** an operator copies a template to its activating filename
+  (`config/org.yaml`, `config/autonomy.yaml`, `config/models.yaml`)
+- **THEN** that file is git-ignored so a customer's real topology cannot be
+  committed to the reference repository

@@ -74,8 +74,8 @@ def test_bootstrap_mode_is_permissive_when_no_file(tmp_path):
 
 def test_shipped_neutral_config_parses():
     repo_root = Path(__file__).resolve().parents[3]
-    org_path = repo_root / "config" / "org.yaml"
-    assert org_path.exists(), f"expected shipped neutral org.yaml at {org_path}"
+    org_path = repo_root / "config" / "org.yaml.example"
+    assert org_path.exists(), f"expected shipped neutral template at {org_path}"
     model = om.load_org_model(str(org_path))
     assert model.loaded is True
     # the three demo teams from the neutral topology

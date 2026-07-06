@@ -80,6 +80,46 @@ class AutonomyMatrix:
         return self.rules.get(("*", decision_class))
 
 
+def autonomy_ref(
+    team_id: str,
+    decision_class: str,
+    *,
+    matrix: "Optional[AutonomyMatrix]" = None,
+    loaded_source: str = "matrix",
+    reason: str = "",
+) -> str:
+    """Render a stable, queryable citation for WHY a decision was autopiloted or
+    gated — the audit answer the Phase 5 compliance query reads.
+
+    Shape: ``autonomy/<source>/<scope>/<class>/<mode>[@t=<threshold>]:<reason>``
+      - source: "matrix" (config-plane rule) or "mode" (bootstrap/legacy default)
+      - scope:  the team_id whose rule matched, "*" for the default row, or
+                "invariant" for the hard-lock, or "bootstrap" when no matrix
+      - mode:   gate | autopilot_always | autopilot_above_threshold
+      - reason: short machine tag (e.g. "precedent>=0.8", "no-precedent",
+                "phi-hard-lock", "autopilot-mode")
+
+    Deterministic and grep-able so it can be filtered in the ledger query. Never
+    free text alone — the structured prefix is the contract.
+    """
+    m = matrix if matrix is not None else AUTONOMY_MATRIX
+    if decision_class in _INVARIANT_CLASSES:
+        return f"autonomy/invariant/{decision_class}/gate:phi-auth-hard-lock"
+    rule = m.rule_for(team_id, decision_class) if m is not None else None
+    if rule is None:
+        # bootstrap / mode-driven — no matrix rule governed this
+        tag = reason or "mode-driven"
+        return f"autonomy/mode/bootstrap/{decision_class}/{'gate'}:{tag}"
+    # Which scope matched: exact team row or the "*" default.
+    scope = team_id if (team_id, decision_class) in m.rules else "*"
+    base = f"autonomy/{loaded_source}/{scope}/{decision_class}/{rule.mode}"
+    if rule.mode == "autopilot_above_threshold":
+        base += f"@t={rule.threshold:g}"
+    if reason:
+        base += f":{reason}"
+    return base
+
+
 def _candidate_paths() -> list[Path]:
     """Activation is OPT-IN. The shipped config/autonomy.yaml is a TEMPLATE and is
     deliberately NOT auto-discovered — a fresh deploy stays in bootstrap
