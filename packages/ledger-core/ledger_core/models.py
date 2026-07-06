@@ -115,6 +115,10 @@ class LedgerEntry(BaseModel):
     bundle_refs: List[str] = Field(default_factory=list)  # ["security/v0.1.0/PHI-001", ...]
     precedent_refs: List[str] = Field(default_factory=list)  # prior ledger entry IDs
     phi_class: PHIClass = "none"
+    # config-plane (add-configuration-plane Phase 2): structured citation for the
+    # autonomy rule that governed this decision — WHY autopilot vs gate. Read by
+    # the Phase 5 compliance query. Empty on pre-Phase-2 / non-decision entries.
+    autonomy_ref: str = ""
 
     # GitHub audit log cross-reference (set on Agent-HQ-driven entries)
     agent_session_id: Optional[str] = None

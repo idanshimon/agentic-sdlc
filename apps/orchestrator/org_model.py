@@ -82,12 +82,19 @@ class OrgModel:
 
 
 def _candidate_paths() -> list[Path]:
+    """Activation is OPT-IN. The shipped config/org.yaml is a TEMPLATE and is
+    deliberately NOT auto-discovered — a fresh deploy stays in bootstrap
+    (permissive) mode until an operator explicitly activates the org model by
+    either setting ORG_MODEL_PATH or dropping a file at a deploy location
+    (/app/org.yaml or ./org.yaml). This prevents the repo template from silently
+    changing behaviour the moment the image ships. See config/README.md."""
     env_path = os.getenv("ORG_MODEL_PATH")
     paths: list[Path] = []
     if env_path:
         paths.append(Path(env_path))
-    paths.extend([Path("/app/org.yaml"), Path("org.yaml"),
-                  Path(__file__).resolve().parent.parent.parent / "config" / "org.yaml"])
+    # Deploy locations an operator opts into by placing a file there. The repo
+    # config/ template dir is intentionally excluded from auto-discovery.
+    paths.extend([Path("/app/org.yaml"), Path("org.yaml")])
     return paths
 
 

@@ -31,6 +31,16 @@ when an account's platform team already runs strong Azure-native governance.
 Config objects live in the CUSTOMER's repo and are edited via governed PRs
 (reuses the shipped config-editing-plane write-back), never live-mutated.
 
+Activation posture (decided 2026-07-06): config objects are **opt-in, never
+auto-loaded**. The repo ships each object as a `<name>.yaml.example` TEMPLATE
+that is NOT auto-discovered. A fresh deploy stays in bootstrap mode (permissive
+org / mode-driven autonomy — i.e. exact pre-configuration behaviour) until an
+operator activates a config object via `ORG_MODEL_PATH` / `AUTONOMY_PATH` env or
+a deploy-location file (`/app/<name>.yaml`). Real (activated) config filenames
+are git-ignored so a customer's topology never lands in the reference repo. This
+prevents the shipped neutral template from silently changing behaviour on deploy.
+Onboarding guide: `config/README.md`.
+
 ## What changes
 
 ### #1 — Organization model (`config/org.yaml`)
