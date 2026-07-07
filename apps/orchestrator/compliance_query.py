@@ -154,6 +154,25 @@ def completeness_summary(rows: list[dict]) -> dict:
     }
 
 
+def _build_compliance_cosmos_query(
+    clauses: list[str], *, limit: int, single_partition: bool,
+) -> str:
+    """Build the SELECT for the compliance read.
+
+    ORDER BY is emitted ONLY for a single-partition read (team_id supplied).
+    Cross-partition ORDER BY in Cosmos requires a composite index that isn't
+    guaranteed here and can throw at query time — the rest of this codebase
+    (query_recent_runs / query_decisions) omits it and sorts client-side, and so
+    do we. build_compliance_rows() always re-sorts newest-first, so correctness
+    holds either way; the DB-side ORDER BY is just an optimization that makes
+    `TOP N` return the most-recent N when it's safe to ask for it.
+    """
+    base = f"SELECT TOP {limit} * FROM c WHERE {' AND '.join(clauses)}"
+    if single_partition:
+        return base + " ORDER BY c.created_at DESC"
+    return base
+
+
 async def query_compliance(
     ledger: Any,
     *,
@@ -186,15 +205,11 @@ async def query_compliance(
     if until_iso:
         clauses.append("c.created_at<=@u")
         params.append({"name": "@u", "value": until_iso})
-    # ORDER BY created_at DESC so TOP N returns the MOST RECENT N decisions, not
-    # an arbitrary subset (Copilot review compliance_query.py:162). Without it,
-    # Cosmos gives no ordering guarantee and a capped 30d window could silently
-    # drop the newest rows. build_compliance_rows re-sorts as a safety net, but
-    # the DB-side ordering is what makes `limit` correct. Single-partition reads
-    # (team_id given) order cheaply; cross-partition uses the created_at index.
-    query = (
-        f"SELECT TOP {limit} * FROM c WHERE {' AND '.join(clauses)} "
-        f"ORDER BY c.created_at DESC"
+    # ORDER BY only when single-partition (team_id given); a cross-partition
+    # ORDER BY needs a composite index and can throw. build_compliance_rows
+    # re-sorts newest-first regardless, so `limit` stays correct either way.
+    query = _build_compliance_cosmos_query(
+        clauses, limit=limit, single_partition=bool(team_id),
     )
 
     entries: list[dict] = []
