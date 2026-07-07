@@ -1,7 +1,7 @@
 # Tasks — add-configuration-plane
 
 > Order feeds the acceptance query — identity + policy rows must exist before the
-> query returns complete cross-surface results. Phases 1–2 shipped; 3–5 pending.
+> query returns complete cross-surface results. **All five phases shipped.**
 > All config objects are OPT-IN (template `<name>.yaml.example`, activated via
 > env/deploy-location, never auto-loaded). See `config/README.md`.
 
@@ -41,15 +41,23 @@
 - [x] Opt-in activation (MODELS_PATH / deploy-location) + `models.yaml.example`
 - [x] 21 tests (13 policy + 5 dispatch enforcement + 3 refusal-ledger-audit)
 
-## Phase 5 — the acceptance query (hero)  ⬜ PENDING
-- [ ] Query endpoint: filter phi_class, date range, actor kind, team
-- [ ] Returns what + why + rule version + actor + model + cost per row
-- [ ] Cross-surface-capable read path (no surface-specific branches)
-- [ ] Compliance UI over the endpoint
-- [ ] ACCEPTANCE TEST: phi_class=high / 30d returns complete non-null rows
+## Phase 5 — the acceptance query (hero)  ✅ SHIPPED
+- [x] Query endpoint: filter phi_class, date range, actor kind, team
+      (`GET /api/compliance/decisions`, `apps/orchestrator/compliance_query.py`)
+- [x] Returns what + why + rule version + actor + model + cost per row
+- [x] Cross-surface-capable read path (one ledger container, no surface-specific branch)
+- [x] Compliance UI over the endpoint (`apps/ledger-insights-ui/src/app/compliance/page.tsx`,
+      URL-state filters + completeness banner + attributed-decision table; TS build clean)
+- [x] ACCEPTANCE TEST: phi_class=high / 30d returns complete non-null rows
+      (`test_compliance_query.py::test_acceptance_phi_high_30d_returns_complete_nonnull_rows`)
+- [x] 10 tests (8 pure query/builder incl. acceptance + 2 endpoint)
 
 ## Cross-cutting
 - [x] Neutrality scrub on shipped config templates (no customer names)
 - [x] Tests per phase before commit (Phases 1–2)
 - [x] Opt-in onboarding guide (`config/README.md`)
-- [ ] Honest-disclaimer pass: connectors beyond pipeline are Tier 2
+- [x] Honest-disclaimer pass: connectors beyond pipeline are Tier 2 — the
+      compliance query is cross-surface-CAPABLE (single ledger container, no
+      surface branch) and demo-proves completeness on pipeline + autopilot +
+      human-gate + model-refusal entries; IDE/coding-agent connector rows
+      backfill when those surfaces land (Tier 2, per proposal scope discipline).

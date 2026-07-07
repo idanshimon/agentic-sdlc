@@ -23,6 +23,7 @@ export type AssistContextKind =
   | "prompts-list"
   | "prompt-edit"
   | "phi-classifier"
+  | "compliance"
   | "reports";
 
 export interface AssistContext {
