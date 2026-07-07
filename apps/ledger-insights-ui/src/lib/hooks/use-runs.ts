@@ -125,3 +125,19 @@ export function usePromptLibrary() {
     staleTime: 60_000,
   });
 }
+
+/**
+ * Phase 5 (add-configuration-plane) — the unified compliance query hook.
+ * Filters are part of the query key so a URL-state change refetches. Returns
+ * fully-attributed decision rows (WHAT + WHY + WHO + model + cost) plus a
+ * completeness summary the page banner asserts on.
+ */
+export function useCompliance(filters?: {
+  phi_class?: string; actor_kind?: string; team_id?: string; window?: string;
+}) {
+  return useQuery({
+    queryKey: ["compliance", filters],
+    queryFn: () => orchestrator.compliance(filters),
+    refetchInterval: 15_000,
+  });
+}
