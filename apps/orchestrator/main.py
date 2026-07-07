@@ -47,7 +47,6 @@ from ._pipeline_stages import ModelPolicyRefusal
 from .prompt_library import build_catalog_view, get_prompt, UnknownStageError
 from .telemetry import init_telemetry, record_gate_wall_clock, span
 from .telemetry_queries import query_classes, query_cost, query_decisions, query_recent_runs
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 _logger = logging.getLogger("orchestrator.main")
 
@@ -1574,6 +1573,54 @@ async def telemetry_classes(window: str = "7d", team_id: str | None = None) -> d
     if _ledger is None:
         return {"window": window, "total_decisions": 0, "classes": []}
     return await query_classes(_ledger, window=window, team_id=team_id)
+
+
+# ---------- compliance query (THE acceptance query, config-plane Phase 5) ------
+@app.get("/api/compliance/decisions")
+async def compliance_decisions(
+    phi_class: str | None = None,
+    actor_kind: str | None = None,
+    team_id: str | None = None,
+    window: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    limit: int = 500,
+) -> dict:
+    """Unified compliance query (add-configuration-plane Phase 5 — the hero).
+
+    Returns, per AI decision: WHAT was decided, WHY (governing autonomy rule +
+    bundle rule VERSION), WHO (human UPN or agent principal), which MODEL, and
+    the COST — filterable by phi_class, date range, actor kind, and team, across
+    every decision-producing surface (one ledger container, no surface-specific
+    branch). This is the capability's acceptance test:
+
+        phi_class=high&window=30d  ->  complete, non-null rows.
+
+    `window` (24h|7d|30d) is a shortcut that resolves to `since`; an explicit
+    `since`/`until` (ISO) overrides it. Best-effort: empty payload on Cosmos
+    error, never a 500.
+    """
+    from .compliance_query import completeness_summary, query_compliance
+    from .telemetry_queries import parse_window
+
+    since_iso = since
+    if since_iso is None and window:
+        from datetime import datetime, timezone
+        since_iso = (datetime.now(timezone.utc) - parse_window(window)).isoformat()
+
+    if _ledger is None:
+        return {
+            "rows": [],
+            "summary": completeness_summary([]),
+            "filters": {
+                "phi_class": phi_class, "since": since_iso, "until": until,
+                "actor_kind": actor_kind, "team_id": team_id,
+            },
+        }
+    return await query_compliance(
+        _ledger, phi_class=phi_class, since_iso=since_iso, until_iso=until,
+        actor_kind=actor_kind, team_id=team_id, limit=limit,
+    )
 
 
 # ---------- runs index endpoint ----------------------------------------------
