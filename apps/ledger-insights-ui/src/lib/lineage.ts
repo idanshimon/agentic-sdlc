@@ -210,3 +210,88 @@ export function lineageBadge(info: LineageInfo): { label: string; tone: string; 
       return null;
   }
 }
+
+/**
+ * A "teaching bucket" — one ambiguity slot a human taught the pipeline, plus
+ * the autopilot reuses that teaching earned. This is the row shape the
+ * /autonomy page renders so an operator can see WHAT was learned, not just a
+ * headline percentage: the class, who taught it, the resolution they set, and
+ * how many later runs the agent auto-resolved from it.
+ */
+export interface AutonomyBucket {
+  slotKey: string;
+  ambiguityClass: string;
+  /** UPN / id of the human whose swap became precedent. */
+  taughtBy: string;
+  /** The resolution text the human set (what the agent now reuses). */
+  resolutionText: string;
+  /** ISO timestamp of the teaching swap. */
+  taughtAt: string;
+  /** How many later autopilot decisions reused this precedent. */
+  reuseCount: number;
+  /** ISO timestamp of the most recent reuse (or the swap if none). */
+  lastUsedAt: string;
+  /** active = taught AND reused; dormant = taught, not yet reused; flagged = a signal killed it. */
+  status: "active" | "dormant" | "flagged";
+  /** Number of teaching signals (flags) pointing at this bucket's decisions. */
+  flagCount: number;
+}
+
+/**
+ * Reduce a flat entries list to the per-bucket teaching detail, most-reused
+ * first. Only buckets that contain a human swap (a real teaching event) are
+ * returned — an autopilot-only bucket taught nothing. Pure + O(n).
+ */
+export function buildAutonomyBuckets(entries: LedgerEntry[]): AutonomyBucket[] {
+  const stage = entries.filter(isStageDecision);
+  const signals = entries.filter(isTeachingSignal);
+
+  // Flags per bucket (via the decision they reference).
+  const idToSlot = new Map<string, string>();
+  for (const e of stage) if (e.slot_value_hash) idToSlot.set(e.id, e.slot_value_hash);
+  const flagsBySlot = new Map<string, number>();
+  for (const s of signals) {
+    const slot = s.references_entry_id ? idToSlot.get(s.references_entry_id) : undefined;
+    if (slot) flagsBySlot.set(slot, (flagsBySlot.get(slot) ?? 0) + 1);
+  }
+
+  const byBucket = new Map<string, LedgerEntry[]>();
+  for (const e of stage) {
+    if (!e.slot_value_hash) continue;
+    const arr = byBucket.get(e.slot_value_hash) ?? [];
+    arr.push(e);
+    byBucket.set(e.slot_value_hash, arr);
+  }
+
+  const out: AutonomyBucket[] = [];
+  for (const [slotKey, arr] of byBucket) {
+    const swap = arr.find(isHumanSwap);
+    if (!swap) continue; // no human teaching in this bucket → skip
+
+    const reuses = arr.filter(isAutopilot);
+    const reuseCount = reuses.length;
+    const flagCount = flagsBySlot.get(slotKey) ?? 0;
+    const lastUsedAt = reuses.reduce(
+      (max, r) => (r.created_at > max ? r.created_at : max),
+      swap.created_at,
+    );
+    const status: AutonomyBucket["status"] =
+      flagCount > 0 ? "flagged" : reuseCount > 0 ? "active" : "dormant";
+
+    out.push({
+      slotKey,
+      ambiguityClass: swap.ambiguity_class ?? "other",
+      taughtBy: swap.actor?.id ?? "unknown",
+      resolutionText: swap.decision ?? swap.rationale ?? "(no resolution text)",
+      taughtAt: swap.created_at,
+      reuseCount,
+      lastUsedAt,
+      status,
+      flagCount,
+    });
+  }
+
+  // Most-reused first; ties broken by most-recent teaching.
+  out.sort((a, b) => b.reuseCount - a.reuseCount || (a.taughtAt < b.taughtAt ? 1 : -1));
+  return out;
+}

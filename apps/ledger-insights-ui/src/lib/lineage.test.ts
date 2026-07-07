@@ -6,7 +6,7 @@
  * autonomy-earned metric reflects the loop closing.
  */
 import { describe, it, expect } from "vitest";
-import { buildLineageIndex, isHumanSwap, isAutopilot, lineageBadge } from "./lineage";
+import { buildLineageIndex, isHumanSwap, isAutopilot, lineageBadge, buildAutonomyBuckets } from "./lineage";
 import type { LedgerEntry } from "@/lib/types";
 
 function entry(over: Partial<LedgerEntry> & { id: string }): LedgerEntry {
@@ -125,5 +125,52 @@ describe("lineageBadge", () => {
   it("plain entries get no badge", () => {
     const idx = buildLineageIndex([entry({ id: "p1" })]);
     expect(lineageBadge(idx.byId.get("p1")!)).toBeNull();
+  });
+});
+
+describe("buildAutonomyBuckets — per-bucket teaching detail", () => {
+  it("surfaces the taught bucket with class, teacher, resolution, and reuse count", () => {
+    const buckets = buildAutonomyBuckets([
+      entry({
+        id: "swap1", slot_value_hash: "H", ambiguity_class: "sla-binding",
+        decision_kind: "swap", confidence_source: "human",
+        actor: { kind: "human", id: "chen@stonybrook" },
+        decision: "SLA must be 4h not 24h", created_at: "2026-06-20T10:00:00Z",
+      }),
+      entry({ id: "auto1", slot_value_hash: "H", ambiguity_class: "sla-binding", confidence_source: "autopilot", created_at: "2026-06-21T10:00:00Z" }),
+      entry({ id: "auto2", slot_value_hash: "H", ambiguity_class: "sla-binding", confidence_source: "autopilot", created_at: "2026-06-22T10:00:00Z" }),
+    ]);
+    expect(buckets).toHaveLength(1);
+    const b = buckets[0];
+    expect(b.ambiguityClass).toBe("sla-binding");
+    expect(b.taughtBy).toBe("chen@stonybrook");
+    expect(b.resolutionText).toBe("SLA must be 4h not 24h");
+    expect(b.reuseCount).toBe(2);
+    expect(b.slotKey).toBe("H");
+    expect(b.status).toBe("active"); // taught + reused, no flag
+  });
+
+  it("marks a bucket 'dormant' when taught but never reused", () => {
+    const buckets = buildAutonomyBuckets([
+      entry({ id: "swap1", slot_value_hash: "H", ambiguity_class: "naming-convention", decision_kind: "swap", confidence_source: "human", actor: { kind: "human", id: "op" } }),
+    ]);
+    expect(buckets[0].reuseCount).toBe(0);
+    expect(buckets[0].status).toBe("dormant");
+  });
+
+  it("sorts most-reused buckets first", () => {
+    const buckets = buildAutonomyBuckets([
+      entry({ id: "s1", slot_value_hash: "A", ambiguity_class: "sla-binding", decision_kind: "swap", confidence_source: "human", actor: { kind: "human", id: "op" } }),
+      entry({ id: "s2", slot_value_hash: "B", ambiguity_class: "scope-resolution", decision_kind: "swap", confidence_source: "human", actor: { kind: "human", id: "op" } }),
+      entry({ id: "a1", slot_value_hash: "B", confidence_source: "autopilot" }),
+      entry({ id: "a2", slot_value_hash: "B", confidence_source: "autopilot" }),
+      entry({ id: "a3", slot_value_hash: "A", confidence_source: "autopilot" }),
+    ]);
+    expect(buckets[0].slotKey).toBe("B"); // 2 reuses
+    expect(buckets[1].slotKey).toBe("A"); // 1 reuse
+  });
+
+  it("returns empty when nothing has been taught", () => {
+    expect(buildAutonomyBuckets([entry({ id: "p1", confidence_source: "autopilot" })])).toEqual([]);
   });
 });

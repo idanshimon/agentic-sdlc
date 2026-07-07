@@ -301,6 +301,14 @@ export const orchestrator = {
   telemetryDecisions() {
     return req<{ entries: Array<Record<string, unknown>> }>("/api/telemetry/decisions");
   },
+  // Tier-2 governance floor: which ambiguity classes can NEVER be auto-resolved
+  // (PHI/auth invariants + any env-extended set). Read-only — the /autonomy page
+  // renders this as the "control envelope" the learning loop can never cross.
+  hardGateClasses() {
+    return req<{ hard_gate_classes: string[]; floor: string[]; explainer: string }>(
+      "/api/config/hard-gate-classes",
+    );
+  },
   // Phase 5 (add-configuration-plane) — the unified compliance query (the hero).
   // WHAT + WHY (autonomy rule + bundle version) + WHO + model + cost per AI
   // decision, filterable by phi_class / window / actor kind / team.

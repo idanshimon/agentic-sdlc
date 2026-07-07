@@ -127,6 +127,19 @@ export function usePromptLibrary() {
 }
 
 /**
+ * Tier-2 governance floor for the /autonomy page's "control envelope": the
+ * ambiguity classes that can NEVER be auto-resolved (PHI/auth invariants +
+ * any env-extended set). Read-only; changing it is a standards-change PR.
+ */
+export function useHardGateClasses() {
+  return useQuery({
+    queryKey: ["hard-gate-classes"],
+    queryFn: () => orchestrator.hardGateClasses(),
+    staleTime: 300_000,
+  });
+}
+
+/**
  * Phase 5 (add-configuration-plane) — the unified compliance query hook.
  * Filters are part of the query key so a URL-state change refetches. Returns
  * fully-attributed decision rows (WHAT + WHY + WHO + model + cost) plus a
