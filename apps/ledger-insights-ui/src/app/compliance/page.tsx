@@ -1,6 +1,6 @@
 "use client";
 import { FileSearch, ShieldAlert, CheckCircle2, AlertTriangle, User, Bot } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCompliance } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
@@ -32,6 +32,17 @@ const WINDOW_OPTS = [
 ];
 
 export default function CompliancePage() {
+  // useSearchParams() must sit under a Suspense boundary or Next 16's static
+  // export bails with a prerender-error. The inner component holds all the
+  // URL-state logic; this wrapper supplies the boundary.
+  return (
+    <Suspense fallback={<div className="skeleton h-40 rounded-lg" />}>
+      <CompliancePageInner />
+    </Suspense>
+  );
+}
+
+function CompliancePageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
