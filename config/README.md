@@ -74,6 +74,8 @@ the PR opens. The unified compliance query (Phase 5) reads across all of these.
 
 ## Reference
 
-- Capability spec: `openspec/changes/add-configuration-plane/`
+- Capability spec (canonical): `openspec/specs/configuration-plane/spec.md`
+  (history: archived change `openspec/changes/archive/2026-07-07-add-configuration-plane/`)
 - Concept + MVP framing: `docs/CONCEPT-BRIEF.md`, `docs/MVP-control-plane-spec.md`
-- Loaders: `apps/orchestrator/org_model.py`, `apps/orchestrator/autonomy.py`
+- Loaders: `apps/orchestrator/org_model.py`, `apps/orchestrator/autonomy.py`,
+  `apps/orchestrator/model_policy.py`, `apps/orchestrator/bundle_rules.py`

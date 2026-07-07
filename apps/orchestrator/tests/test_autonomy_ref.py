@@ -50,9 +50,20 @@ def test_ref_default_row_scope_is_star(tmp_path):
 
 def test_ref_bootstrap_when_no_matrix():
     empty = au.load_autonomy_matrix("/nonexistent/none.yaml")
+    # bootstrap autopilot decision — the mode segment must reflect autopilot,
+    # NOT be hardcoded to gate (Copilot review: a gate-labelled autopilot
+    # citation can't answer "why autopilot vs gate" from the structured path).
     ref = au.autonomy_ref("cardiology", "sla-binding", matrix=empty, reason="autopilot-mode")
-    assert ref.startswith("autonomy/mode/bootstrap/sla-binding/gate")
+    assert ref.startswith("autonomy/mode/bootstrap/sla-binding/autopilot")
     assert ref.endswith(":autopilot-mode")
+
+
+def test_ref_bootstrap_gate_reason_stays_gate():
+    empty = au.load_autonomy_matrix("/nonexistent/none.yaml")
+    # a genuine bootstrap gate (hybrid, no precedent) keeps the gate mode segment
+    ref = au.autonomy_ref("cardiology", "sla-binding", matrix=empty, reason="human-gate")
+    assert ref.startswith("autonomy/mode/bootstrap/sla-binding/gate")
+    assert ref.endswith(":human-gate")
 
 
 # ---- both models carry the field, and it survives serialization ------------

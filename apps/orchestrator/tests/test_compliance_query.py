@@ -130,7 +130,6 @@ def test_rows_sorted_newest_first():
 
 
 # ---- THE ACCEPTANCE TEST ----------------------------------------------------
-
 def test_acceptance_phi_high_30d_returns_complete_nonnull_rows():
     """The capability's definition of done: phi_class=high over 30d returns rows
     where WHY (rule version), WHO (actor), model, and cost are all present and
@@ -150,3 +149,43 @@ def test_acceptance_phi_high_30d_returns_complete_nonnull_rows():
     assert summary["total"] == len(rows)
     assert summary["complete"] == len(rows)
     assert summary["incomplete"] == 0
+
+
+# ---- Copilot-review hardening ----------------------------------------------
+
+def test_mixed_timestamp_formats_filter_correctly():
+    """Cosmos/py entries use '...+00:00'; JS toISOString uses '...Z'. String
+    comparison mis-orders/mis-filters across the two. The 30d window must be
+    correct regardless of suffix (Copilot review compliance_query.py:113)."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    z_recent = now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"       # 2d-ish, JS style
+    off_old = (now - timedelta(days=45)).isoformat()                  # +00:00 style
+    entries = [
+        {"id": "z", "team_id": "t", "run_id": "r", "created_at": z_recent,
+         "phi_class": "high", "decision": "recent", "actor": {"kind": "human", "id": "a@b"},
+         "bundle_refs": ["security/v0.1.0/PHI-001"], "model_used": "gpt-4-1", "cost_usd": 0.01},
+        {"id": "o", "team_id": "t", "run_id": "r", "created_at": off_old,
+         "phi_class": "high", "decision": "old", "actor": {"kind": "human", "id": "a@b"},
+         "bundle_refs": ["security/v0.1.0/PHI-001"], "model_used": "gpt-4-1", "cost_usd": 0.01},
+    ]
+    since = (now - timedelta(days=30)).isoformat()
+    rows = cq.build_compliance_rows(entries, since_iso=since)
+    ids = {r["id"] for r in rows}
+    assert "z" in ids, "recent Z-suffixed row must survive the 30d filter"
+    assert "o" not in ids, "45d-old row must be excluded regardless of suffix"
+
+
+def test_missing_cost_marks_row_incomplete():
+    """A legacy entry with no cost_usd must NOT be silently marked complete —
+    absent cost is a real attribution gap (Copilot review compliance_query.py:70)."""
+    entry = {
+        "id": "nocost", "team_id": "t", "run_id": "r", "created_at": "2026-07-01T00:00:00+00:00",
+        "phi_class": "high", "decision": "d", "actor": {"kind": "human", "id": "a@b"},
+        "bundle_refs": ["security/v0.1.0/PHI-001"], "model_used": "gpt-4-1",
+        # cost_usd deliberately absent
+    }
+    rows = cq.build_compliance_rows([entry])
+    assert rows[0]["cost_usd"] is None, "absent cost must stay None, not default to 0.0"
+    assert rows[0]["complete"] is False
+    assert cq.completeness_summary(rows)["incomplete"] == 1

@@ -107,9 +107,14 @@ def autonomy_ref(
         return f"autonomy/invariant/{decision_class}/gate:phi-auth-hard-lock"
     rule = m.rule_for(team_id, decision_class) if m is not None else None
     if rule is None:
-        # bootstrap / mode-driven — no matrix rule governed this
+        # bootstrap / mode-driven — no matrix rule governed this. Derive the mode
+        # segment from the reason tag so the citation doesn't claim "gate" for an
+        # autopilot decision (Copilot review): reasons that begin with "autopilot"
+        # or "hybrid" (which auto-resolved on precedent) are autopilot; a gate/
+        # human reason stays gate. Default to gate when the reason is unknown.
         tag = reason or "mode-driven"
-        return f"autonomy/mode/bootstrap/{decision_class}/{'gate'}:{tag}"
+        seg = "autopilot" if tag.startswith(("autopilot", "hybrid")) else "gate"
+        return f"autonomy/mode/bootstrap/{decision_class}/{seg}:{tag}"
     # Which scope matched: exact team row or the "*" default.
     scope = team_id if (team_id, decision_class) in m.rules else "*"
     base = f"autonomy/{loaded_source}/{scope}/{decision_class}/{rule.mode}"

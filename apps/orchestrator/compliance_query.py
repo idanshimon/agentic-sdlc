@@ -27,9 +27,25 @@ Design:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 _logger = logging.getLogger("orchestrator.compliance_query")
+
+
+def _parse_ts(ts: str) -> Optional[datetime]:
+    """Parse an ISO timestamp to an aware datetime, tolerating both the Python
+    '...+00:00' and the JS '...Z' suffixes. Returns None on empty/garbage so a
+    bad timestamp sorts last / filters out rather than crashing the audit query.
+    Comparing parsed datetimes (not raw strings) is essential: lexicographic
+    comparison of mixed +00:00 / Z suffixes mis-filters and mis-orders rows
+    (Copilot review compliance_query.py:113)."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
 
 
 def _norm_actor(entry: dict) -> tuple[str, str]:
@@ -64,9 +80,11 @@ def _row(entry: dict) -> dict:
         # WHO
         "actor_kind": actor_kind,
         "actor_id": actor_id,
-        # model + cost + PHI class
+        # model + cost + PHI class. cost_usd stays None when absent so a legacy
+        # entry with no cost attribution is flagged INCOMPLETE rather than being
+        # silently defaulted to $0.00 and marked complete (Copilot review :70).
         "model_used": entry.get("model_used"),
-        "cost_usd": entry.get("cost_usd", 0.0),
+        "cost_usd": entry.get("cost_usd", None),
         "phi_class": entry.get("phi_class") or "none",
     }
 
@@ -93,15 +111,22 @@ def build_compliance_rows(
     team_id: Optional[str] = None,
 ) -> list[dict]:
     """Pure builder: normalize + filter ledger dicts into compliance rows,
-    sorted newest-first. All filters are AND-combined; None = no filter."""
+    sorted newest-first. All filters are AND-combined; None = no filter.
+
+    Timestamps are compared as parsed datetimes (not raw strings) so mixed
+    '+00:00' / 'Z' suffixes across surfaces filter and order correctly
+    (Copilot review compliance_query.py:113)."""
+    since_dt = _parse_ts(since_iso) if since_iso else None
+    until_dt = _parse_ts(until_iso) if until_iso else None
     rows: list[dict] = []
     for e in entries:
         row = _row(e)
         if phi_class and row["phi_class"] != phi_class:
             continue
-        if since_iso and (row["created_at"] or "") < since_iso:
+        row_dt = _parse_ts(row["created_at"])
+        if since_dt is not None and (row_dt is None or row_dt < since_dt):
             continue
-        if until_iso and (row["created_at"] or "") > until_iso:
+        if until_dt is not None and (row_dt is None or row_dt > until_dt):
             continue
         if actor_kind and row["actor_kind"] != actor_kind:
             continue
@@ -109,7 +134,9 @@ def build_compliance_rows(
             continue
         row["complete"] = _is_complete(row)
         rows.append(row)
-    rows.sort(key=lambda r: r["created_at"], reverse=True)
+    # Newest-first by parsed datetime; unparseable timestamps sort last.
+    _EPOCH = datetime.min.replace(tzinfo=timezone.utc)
+    rows.sort(key=lambda r: _parse_ts(r["created_at"]) or _EPOCH, reverse=True)
     return rows
 
 
@@ -159,7 +186,16 @@ async def query_compliance(
     if until_iso:
         clauses.append("c.created_at<=@u")
         params.append({"name": "@u", "value": until_iso})
-    query = f"SELECT TOP {limit} * FROM c WHERE {' AND '.join(clauses)}"
+    # ORDER BY created_at DESC so TOP N returns the MOST RECENT N decisions, not
+    # an arbitrary subset (Copilot review compliance_query.py:162). Without it,
+    # Cosmos gives no ordering guarantee and a capped 30d window could silently
+    # drop the newest rows. build_compliance_rows re-sorts as a safety net, but
+    # the DB-side ordering is what makes `limit` correct. Single-partition reads
+    # (team_id given) order cheaply; cross-partition uses the created_at index.
+    query = (
+        f"SELECT TOP {limit} * FROM c WHERE {' AND '.join(clauses)} "
+        f"ORDER BY c.created_at DESC"
+    )
 
     entries: list[dict] = []
     try:
