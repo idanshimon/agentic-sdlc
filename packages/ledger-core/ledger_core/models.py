@@ -46,6 +46,9 @@ RuntimeKind = Literal[
     "heal_proposed",        # self-heal cowork: agent proposed a heal (add-self-heal-cowork)
     "heal_decided",         # self-heal cowork: human approved/declined a heal
     "heal_executed",        # self-heal cowork: executor landed the heal (PR/re-run)
+    "review_remediation",   # autonomous review loop: one bounded remediation attempt
+    "loop_converged",       # autonomous review loop: terminal PASS (merged or awaiting)
+    "loop_escalated",       # autonomous review loop: terminal escalation to a human
 ]
 MetaKind = Literal[
     "bundle_change_merged",

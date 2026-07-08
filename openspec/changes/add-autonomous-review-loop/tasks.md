@@ -10,11 +10,11 @@ Goal: one real failed PR → autonomous remediation → re-review → PASS →
 `loop_converged`, on a Tier-A test repo, end to end. This is the demo asset.
 
 - [x] 0.0 **CRITICAL PATH — make review-scan emit a real verdict.** DONE (PR-2). `apps/orchestrator/review_verdict.py` builds a structured `ReviewVerdict` (`status: PASS|FAIL` + `blockers[]` with check/rule/detail/file/line/phi) by reusing the PR-1 deterministic matcher (`scripts/enforce_bundles.py`) over the generated code. `stage_review_scan` now delegates to it — the `findings = 0` stub is gone. `Blocker` + `ReviewVerdict` added to `apps/orchestrator/models.py`. 8 tests in `test_review_verdict.py` (RED→GREEN); full orchestrator suite 223 pass (was 215) + 1 pre-existing unrelated fail.
-- [ ] 0.1 `apps/orchestrator/review_loop.py` — pure core `plan_next_loop_action(verdict, attempt, tier, cost, has_phi_or_deny) -> LoopAction` (enum: REMEDIATE | MERGE | AWAIT_HUMAN_MERGE | COMMENT_ONLY | ESCALATE). Zero I/O.
-- [ ] 0.2 Unit tests for `plan_next_loop_action` — the full truth table (tier × verdict × attempt × phi/deny × cost). RED first.
-- [ ] 0.3 `review_remediation` / `loop_converged` / `loop_escalated` added to BOTH LedgerEntry models (`apps/orchestrator/models.py` AND `packages/ledger-core/ledger_core/models.py`) + `decision-ledger-mcp/src/schema.ts`. Test the two-model round-trip.
-- [ ] 0.4 Async glue `run_review_loop(pr_ref, run)` — calls the real verdict (0.0), dispatches codegen remediation, re-reviews, writes ledger hops. Stubbed codegen acceptable for the slice; the verdict is NOT stubbed.
-- [ ] 0.5 E2E (stubbed codegen): FAIL → remediate → PASS → `loop_converged{merged:true}`; assert the 2-entry chain + structured citations. RED first.
+- [x] 0.1 `apps/orchestrator/review_loop.py` — pure core `plan_next_loop_action(verdict, *, attempt, tier, cost_usd) -> LoopAction` (enum: REMEDIATE | MERGE | AWAIT_HUMAN_MERGE | COMMENT_ONLY | ESCALATE). Zero I/O. DONE (PR-3).
+- [x] 0.2 Unit tests for `plan_next_loop_action` — the full truth table (tier A/B/C × PASS/FAIL × attempt bound × cost ceiling × PHI floor). 16 tests in `test_review_loop.py`, RED→GREEN. DONE.
+- [x] 0.3 `review_remediation` / `loop_converged` / `loop_escalated` added to ledger-core `RuntimeKind` (`packages/ledger-core/ledger_core/models.py`) + the MCP `RuntimeKindSchema` (`apps/decision-ledger-mcp/src/schema.ts`); orchestrator `LedgerEntry.runtime_kind` is a free `Optional[str]` that already accepts them. Round-trip tested (`test_review_loop_ledger.py`, 3 tests). DONE.
+- [x] 0.4 Async glue `run_review_loop(*, repo, tier, code_files, review, remediate, do_merge)` — drives review→plan→(remediate|merge|escalate) to a terminal state, writes a ledger hop per action with a `reviewloop/...` citation. Injectable callables so it's testable with zero real codegen/GitHub. DONE.
+- [x] 0.5 E2E (stubbed codegen): FAIL → remediate → PASS → `loop_converged{merged:true}`; asserts the remediation+converged hop chain + PHI-floor escalation + tier B/C behavior. 6 tests in `test_run_review_loop.py`. DONE.
 - [ ] 0.6 `openspec validate add-autonomous-review-loop --strict` → Valid.
 
 ## Phase 1 — Per-repo autonomy tier (the "move the dial" control)
@@ -30,7 +30,7 @@ Goal: one real failed PR → autonomous remediation → re-review → PASS →
 
 ## Phase 2 — Real remediation + real re-review
 
-- [ ] 2.1 `.github/agents/codegen.agent.md` — documented remediation entry mode (verdict in → commit resolving only cited blockers → same-rule citation → no unrelated edits).
+- [x] 2.1 `.github/agents/codegen.agent.md` — documented remediation entry mode (verdict in → commit resolving only cited blockers → same-rule citation → no unrelated edits, never a phi:true blocker). DONE (PR-3).
 - [ ] 2.2 `.github/agents/review-scan.agent.md` — verdict gains `attempt` + `prior_verdict_ref` for chainable re-reviews.
 - [ ] 2.3 Wire real codegen remediation dispatch in `run_review_loop` (drop the Phase-0 stub); full re-scan on the updated branch.
 - [ ] 2.4 Attempt bound (`REVIEW_LOOP_MAX_ATTEMPTS`, default 3, unbounded rejected) + **net-new per-run cost ceiling** (`total_cost_usd` accumulates today but never gates — build the enforcement). Tests for exhaustion→escalate and cost→escalate.

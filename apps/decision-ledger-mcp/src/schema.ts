@@ -25,6 +25,11 @@ export const RuntimeKindSchema = z.enum([
   "decision_flagged",     // T1 — "this decision was wrong, don't reuse it as precedent"
   "replay_requested",     // T2 — "re-run the same inputs against current rules"
   "class_paused",         // T3 — "stop auto-deciding this whole ambiguity class"
+  // Autonomous review loop (add-autonomous-review-loop). One hop per action;
+  // each carries a reviewloop/<tier>/<repo>/<action>@attempt=N autonomy_ref.
+  "review_remediation",   // one bounded codegen remediation attempt
+  "loop_converged",       // terminal PASS (auto-merged or awaiting human merge)
+  "loop_escalated",       // terminal escalation to a human (exhaustion / cost / PHI floor)
 ]);
 
 /**
