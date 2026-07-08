@@ -46,6 +46,11 @@ gates); (d) a GitHub merge primitive (`deliver_pr.py` only opens PRs).
   its unattended sibling. Both share the never-auto-merge-PHI floor.
 - Not a new gate model. The resolver gate and its tier-2 hard-gate are
   unchanged; this operates on the *delivered PR*, downstream of the gate.
+- Not the deterministic CI floor. `add-bundle-ci-enforcement` specifies a
+  standalone, orchestrator-independent required status check that enforces the
+  pattern-matchable bundle rules on any PR's diff. This loop runs *above* that
+  floor: the CI gate is the dumb, un-bypassable check; this loop is the smart
+  remediation layer. They compose and are specified separately.
 
 ## Architecture
 
@@ -91,7 +96,7 @@ gates); (d) a GitHub merge primitive (`deliver_pr.py` only opens PRs).
 | `.github/agents/codegen.agent.md` | Add **remediation entry mode**: input = review verdict, output = commit resolving only cited blockers, same-rule citation, no unrelated edits. | Codegen becomes the remediator without a second agent. |
 | `.github/agents/review-scan.agent.md` + `apps/orchestrator/_pipeline_stages.py` | **Make the review actually emit a structured verdict.** Today `stage_review_scan` is a stub (`findings = 0`, never FAIL). Build the real `status`+`blockers[]` (check, rule-id, detail, file:line) + `attempt` + `prior_verdict_ref`. | The loop's load-bearing input — net-new, the true critical path. |
 | `.github/agents/review-loop-controller.agent.md` (NEW) | Foundry-registered persona: allowed actions (dispatch remediation, request re-review, auto-merge in-tier, escalate), ledger kinds it writes, bundle subscriptions (security, privacy read-only). | Agent-HQ-side identity for the loop, per the four-plane model. |
-| `.github/hooks/` (NEW `pull_request.opened`) | Trigger the loop when a Coding Agent opens a PR on an opted-in repo. | The external-PR trigger surface Bobu specified. |
+| `.github/hooks/` (NEW `pull_request.opened`) | Trigger the loop when a Coding Agent opens a PR on an opted-in repo. | The external-PR trigger surface for un-orchestrated agent PRs. |
 | `apps/decision-ledger-mcp/src/schema.ts` | New runtime kinds: `review_remediation`, `loop_converged`, `loop_escalated`. | First-class audit of every loop hop. |
 | `apps/orchestrator/main.py` | `GET /api/review-loops`, `GET /api/review-loops/{id}` (stream), `POST /api/review-loops/{id}/merge` (Tier B human merge), `GET /api/config/repo-autonomy`. | Read + the single human touch-point (Tier B). |
 | `apps/ledger-insights-ui/` | New `/review-loop` page; `/autonomy` per-repo panel; escalation inbox. | Make the dark factory observable + governable. |
@@ -164,11 +169,11 @@ Agent-HQ **pink** + Ledger **green** where it shows audit).
    per-class autonomy matrix, a per-repo tier list: repo, current tier, **why
    it is capped** (e.g. "held at C — PHI blocker seen in last 30d"), who
    graduated it and when, and the last 10 loop outcomes as sparkline dots. The
-   "move the dial per repo" control Bobu asked for, made legible.
+   "move the dial per repo" control, made legible.
 3. **Escalation inbox.** Escalations render as a first-class list: the PR, the
    unresolved blockers with their bundle citations, the attempt history, and a
    single "take it from here" affordance that hands the human the PR. The human
-   enters **only** at the boundary the customer's tier configuration chose.
+   enters **only** at the boundary the operator's tier configuration chose.
 4. **Demo-mode parity.** The page renders from deterministic fixtures in DEMO
    MODE (no live Cosmos) so the loop is presentable offline — same discipline
    as the existing demo store.
@@ -181,9 +186,9 @@ Agent-HQ **pink** + Ledger **green** where it shows audit).
   distinct products (co-pilot vs autopilot). Cleaner as a sibling that shares
   the PHI/deny floor.
 - **Global "autonomous mode" flag.** Rejected: a single global switch is
-  exactly the reckless dark factory GitHub warned against on the call. Per-repo
-  graduation is the safe, sellable version and matches the customer's own
-  per-BU risk-appetite framing.
+  exactly the reckless dark factory this design exists to avoid. Per-repo
+  graduation is the safe posture and matches how organizations set
+  per-BU risk appetite.
 - **Unbounded retry until PASS.** Rejected: an unreliable model can thrash or
   burn cost indefinitely. The attempt/cost governor + escalation is what makes
   an unreliable model *safe to run unattended* — this is the whole point.
