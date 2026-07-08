@@ -10,17 +10,25 @@ dead end: a FAIL blocks merge and stops. This change closes the loop so a
 convergence — bounded, audited, and permitted only where a per-repo autonomy
 tier says it is safe.
 
-The design deliberately reuses three proven in-repo patterns rather than
-inventing new ones:
+The design deliberately reuses proven in-repo patterns where they genuinely
+exist, and is explicit about what is net-new:
 
-1. **Opt-in config loader + governance teeth** (from the shipped configuration
-   plane: `org_model.py`, `autonomy.py`, `model_policy.py`). A config edit can
-   only *tighten*; the unsafe state is refused at load AND forced-safe at
-   runtime.
-2. **Structured, grep-able citations** (`autonomy_ref`, `rule_ref`) so every
-   loop hop is queryable by the Phase-5 compliance engine, not free text.
+1. **Opt-in config floor + fail-closed validator** — the *real* shipped idiom is
+   `config.py::_hard_gate_classes()` (an env-extends-never-shrinks set floor over
+   `INVARIANT_CLASSES`) plus the fail-closed kernel `heal.py::validate_heal_action`.
+   `repo_autonomy.py` is written **fresh** against these idioms. (There is no
+   `org_model.py`/`autonomy.py`/`model_policy.py` loader triad in the repo — an
+   earlier draft claimed one; corrected.)
+2. **Structured, grep-able citations** (`autonomy_ref` on ledger entries) so
+   every loop hop is queryable by the compliance surface, not free text.
 3. **Pure-builder-first ledger reads** so the controller's decisions are
    unit-testable with zero Cosmos.
+
+**Net-new (not a reuse — built by this change):** (a) a real machine-consumable
+review verdict — today `stage_review_scan` is a stub (`findings = 0`); (b) a
+rule-ref→`phi:true`/deny resolver bridging blocker rule-ids to the floor; (c)
+per-run cost-ceiling *enforcement* (`total_cost_usd` accumulates today but never
+gates); (d) a GitHub merge primitive (`deliver_pr.py` only opens PRs).
 
 ## Goals / Non-goals
 
@@ -81,7 +89,7 @@ inventing new ones:
 | `apps/orchestrator/review_loop.py` (NEW) | The controller: verdict→remediate→re-review, attempt/cost governor, terminal-state resolution. Pure core `plan_next_loop_action(verdict, attempt, tier, cost)` + thin async glue. | The missing wire, testable with zero Cosmos. |
 | `apps/orchestrator/repo_autonomy.py` (NEW) | Opt-in loader for `config/repo_autonomy.yaml`; `tier_for(repo)`; `RepoTierUnlockError` teeth. | Per-repo "move the dial" with a tightening-only guarantee. |
 | `.github/agents/codegen.agent.md` | Add **remediation entry mode**: input = review verdict, output = commit resolving only cited blockers, same-rule citation, no unrelated edits. | Codegen becomes the remediator without a second agent. |
-| `.github/agents/review-scan.agent.md` | Verdict gains machine-consumable `blockers[]` already present; add `attempt` + `prior_verdict_ref` so re-reviews are chainable. | Chainable verdicts = auditable loop. |
+| `.github/agents/review-scan.agent.md` + `apps/orchestrator/_pipeline_stages.py` | **Make the review actually emit a structured verdict.** Today `stage_review_scan` is a stub (`findings = 0`, never FAIL). Build the real `status`+`blockers[]` (check, rule-id, detail, file:line) + `attempt` + `prior_verdict_ref`. | The loop's load-bearing input — net-new, the true critical path. |
 | `.github/agents/review-loop-controller.agent.md` (NEW) | Foundry-registered persona: allowed actions (dispatch remediation, request re-review, auto-merge in-tier, escalate), ledger kinds it writes, bundle subscriptions (security, privacy read-only). | Agent-HQ-side identity for the loop, per the four-plane model. |
 | `.github/hooks/` (NEW `pull_request.opened`) | Trigger the loop when a Coding Agent opens a PR on an opted-in repo. | The external-PR trigger surface Bobu specified. |
 | `apps/decision-ledger-mcp/src/schema.ts` | New runtime kinds: `review_remediation`, `loop_converged`, `loop_escalated`. | First-class audit of every loop hop. |
@@ -124,11 +132,16 @@ runtime — exactly like the shipped autonomy/model-policy invariants.
 3. **Bounded attempts.** `REVIEW_LOOP_MAX_ATTEMPTS` (default 3) is a hard
    ceiling; the env may lower it but a value that would allow unbounded loops
    is rejected. Exhaustion escalates; it never merges.
-4. **Cost ceiling.** The loop reuses the model-policy cost-ceiling seam; a loop
-   that would exceed the per-run ceiling escalates with reason `cost_ceiling`.
+4. **Cost ceiling.** A per-run cost ceiling (built here — net-new; today
+   `total_cost_usd` accumulates but never gates) escalates a loop that would
+   exceed it with reason `cost_ceiling`.
 5. **Never a silent merge.** Auto-merge writes `loop_converged{merged:true}`
    with the full attempt chain referenced. There is no code path to merge
-   without a terminal ledger entry.
+   without a terminal ledger entry. **The merge itself is net-new** — a real
+   `PUT /pulls/{n}/merge` primitive (branch-protection-aware), NOT the
+   `deliver_pr.py` open-PR path, which never merges. A merge blocked by branch
+   protection MUST surface as an explicit failure/escalation, never a silent
+   no-op (which would itself violate this invariant).
 6. **Absence = safe.** A repo not listed in `repo_autonomy.yaml` is Tier C
    (advisory) — the loop comments but changes nothing. Deploying the image
    changes no repo's behavior until a human graduates it.
@@ -183,9 +196,17 @@ Agent-HQ **pink** + Ledger **green** where it shows audit).
 
 - Attempt-bound default: 3 vs 5. Start at 3 (cheap, escalates fast); revisit
   with real convergence-rate data.
-- Should Tier A require a *clean* review history window (e.g. 30d no PHI/deny
-  blocker) as a *precondition* to graduation, enforced in the loader? Leaning
-  yes — makes graduation earned, not asserted.
+- ~~Should Tier A require a *clean* review history window as a precondition to
+  graduation?~~ **RESOLVED — yes, required.** This is not optional polish: the
+  autonomous loop runs *downstream* of the resolver gate, so a Coding-Agent PR
+  that never hit the assessor could otherwise auto-merge PHI code with zero
+  human decision — bypassing the per-class tier-2 hard-gate (409-on-bulk) that
+  exists precisely to force PHI/auth to be individual human calls. The rule-ref
+  →PHI/deny resolver (net-new) plus a required clean-history precondition
+  (e.g. 30d, no `phi:true`/deny blocker) enforced in the `repo_autonomy.py`
+  loader is what closes that bypass. `RepoTierUnlockError` is a **new** error
+  class (there is no `InvariantUnlockError` in the repo to mirror; it follows
+  the fail-closed `heal.py` validator shape).
 - Re-review after remediation: full scan vs. delta-only on changed hunks.
   Full scan is safer for v1 (no missed cross-file regressions); delta is a
   later cost optimization.
