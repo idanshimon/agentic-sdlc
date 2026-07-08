@@ -4,6 +4,10 @@ metadata:
   authors: ["@privacy-office"]
   date: 2026-06-05
   description: HIPAA minimum-necessary, retention windows, consent surfaces
+  # BLOCK rules carrying a `pattern` opt into the CI enforcement lane. Most
+  # privacy rules are semantic (no pattern) and remain enforced by the
+  # pipeline stages / review loop only — the CI lane silently skips them.
+  ci_checks_default: true
 
 rules:
   - id: HIPAA-MIN-NEC-001
