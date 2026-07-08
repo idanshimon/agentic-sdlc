@@ -20,22 +20,30 @@
 The reference design already has every ingredient of a governed loop **except
 the wire that closes it autonomously**:
 
-- `review-scan.agent.md` produces `status: FAIL` with per-blocker bundle-rule
-  citations — but nothing feeds that failure **back** to codegen. It is
-  reject-and-stop, not reject→fix→re-review.
+- `review-scan.agent.md` describes a `status: FAIL` verdict with per-blocker
+  bundle-rule citations — but **the executable `stage_review_scan`
+  (`_pipeline_stages.py`) is a stub** (`findings = 0  # demo: stubbed clean`,
+  always `completed`). The structured verdict lives only in persona markdown.
+  **Emitting a real machine-consumable verdict is net-new Phase-0 work, and is
+  the true critical path** — the loop cannot exist without it.
 - `codegen.agent.md` generates from an architecture proposal — but has no
   entry path that takes a *review verdict* as its input and remediates against
   it.
 - `swap-deliver-ado-to-github` opens a **real** GitHub PR (Git Data API, no
-  fakes) — so a real PR object exists to be reviewed, but the review that runs
-  today is pipeline-internal, not triggered by an external **Coding Agent** PR.
+  fakes, `deliver_pr.py`) — so a real PR object exists to be reviewed. But that
+  change states outright the orchestrator **never merges**; a Tier-A auto-merge
+  primitive (`PUT /pulls/{n}/merge`, branch-protection-aware) is **net-new**,
+  not a reuse of the deliver path.
 - `add-self-heal-cowork` builds a reject→fix loop but its **core invariant is
   the opposite of what is needed here**: every heal is human-invoked and every
   action requires explicit per-action human approval. It is the *co-pilot*
   loop. Bobu's ask is the *autopilot* loop.
 - `add-graduated-autonomy-tier2` governs autonomy **per ambiguity-class** at
-  the resolver gate — but there is no **per-repository** autonomy tier that
-  decides whether a given repo may run review→merge with no human at all.
+  the resolver gate (the shipped `INVARIANT_CLASSES` floor +
+  `config.py::_hard_gate_classes()` env-extends-never-shrinks idiom) — but there
+  is no **per-repository** autonomy tier, and that per-class floor keys on the
+  assessor's ambiguity **class**, not on the bundle **rule ids** a review
+  blocker cites (a gap this change must bridge with new code, see below).
 
 So the missing capability is a **new composition**, not a duplicate: a
 closed, bounded, autonomous loop —
@@ -81,8 +89,11 @@ in.
 ### 2. Bounded re-review controller (the loop with a governor)
 
 - `review_loop.py` runs review→remediate→re-review with a **hard attempt
-  bound** (`REVIEW_LOOP_MAX_ATTEMPTS`, default 3) and a **cost ceiling**
-  (reuses the model-policy cost-ceiling seam from the config plane).
+  bound** (`REVIEW_LOOP_MAX_ATTEMPTS`, default 3) and a **cost ceiling**. Note:
+  there is no shipped cost-enforcement seam to reuse — `total_cost_usd`
+  accumulates on the run but never gates. The per-run ceiling is **net-new**
+  enforcement built here (the existing `_STAGE_WEIGHTS` apportionment is
+  display-only).
 - Convergence (PASS) or exhaustion (still FAIL after N) are both terminal and
   both audited. Exhaustion **always escalates to a human** — it never silently
   merges and never loops unbounded.
@@ -90,8 +101,11 @@ in.
 ### 3. Per-repo autonomy tier (the "move the dial" control Bobu asked for)
 
 - A new authorable config object `config/repo_autonomy.yaml` →
-  `apps/orchestrator/repo_autonomy.py`, mirroring the shipped opt-in-loader +
-  governance-teeth pattern (`org_model.py`, `autonomy.py`, `model_policy.py`).
+  `apps/orchestrator/repo_autonomy.py`, following the **actual shipped floor
+  idiom** — `config.py::_hard_gate_classes()` (env-extends-never-shrinks set)
+  and the fail-closed validator shape in `heal.py::validate_heal_action`. (Note:
+  there is no `org_model.py`/`model_policy.py` triad to mirror — the loader is
+  written fresh against the `config.py`/`heal.py` idioms.)
 - Three tiers per repo:
   - **Tier A — Autonomous merge:** PASS auto-merges with no human. Permitted
     only for repos explicitly graduated in config.
@@ -102,7 +116,15 @@ in.
 - **Governance teeth (tightening-only, enforced at load AND runtime):** a repo
   that touches a `phi: true` or explicit-deny rule can **never** be Tier A,
   regardless of config; the loader refuses the unsafe tier and the runtime
-  forces escalation. Same `InvariantUnlockError` shape as autonomy invariants.
+  forces escalation (fail-closed, same shape as `heal.py::validate_heal_action`).
+- **New rule-ref → PHI/deny resolver.** The shipped per-class floor
+  (`INVARIANT_CLASSES`) keys on the assessor's ambiguity **class**; review
+  blockers cite bundle **rule ids** (`security/v0.1.0/PHI-001`). PHI-ness lives
+  at rule level (`rules.yaml: phi: true`, `envelope.yaml: forbidden`). Mapping a
+  blocker to the floor therefore needs a **new** rule-ref→`phi:true`/deny lookup
+  sourced from the bundle files — this is net-new governance code, not a reuse
+  of `INVARIANT_CLASSES`, and is the airtight link that makes the per-repo tier
+  safe at the exact PHI boundary the resolver-gate tier-2 protects.
 
 ### 4. UX — the Autonomous Review surface (so a human can *watch* the dark factory)
 
