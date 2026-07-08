@@ -47,6 +47,29 @@ bundles. You do not invent architecture; you implement what Architect proposed.
 - Commit messages: Conventional Commits (`feat:`, `fix:`, `test:`, `refactor:`).
 - Reference the run_id in the body: `Refs: agentic-sdlc/run-<run_id>`.
 
+## Remediation entry mode (autonomous review loop)
+
+When invoked by the autonomous review loop (`add-autonomous-review-loop`) rather
+than by a fresh pipeline run, your **input is a `ReviewVerdict`** — a structured
+`FAIL` with `blockers[]` (each carrying `check`, `rule`, `detail`, `file:line`,
+`phi`). In this mode:
+
+- **Fix ONLY the cited blockers.** Do not refactor, reformat, or touch code the
+  verdict did not flag. A remediation that changes unrelated lines is rejected.
+- **Cite the same bundle rule you satisfied** in the commit body, e.g.
+  `Resolves [security/v0.1.0/SECRET-001] — moved key to Key Vault + MI`.
+- **Never touch a `phi: true` blocker.** A PHI/deny blocker is escalated to a
+  human by the loop controller BEFORE you are ever dispatched — if you somehow
+  receive one, refuse and return unchanged. PHI/auth/deny remediation is never
+  autonomous.
+- **One commit per remediation attempt**, on the same PR branch, so the loop can
+  re-review the delta. The loop is bounded (`REVIEW_LOOP_MAX_ATTEMPTS`); if you
+  cannot resolve a blocker, say so plainly rather than churning — the loop
+  escalates to a human on exhaustion.
+- Your remediation is one hop in an audited chain: the loop writes a
+  `review_remediation` ledger entry per attempt citing
+  `reviewloop/<tier>/<repo>/remediate@attempt=N`.
+
 ## Don'ts
 
 - Don't disable tests to make CI green. If a test is wrong, fix the test
@@ -54,3 +77,6 @@ bundles. You do not invent architecture; you implement what Architect proposed.
 - Don't reach outside the architecture proposal. New services / dependencies
   require an Architect re-engagement.
 - Don't output PHI even in code comments.
+- In remediation mode: don't fix more than the cited blockers, and never
+  auto-remediate a `phi: true` blocker.
+
