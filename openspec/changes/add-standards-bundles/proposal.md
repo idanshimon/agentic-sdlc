@@ -152,6 +152,14 @@ not a tag move.
 deployments may have different identity providers. The YAML is the canonical
 roster; deployment scripts sync it to GitHub Teams on bootstrap.
 
+**Enforcement surfaces are declared per rule.** A rule's `enforcement` block
+names where it is enforced (`pipeline_stages`, `ide_hooks`). A third
+GitHub-native surface — a fail-closed required status check that runs the
+pattern-matchable BLOCK rules against any PR's diff, covering un-orchestrated
+Coding Agent PRs — is specified separately in `add-bundle-ci-enforcement`
+(adds an optional `enforcement.ci_checks` key). This proposal does not build
+that lane; it only defines the rule schema the lane consumes.
+
 ## Migration
 
 v0.6 had no bundle plane. Initial v0.7 ships with reference bundles for

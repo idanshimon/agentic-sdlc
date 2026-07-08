@@ -3,17 +3,15 @@
 > **Status:** DRAFT (2026-07-08)
 > **Capability:** autonomous-review-loop (NEW)
 > **Author:** Idan Shimon
-> **Motivating engagement:** CVS Health Innovation Lab, AI SDLC deep dive
->   (2026-07-08). The customer (a Principal Architect who already owns the
->   four-plane concept) named exactly one frontier his org has not solved and
->   wants by EOY: an autonomous **"dark factory"** where agents review agents'
->   pull requests, the human-in-the-loop review bottleneck is removed, and a
->   rejected PR causes the coding agent to **pick up the rejection comment and
->   come back with an approved method** — all **without relaxing standards**.
->   GitHub's own field engineers confirmed on the call that closing this loop
->   is not on a committed roadmap and is blocked on model reliability. This is
->   the capability that lets the reference design *show it is possible on
->   GitHub as an engine*.
+> **Motivation:** The one frontier this class of governed pipeline has not yet
+>   closed is an autonomous **"dark factory"** review: agents review agents' pull
+>   requests, the human-in-the-loop review bottleneck is removed, and a rejected
+>   PR causes the coding agent to **pick up the rejection comment and come back
+>   with an approved method** — all **without relaxing standards**. Closing this
+>   loop on GitHub is not on a committed platform roadmap and is blocked on model
+>   reliability. This capability lets the reference design *show it is possible on
+>   GitHub as an engine* — by containing an unreliable model with bounded
+>   attempts + a hard escalation floor rather than waiting for a reliable one.
 
 ## Why
 
@@ -37,7 +35,7 @@ the wire that closes it autonomously**:
 - `add-self-heal-cowork` builds a reject→fix loop but its **core invariant is
   the opposite of what is needed here**: every heal is human-invoked and every
   action requires explicit per-action human approval. It is the *co-pilot*
-  loop. Bobu's ask is the *autopilot* loop.
+  loop. The autonomous loop is the *autopilot* counterpart.
 - `add-graduated-autonomy-tier2` governs autonomy **per ambiguity-class** at
   the resolver gate (the shipped `INVARIANT_CLASSES` floor +
   `config.py::_hard_gate_classes()` env-extends-never-shrinks idiom) — but there
@@ -62,7 +60,7 @@ Coding Agent opens PR → review-scan verdict (PASS|FAIL, cited)
 ```
 
 — governed by a **per-repo autonomy tier** so the human is removed *only where
-the customer has decided it is safe*, and every hop is a ledger entry.
+an operator has decided it is safe*, and every hop is a ledger entry.
 
 This is the honest, demonstrable answer to "is a dark factory possible on
 GitHub without relaxing standards?": **yes, on repos you have graduated to
@@ -98,7 +96,7 @@ in.
   both audited. Exhaustion **always escalates to a human** — it never silently
   merges and never loops unbounded.
 
-### 3. Per-repo autonomy tier (the "move the dial" control Bobu asked for)
+### 3. Per-repo autonomy tier (the "move the dial" control)
 
 - A new authorable config object `config/repo_autonomy.yaml` →
   `apps/orchestrator/repo_autonomy.py`, following the **actual shipped floor
@@ -140,7 +138,7 @@ merge path:
   who graduated it, last 10 loop outcomes) next to the existing per-class view.
 - Escalations surface as a first-class inbox: "this loop exhausted N attempts,
   here are the unresolved blockers, here is the PR" — the human enters only at
-  the boundary the customer chose.
+  the boundary the operator configured.
 
 ## Impact
 
@@ -150,7 +148,10 @@ merge path:
   auto-merge a PHI/deny change" floor), `add-graduated-autonomy-tier2`
   (per-class autonomy — this adds the orthogonal per-repo axis),
   `swap-deliver-ado-to-github` (provides the real PR object under review),
-  `add-teaching-signal-feedback` (a converged loop becomes precedent).
+  `add-teaching-signal-feedback` (a converged loop becomes precedent),
+  `add-bundle-ci-enforcement` (the deterministic, orchestrator-independent
+  required-check floor this loop runs above — a PR passes the CI bundle gate
+  before the loop's richer LLM verdict and remediation apply).
 - **Affected code:** `apps/orchestrator/` (new `review_loop.py`,
   `repo_autonomy.py`; edits to `_pipeline_stages.py` deliver dispatch and
   `main.py` endpoints), `.github/agents/` (codegen remediation mode,
