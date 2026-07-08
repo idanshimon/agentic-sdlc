@@ -14,35 +14,35 @@ Goal: `scripts/enforce_bundles.py` loads the real bundles, applies BLOCK+pattern
 rules to a file set, exits non-zero with cited violations. Proven green on the
 current repo and red on an injected violation. This is the demo asset.
 
-- [ ] 0.1 `scripts/enforce_bundles.py` — stdlib + PyYAML only. `load_rules(team) -> list[Rule]` reads `standards-bundles/**/rules.yaml`, resolves versions via `PINS.yaml` (`defaults` fallback), selects `severity: BLOCK` + has `pattern` + (`ci_checks: true` OR bundle `ci_checks_default: true`).
-- [ ] 0.2 `check_files(rules, paths) -> list[Violation]` — apply each rule's compiled `pattern` per changed file, capture `file:line`, `<dept>/v<ver>/<rule-id>`, title. `main()` exits non-zero on any violation.
-- [ ] 0.3 RED test: an injected file with a `patient_id` cleartext-log line trips `security/v0.1.0/PHI-001` (only if that rule is CI-enabled in Phase 1); until then, seed a temp bundle fixture with a CI-enabled BLOCK rule and assert exit 1 + citation string.
-- [ ] 0.4 GREEN test: the enforcer over the repo's current `definitions`/sample files (no CI-enabled rule matching) exits 0 and writes `pass: true`.
-- [ ] 0.5 **Safety/validation:** test that `import scripts.enforce_bundles` pulls NO `apps.orchestrator` module and opens no network socket (assert via `sys.modules` inspection + monkeypatched socket). Fail-closed test: a malformed `rules.yaml` fixture yields non-zero exit, not empty-pass.
+- [x] 0.1 `scripts/enforce_bundles.py` — stdlib + PyYAML only. `load_ci_rules(root, versions)` reads `standards-bundles/**/rules.yaml`, resolves versions via `PINS.yaml` (`defaults` fallback), selects `severity: BLOCK` + has `pattern` + (`ci_checks: true` OR bundle `ci_checks_default: true`).
+- [x] 0.2 `scan_file(path, rules)` — apply each rule's compiled `pattern` per changed file, capture `file:line`, `<dept>/v<ver>/<rule-id>`, title. `run()` / `main()` exits non-zero on any violation.
+- [x] 0.3 RED test: temp bundle fixture with a CI-enabled BLOCK rule → exit 1 + citation string (`test_violation_output_format_is_file_line_citation_title`, `test_run_returns_nonzero_on_violation`). Real security bundle catches SECRET-001 + PHI-001.
+- [x] 0.4 GREEN test: clean file → exit 0, `pass: true` in the JSON artifact (`test_run_returns_zero_on_clean_tree`, `test_result_json_shape_on_clean`).
+- [x] 0.5 **Safety/validation:** `import enforce_bundles` pulls NO `apps.orchestrator` module (`test_module_imports_no_orchestrator_cosmos_or_llm`, `test_only_stdlib_and_yaml_imported`). Fail-closed: malformed `rules.yaml` → non-zero, not empty-pass (`test_malformed_rules_yaml_raises_not_empty_pass`, `test_missing_bundle_dir_raises`, `test_unresolvable_pin_raises_bundle_error`).
 
 ## Phase 1 — `ci_checks` schema key + bundle opt-in
 
-- [ ] 1.1 `standards-bundles/BUNDLE-SCHEMA.md` — document the optional `enforcement.ci_checks: <bool>` (default false) and bundle-level `ci_checks_default: <bool>`. Update the rules.yaml schema block and the required/optional field lists.
-- [ ] 1.2 Set `ci_checks_default: true` on `security` and `privacy` bundle metadata (per design recommendation); leave `architect`/`finops` per-rule opt-in. Confirm each selected rule has a real `pattern` (rules without patterns are silently skipped by the CI lane — assert this).
-- [ ] 1.3 Test: `load_rules('defaults')` returns exactly the security+privacy BLOCK-with-pattern rules and excludes architect/finops rules that did not opt in. Lock the selected rule-id set with an explicit assertion (the drift guard).
-- [ ] 1.4 **Safety/validation:** drift test — the enforcer's selected rule-set is derived ONLY from the bundle files (no hardcoded rule list in the script). Assert by adding a temp CI-enabled rule to a fixture bundle and seeing it appear in `load_rules` output without touching the script.
+- [x] 1.1 `standards-bundles/BUNDLE-SCHEMA.md` — documented the optional `enforcement.ci_checks: <bool>` (default false) and bundle-level `metadata.ci_checks_default: <bool>`. Updated the optional-field list + added a bundle-metadata section.
+- [x] 1.2 Set `ci_checks_default: true` on `security` and `privacy` bundle metadata; `architect`/`finops` remain per-rule opt-in. Rules without patterns are silently skipped by the CI lane (asserted).
+- [x] 1.3 Test: `load_ci_rules('defaults')` returns exactly `{security/v0.1.0/PHI-001, security/v0.1.0/SECRET-001}` and excludes architect/finops (`test_real_bundles_select_expected_ci_ruleset_without_force`). Rule-id set locked (the drift guard).
+- [x] 1.4 **Safety/validation:** drift test — selected rule-set derived ONLY from bundle files, no hardcoded list; adding a CI-enabled rule to a fixture bundle appears in output with zero script edits (`test_ci_ruleset_is_data_driven_not_hardcoded`).
 
 ## Phase 2 — GitHub Actions workflow (the surface)
 
-- [ ] 2.1 `.github/workflows/bundle-enforce.yml` — `on: pull_request`; checkout with `fetch-depth: 0`; compute `git diff --name-only origin/${{ github.base_ref }}...HEAD`; `pip install pyyaml`; run `python3 scripts/enforce_bundles.py --team "${BUNDLE_TEAM:-defaults}" --files <changed>`. Non-zero exit fails the job. No `secrets.*` referenced.
-- [ ] 2.2 Workflow uploads `bundle-enforce-result.json` as a build artifact. Header comment states the check is advisory until added to branch protection required checks.
-- [ ] 2.3 Test (workflow-lint): validate the YAML parses and references no `secrets.`; assert the run step passes `--files` scoped to the diff, not the whole tree.
-- [ ] 2.4 **Safety/validation:** confirm the workflow is the first under `.github/workflows/` and does not alter any orchestrator/IDE behavior; a repo without the file is unaffected (documented + asserted by absence).
+- [x] 2.1 `.github/workflows/bundle-enforce.yml` — `on: pull_request`; checkout `fetch-depth: 0`; compute `git diff --name-only --diff-filter=ACM base...head`; `pip install pyyaml`; run `enforce_bundles.py --team defaults --stdin`. Non-zero exit fails the job. No `secrets.*`.
+- [x] 2.2 Workflow writes + uploads `bundle-enforce-result.json` as a build artifact. Header comment states the check is advisory until added to branch-protection required checks.
+- [x] 2.3 Test (workflow-lint): YAML parses, references no `secrets.`, scopes to the diff via `--stdin`, not the whole tree (`test_workflow_*`).
+- [x] 2.4 **Safety/validation:** confirmed the workflow is the first under `.github/workflows/` and does not alter orchestrator/IDE behavior; a repo without the file is unaffected (`test_workflow_is_first_and_only_workflow` + documented in docs/CI-ENFORCEMENT.md).
 
 ## Phase 3 — Result artifact + docs (legibility)
 
-- [ ] 3.1 Enforcer writes `bundle-enforce-result.json` (`pr_ref`, `pass`, `violations[]` with `bundle_ref` + `file:line`). Test the JSON shape for both a failing and a clean run; assert NO ledger/Cosmos import on the write path.
-- [ ] 3.2 `docs/CI-ENFORCEMENT.md` — the three enforcement lanes table (`pipeline_stages` / `ide_hooks` / `ci_checks`), the "advisory until required" step with the exact branch-protection navigation, how the lane sits under `add-autonomous-review-loop` as the deterministic floor, and the "green check is necessary-not-sufficient" caveat.
-- [ ] 3.3 **Safety/validation:** doc-accuracy test — `docs/CI-ENFORCEMENT.md` names the real workflow file and the real script path; a link-check asserts both exist. Re-run the full suite green.
+- [x] 3.1 Enforcer writes `bundle-enforce-result.json` (`pr_ref`, `pass`, `violations[]` with `bundle_ref` + `file:line`). JSON shape tested for failing + clean runs; NO ledger/Cosmos import on the write path (`test_result_json_shape_*`, `test_write_result_json_uses_no_orchestrator_import`).
+- [x] 3.2 `docs/CI-ENFORCEMENT.md` — the three enforcement lanes table (`pipeline_stages` / `ide_hooks` / `ci_checks`), the "advisory until required" step with exact branch-protection navigation, how the lane sits under `add-autonomous-review-loop` as the deterministic floor, and the "green check is necessary-not-sufficient" caveat.
+- [x] 3.3 **Safety/validation:** doc-accuracy test — `docs/CI-ENFORCEMENT.md` names the real workflow file + script path; link-check asserts both exist (`test_ci_enforcement_doc_names_real_paths`).
 
 ## Phase 4 — Spec hygiene
 
-- [ ] 4.1 `openspec validate add-bundle-ci-enforcement --strict` → Valid.
+- [x] 4.1 `openspec validate add-bundle-ci-enforcement --strict` → Valid.
 - [x] 4.2 Cross-reference this change from `add-autonomous-review-loop/design.md` + `add-autonomous-review-loop/proposal.md` (the loop's deterministic floor) and `add-standards-bundles/proposal.md` (the `ci_checks` enforcement key). Do NOT modify their spec deltas — reference only. **DONE 2026-07-08** — prose-only cross-refs added; no spec deltas touched.
 
 ## Rollback plan
@@ -59,7 +59,7 @@ current repo and red on an injected violation. This is the demo asset.
 
 ## Test targets (summary, for strict config)
 
-- Unit: `load_rules` selection (Phase 0/1), fail-closed on malformed bundle,
+- Unit: `load_ci_rules` selection (Phase 0/1), fail-closed on malformed bundle,
   PINS resolution + defaults fallback, no-orchestrator-import guard.
 - Integration: enforcer over an injected violating diff → non-zero + citation;
   over a clean diff → zero + `pass: true` artifact.

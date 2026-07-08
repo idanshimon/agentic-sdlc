@@ -54,8 +54,22 @@ rules:
 
 - `enforcement.pipeline_stages` (default: all stages)
 - `enforcement.ide_hooks` (default: all hooks)
+- `enforcement.ci_checks` (default: `false`) — opts this rule into the third
+  enforcement lane: the GitHub-native required status check run by
+  `scripts/enforce_bundles.py`. A rule runs in the CI lane only when its
+  `severity` is `BLOCK`, it declares a `pattern`, AND either its
+  `enforcement.ci_checks` is `true` or its bundle sets `ci_checks_default: true`.
+  Semantic BLOCK rules (no `pattern`) are silently skipped by the CI lane — they
+  remain enforced by `pipeline_stages` / `ide_hooks` / the autonomous review loop.
 - `pattern` (only meaningful if the enforcement surface uses pattern matching)
 - `test_cases`
+
+### Bundle-level metadata (optional)
+
+- `metadata.ci_checks_default` (default: `false`) — when `true`, every
+  `BLOCK` rule in the bundle that carries a `pattern` opts into the CI lane
+  without per-rule `enforcement.ci_checks`. Set on `security` and `privacy`
+  in v0.1.0.
 
 ## envelope.yaml
 
