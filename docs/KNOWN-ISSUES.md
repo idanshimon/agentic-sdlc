@@ -56,10 +56,16 @@ isolation. Instead make the scoping *visible and adjustable*:
    10s, so a fresh decision surfaces without a manual reload.
 2. Let the operator scope Decisions to a specific run (run detail already knows
    its `team_id`) so cross-team runs are reachable when intended. (open)
-3. Ensure demo/live runs and the dashboard token share a `team_id` in the
-   deployment env (align `LEDGER_TEAM_ID` used by runs with the dashboard
-   token's team) — the cleanest fix for the reported scenario if they diverged.
-   Infra/env change, not code. (open)
+3. ✅ DONE (2026-07-08) — Runs now write decisions under the same team the
+   dashboard token reads. `/api/run` defaulted `team_id` to a hardcoded
+   `"cardiology"` while the dashboard token maps to `team-demo`, so every run's
+   decisions landed in a partition the dashboard could not read — the root cause
+   of the reported symptom. Fixed: `team_id` defaults from the `LEDGER_TEAM_ID`
+   env (fallback `team-demo`); `infra/apps.bicep` + `infra/apps-vnet.bicep` set
+   `LEDGER_TEAM_ID=team-demo` on the orchestrator container. Regression-guarded
+   by `test_run_team_alignment.py` (3 tests). NOTE: corrects NEW runs after
+   redeploy; decisions already written under `cardiology` remain in that
+   partition (historical, one-time data consideration).
 
 **KI-2** (resolver-gate button) — fixed earlier, see below.
 

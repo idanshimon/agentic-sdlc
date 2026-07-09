@@ -101,6 +101,10 @@ resource caOrchestratorVnet 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DELIVER_PROVIDER',         value: 'github' }
             { name: 'LEDGER_MCP_URL',           value: 'http://ca-ledger-mcp-vnet/' }
             { name: 'LEDGER_MCP_TOKEN',         secretRef: 'ledger-mcp-token' }
+            // Partition every run's decisions under the SAME team the dashboard
+            // token reads (ledgerMcpTokensJson maps the token -> team-demo).
+            // Divergence hides decisions from the dashboard (KI-1 Bug B).
+            { name: 'LEDGER_TEAM_ID',           value: 'team-demo' }
           ]
         }
       ]

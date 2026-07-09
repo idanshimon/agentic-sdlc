@@ -569,11 +569,18 @@ async def reload_config() -> dict:
 @app.post("/api/run", tags=["Runs"])
 async def create_run(
     prd: UploadFile = File(...),
-    team_id: str = Form("cardiology"),
+    team_id: str = Form(default_factory=lambda: os.environ.get("LEDGER_TEAM_ID", "team-demo")),
     mode: str = Form("manual"),
     stage_providers: str = Form(""),
 ) -> dict:
     """Accept a PRD upload and kick off the 9-stage pipeline (design.md §2).
+
+    `team_id` is the Cosmos partition every decision for this run is written
+    under. It defaults to the `LEDGER_TEAM_ID` env var (falling back to
+    "team-demo"), which MUST match the team the dashboard's LEDGER_MCP_TOKEN is
+    scoped to — otherwise the run's decisions land in a partition the dashboard
+    token cannot read and the Decisions view appears empty (KI-1 Bug B). The
+    previous hardcoded "cardiology" default caused exactly that divergence.
 
     `mode` is per-run autopilot opt-in: "manual" (default), "autopilot", or "hybrid".
     `stage_providers` is an optional JSON string mapping stage→{provider,model,via_apim}
