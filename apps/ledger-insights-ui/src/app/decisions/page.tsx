@@ -1,5 +1,5 @@
 "use client";
-import { Scale, Table as TableIcon, LayoutGrid, Search, X } from "lucide-react";
+import { Scale, Table as TableIcon, LayoutGrid, Search, X, Users, FlaskConical, AlertTriangle } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useDecisions } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
@@ -42,6 +42,40 @@ export default function DecisionsPage() {
         title="Decision Ledger"
         description="Every meaningful agent decision is written here — runtime entries (per stage) and meta entries (per standards change). PHI classifier output, bundle citations, model + cost, all queryable. Click a row to inspect the full rationale, provenance, and operator teaching signals."
       />
+
+      {/* Scope chips — make the read scope explicit. KI-1: a run under a
+          different team writes to a partition this token can't read, which
+          previously looked like a silent empty result. Surfacing the team +
+          data source turns that into visible, understandable state. */}
+      {!isLoading && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          {data?.team_id && (
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--border-default)] bg-[var(--card)]"
+              title="Decisions are partitioned by team. This token can only read its own team's ledger — a run created under a different team writes to a partition not shown here."
+            >
+              <Users className="h-3 w-3 text-[var(--text-tertiary)]" />
+              <span className="text-[var(--text-tertiary)]">team</span>
+              <span className="mono font-medium">{data.team_id}</span>
+            </span>
+          )}
+          {data?.demo && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--warning)]/40 bg-[var(--warning)]/[0.06] text-[var(--warning)]">
+              <FlaskConical className="h-3 w-3" />
+              demo + live blended
+            </span>
+          )}
+          {data?.live_unreachable && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--danger)]/40 bg-[var(--danger)]/[0.06] text-[var(--danger)]">
+              <AlertTriangle className="h-3 w-3" />
+              live ledger unreachable — showing demo only
+            </span>
+          )}
+          <span className="text-[var(--text-tertiary)]">
+            {entries.length} entr{entries.length === 1 ? "y" : "ies"}
+          </span>
+        </div>
+      )}
 
       {!isLoading && entries.length > 0 && <DecisionsInsights entries={entries} />}
 

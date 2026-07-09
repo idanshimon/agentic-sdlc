@@ -34,7 +34,9 @@ describe("ledger.query handler", () => {
     expect(cosmos.queryEntries).toHaveBeenCalledTimes(1);
     const call = (cosmos.queryEntries as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(call.team_id).toBe("team-cardiology");
-    expect(result).toEqual({ entries: [] });
+    // The handler echoes the team it actually queried (KI-1: makes the
+    // partition the dashboard read explicit instead of a silent empty result).
+    expect(result).toEqual({ entries: [], team_id: "team-cardiology" });
   });
 
   it("accepts explicit team_id when it matches the authed team", async () => {

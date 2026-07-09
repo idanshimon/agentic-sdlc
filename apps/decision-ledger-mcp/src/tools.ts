@@ -47,7 +47,11 @@ export const tools: Record<string, ToolDef> = {
         agent_session_id: args.agent_session_id,
         bundle_ref_prefix: args.bundle_ref_prefix,
       });
-      return { entries };
+      // Echo the team the query actually ran against so the dashboard can show
+      // WHICH partition it read (KI-1: a run under a different team_id is
+      // invisible to this token; surfacing the team makes that explicit instead
+      // of a silent empty result).
+      return { entries, team_id };
     },
   },
 
