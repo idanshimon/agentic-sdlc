@@ -49,12 +49,17 @@ had to be addressed.
 
 **Remaining (Bug B mitigation — UX, not a security change):** don't weaken
 isolation. Instead make the scoping *visible and adjustable*:
-1. Show which team the Decisions view is querying (a small "team: …" chip).
+1. ✅ DONE (2026-07-08) — Show which team the Decisions view is querying. The MCP
+   `ledger.query` now echoes `team_id`; the `/decisions` page shows a "team: …"
+   chip plus "demo + live blended" / "live unreachable" chips, so an empty or
+   stale result is explained, not silent. `useDecisions` also refetches every
+   10s, so a fresh decision surfaces without a manual reload.
 2. Let the operator scope Decisions to a specific run (run detail already knows
-   its `team_id`) so cross-team runs are reachable when intended.
+   its `team_id`) so cross-team runs are reachable when intended. (open)
 3. Ensure demo/live runs and the dashboard token share a `team_id` in the
    deployment env (align `LEDGER_TEAM_ID` used by runs with the dashboard
    token's team) — the cleanest fix for the reported scenario if they diverged.
+   Infra/env change, not code. (open)
 
 **KI-2** (resolver-gate button) — fixed earlier, see below.
 
