@@ -16,6 +16,7 @@ Routes:
 from __future__ import annotations
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
@@ -343,6 +344,48 @@ async def get_repo_autonomy() -> dict:
     """
     from . import repo_autonomy as _ra
     return _ra.REPO_AUTONOMY.posture_summary()
+
+
+class ReviewLoopMergeBody(BaseModel):
+    repo: str
+    pr_number: int
+    merge_method: str = "merge"
+
+
+# Imported at module level so tests can monkeypatch main.merge_pull_request.
+from .merge_pr import merge_pull_request  # noqa: E402
+
+
+@app.post("/api/review-loops/merge")
+async def review_loop_merge(body: ReviewLoopMergeBody) -> dict:
+    """The Tier-B human merge touch-point.
+
+    Tier B = the loop reviews to PASS autonomously, but a human clicks merge —
+    this endpoint is that click. Enforces the tier server-side: refuses on
+    Tier-C / unlisted repos (no autonomous merge surface there; the loop only
+    comments). Tier-A repos merge inside the loop, so this endpoint is the B path.
+    A blocked merge returns merged=false + escalate (honest), never a fake success.
+    """
+    from . import repo_autonomy as _ra
+    tier = _ra.REPO_AUTONOMY.tier_for(body.repo)
+    if tier == "C":
+        raise HTTPException(
+            status_code=409,
+            detail=f"repo '{body.repo}' is Tier C (advisory) or unlisted — the "
+                   f"review loop does not merge here; graduate it to Tier B/A first.",
+        )
+    token = os.getenv("DELIVER_GH_TOKEN") or os.getenv("GH_TOKEN") or ""
+    result = await merge_pull_request(
+        repo=body.repo, pr_number=body.pr_number, token=token,
+        merge_method=body.merge_method,
+    )
+    return {
+        "merged": result.merged,
+        "sha": result.sha,
+        "escalate": result.escalate,
+        "reason": result.reason,
+        "tier": tier,
+    }
 
 
 # ── Editing plane (#3): governed PR write-back ────────────────────────────────
