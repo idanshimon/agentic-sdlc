@@ -103,6 +103,59 @@ class CallResult:
     prompt_resolution: Optional[ResolveResult] = None
 
 
+class ModelPolicyRefusal(Exception):
+    """Raised at stage dispatch when config/models.yaml forbids the resolved
+    model for this stage (Phase 4, add-configuration-plane). Carries the
+    structured `rule_ref` the orchestrator stamps onto the refusal ledger entry
+    (autonomy_ref-style) so the compliance query can cite WHY the stage failed.
+    """
+
+    def __init__(self, stage: str, model: str, reason: str, rule_ref: str) -> None:
+        self.stage = stage
+        self.model = model
+        self.reason = reason
+        self.rule_ref = rule_ref
+        super().__init__(
+            f"model policy refused {model!r} for stage {stage!r}: {reason} "
+            f"[{rule_ref}]"
+        )
+
+
+def enforce_model_policy(
+    stage_key: str,
+    model: str,
+    *,
+    phi: bool,
+    policy=None,
+) -> None:
+    """Refuse a forbidden model at stage dispatch. No-op when the policy is
+    unloaded (bootstrap/permissive) or the model is allowed. Raises
+    ModelPolicyRefusal otherwise. Pure w.r.t. the injected `policy` so it's
+    unit-testable without touching the module singleton."""
+    from .model_policy import MODEL_POLICY
+
+    pol = policy if policy is not None else MODEL_POLICY
+    verdict = pol.check_model(stage_key, model, phi=phi)
+    if not verdict.allowed:
+        raise ModelPolicyRefusal(stage_key, model, verdict.reason, verdict.rule_ref)
+
+
+def _run_handles_phi(run: RunState) -> bool:
+    """Does this run touch PHI-classified content? True when any surfaced card
+    is a phi-classification ambiguity, or the run carries an explicit truthy
+    `phi_class` (harness/seed can set it via RunState extra='allow'). Drives the
+    phi_eligible model check — conservative: unknown ⇒ False (permissive), the
+    phi_stages default still guards architect/codegen/review_scan structurally.
+    """
+    pc = getattr(run, "phi_class", None)
+    if isinstance(pc, str) and pc.lower() in ("low", "high"):
+        return True
+    for card in getattr(run, "cards", None) or []:
+        if getattr(card, "ambiguity_class", None) == "phi-classification":
+            return True
+    return False
+
+
 async def _call(
     *,
     run: RunState,
@@ -125,6 +178,15 @@ async def _call(
         "x-pipeline-stage": stage_key,
     }
     model = model_override or get_model_for_stage(run, stage_key) or settings.model_default
+    # Phase 4 (add-configuration-plane): enforce model policy at the single
+    # stage-dispatch chokepoint. A denied / non-allowlisted model, or a non-
+    # phi_eligible model on a PHI-adjacent stage, raises ModelPolicyRefusal —
+    # the caller (stage driver) turns that into a failed run with a ledger entry
+    # citing rule_ref. No-op when models.yaml isn't activated (permissive).
+    # `phi` is true when this run handles PHI-classified content (any card is a
+    # phi-classification ambiguity, or the run carries an explicit phi flag).
+    _phi = _run_handles_phi(run)
+    enforce_model_policy(stage_key, model, phi=_phi)
     try:
         provider = get_provider_for_stage(run, stage_key)
         resp = await provider.chat(

@@ -191,10 +191,18 @@ from apps.orchestrator.models import RunMode
 
 
 def test_autopilot_auto_accepts_non_invariant(client, seeded_run):
-    """In autopilot, non-invariant cards auto-accept the recommended option."""
+    """In autopilot with NO autonomy matrix loaded (bootstrap), non-invariant
+    cards auto-accept the recommended option — the legacy mode-driven path."""
     seeded_run.mode = RunMode.AUTOPILOT
+    from apps.orchestrator import autonomy as _au
     from apps.orchestrator.main import _run_autopilot
-    _asyncio.run(_run_autopilot(seeded_run))
+    # Force bootstrap (no matrix) so this exercises the mode-driven default,
+    # independent of any shipped config/autonomy.yaml.
+    _au.reload_autonomy_matrix("/nonexistent/autonomy.yaml")
+    try:
+        _asyncio.run(_run_autopilot(seeded_run))
+    finally:
+        _au.reload_autonomy_matrix()  # restore default singleton
     # Card has class 'data-retention' (non-invariant) → auto-resolved.
     assert "card-1" in seeded_run.autopilot_decisions
     assert "card-1" not in seeded_run.autopilot_overrides
@@ -204,6 +212,26 @@ def test_autopilot_auto_accepts_non_invariant(client, seeded_run):
     assert auto_d.actor.startswith("autopilot:")
     # Recommended option text should have been chosen.
     assert "7 years" in auto_d.resolution_text
+
+
+def test_autonomy_matrix_gate_overrides_autopilot(client, seeded_run, tmp_path):
+    """Phase 2: an autonomy matrix setting the card's class to `gate` MUST
+    override autopilot mode — the card gates instead of auto-resolving."""
+    seeded_run.mode = RunMode.AUTOPILOT
+    from apps.orchestrator import autonomy as _au
+    from apps.orchestrator.main import _run_autopilot
+    # seeded_run's card-1 is class 'data-retention' for team 'cardiology'.
+    policy = tmp_path / "autonomy.yaml"
+    policy.write_text('teams:\n  "*":\n    data-retention: gate\n')
+    _au.reload_autonomy_matrix(str(policy))
+    try:
+        _asyncio.run(_run_autopilot(seeded_run))
+    finally:
+        _au.reload_autonomy_matrix()
+    # Matrix said gate → card is overridden, NOT auto-decided.
+    assert "card-1" in seeded_run.autopilot_overrides
+    assert "card-1" not in seeded_run.autopilot_decisions
+    assert seeded_run.decisions == []
 
 
 def test_autopilot_invariant_override_still_gates(client):

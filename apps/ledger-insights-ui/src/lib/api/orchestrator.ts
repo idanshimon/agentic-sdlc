@@ -301,6 +301,20 @@ export const orchestrator = {
   telemetryDecisions() {
     return req<{ entries: Array<Record<string, unknown>> }>("/api/telemetry/decisions");
   },
+  // Phase 5 (add-configuration-plane) — the unified compliance query (the hero).
+  // WHAT + WHY (autonomy rule + bundle version) + WHO + model + cost per AI
+  // decision, filterable by phi_class / window / actor kind / team.
+  compliance(filters?: {
+    phi_class?: string; actor_kind?: string; team_id?: string;
+    window?: string; since?: string; until?: string; limit?: number;
+  }) {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters ?? {})) {
+      if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+    }
+    const qs = q.toString();
+    return req<ComplianceResponse>(`/api/compliance/decisions${qs ? `?${qs}` : ""}`);
+  },
   promptLibrary() {
     return req<PromptCatalogResponse>("/api/prompt-library");
   },
@@ -364,6 +378,36 @@ export interface ConfigSaveResponse {
   path: string;
   dry_run: boolean;
   message: string;
+}
+
+/** One row of the Phase 5 compliance query — a fully-attributed AI decision. */
+export interface ComplianceRow {
+  id: string;
+  created_at: string;
+  team_id: string | null;
+  run_id: string | null;
+  agent_session_id: string | null;
+  stage: string | null;
+  decision: string;
+  ambiguity_class: string | null;
+  decision_kind: string | null;
+  autonomy_ref: string;
+  bundle_refs: string[];
+  actor_kind: "human" | "agent";
+  actor_id: string;
+  model_used: string | null;
+  cost_usd: number | null;
+  phi_class: string;
+  complete: boolean;
+}
+
+export interface ComplianceResponse {
+  rows: ComplianceRow[];
+  summary: { total: number; complete: number; incomplete: number; complete_pct: number };
+  filters: {
+    phi_class: string | null; since: string | null; until: string | null;
+    actor_kind: string | null; team_id: string | null;
+  };
 }
 
 /** Browser-fetch a same-origin sample PRD file (lives under public/samples). */
