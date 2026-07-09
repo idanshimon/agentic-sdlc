@@ -148,7 +148,12 @@ class LedgerEntry(BaseModel):
     # display-only. ledger-core's LedgerEntry already has bundle_refs; the
     # orchestrator-local model was missing it (the recurring two-model drift).
     bundle_refs: list[str] = Field(default_factory=list)
-    # self-heal cowork (add-self-heal-cowork): heal entries reuse this LedgerEntry
+    # Config-plane (add-configuration-plane Phase 2): the autonomy rule that
+    # governed this decision — WHY it was autopiloted or gated. Structured,
+    # queryable citation (see autonomy.autonomy_ref). Empty for entries written
+    # before this wiring; the Phase 5 compliance query filters on it. Closes the
+    # "why this was autopilot vs gated" audit gap.
+    autonomy_ref: str = ""
     # with runtime_kind in {heal_proposed, heal_decided, heal_executed} and a
     # shared heal_id tying the chain. These are optional so non-heal entries are
     # unaffected.

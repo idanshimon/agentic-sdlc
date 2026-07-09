@@ -44,10 +44,10 @@ from .stages import (
     stage_architect, stage_assessor, stage_codegen, stage_deliver,
     stage_ingest, stage_review_scan, stage_test_plan,
 )
+from ._pipeline_stages import ModelPolicyRefusal
 from .prompt_library import build_catalog_view, get_prompt, UnknownStageError
 from .telemetry import init_telemetry, record_gate_wall_clock, span
 from .telemetry_queries import query_classes, query_cost, query_decisions, query_recent_runs
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 _logger = logging.getLogger("orchestrator.main")
 
@@ -204,24 +204,68 @@ async def _run_autopilot(run: RunState) -> None:
     """
     if run.mode not in (RunMode.AUTOPILOT, RunMode.HYBRID):
         return
+    from .autonomy import AUTONOMY_MATRIX, autonomy_ref
     for card in run.cards:
         if not card.is_gating:
             continue
         if card.card_id in run.autopilot_decisions or card.card_id in run.autopilot_overrides:
             continue
-        # Invariant override — always gates.
+        # Invariant override — always gates. (Belt: the matrix also returns
+        # 'gate' for invariants, but this stays as the primary hard-lock so the
+        # guarantee holds even if autonomy config is absent or bypassed.)
         if card.ambiguity_class in INVARIANT_CLASSES:
             run.autopilot_overrides.append(card.card_id)
             continue
-        # HYBRID: gate when no precedent exists.
-        if run.mode == RunMode.HYBRID:
-            if _ledger is None:
-                continue  # no ledger → can't verify precedent → gate
-            precedent = await _ledger.find_precedent(
-                run.team_id, card.ambiguity_class, card.slot_value_hash,
-            )
-            if not precedent:
+
+        # Phase 2 — autonomy matrix (config-plane). When authored, it decides
+        # per (team, class) whether to gate / autopilot-always / autopilot-above-
+        # threshold, overriding the mode-driven default below. When unloaded,
+        # rule is None and we preserve the exact pre-Phase-2 behaviour. We also
+        # capture WHY (autonomy_ref) so the decision records why it was
+        # autopiloted vs gated — the audit answer the compliance query reads.
+        rule = AUTONOMY_MATRIX.rule_for(run.team_id, card.ambiguity_class)
+        decision_ref = ""
+        if rule is not None:
+            if rule.mode == "gate":
+                run.autopilot_overrides.append(card.card_id)
                 continue
+            if rule.mode == "autopilot_above_threshold":
+                # Gate unless ledger precedent meets the configured confidence.
+                if _ledger is None:
+                    run.autopilot_overrides.append(card.card_id)
+                    continue
+                precedent = await _ledger.find_precedent(
+                    run.team_id, card.ambiguity_class, card.slot_value_hash,
+                )
+                score = getattr(precedent, "accuracy_score", 0.0) if precedent else 0.0
+                if not precedent or score < rule.threshold:
+                    run.autopilot_overrides.append(card.card_id)
+                    continue
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class,
+                    reason=f"precedent{score:g}>=t{rule.threshold:g}",
+                )
+            else:  # autopilot_always
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="autopilot-always",
+                )
+        else:
+            # HYBRID: gate when no precedent exists (legacy mode-driven path).
+            if run.mode == RunMode.HYBRID:
+                if _ledger is None:
+                    continue  # no ledger → can't verify precedent → gate
+                precedent = await _ledger.find_precedent(
+                    run.team_id, card.ambiguity_class, card.slot_value_hash,
+                )
+                if not precedent:
+                    continue
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="hybrid-precedent",
+                )
+            else:  # pure AUTOPILOT mode, no matrix rule
+                decision_ref = autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="autopilot-mode",
+                )
         # Pick the recommended option (or first option if none flagged).
         if not card.options:
             run.autopilot_overrides.append(card.card_id)
@@ -253,6 +297,10 @@ async def _run_autopilot(run: RunState) -> None:
                 # govern this decision. Makes the agent→bundle relationship a
                 # queryable fact on the decision, not display-only card metadata.
                 bundle_refs=bundles_for_stage("assessor"),
+                # Config-plane Phase 2: WHY this card was auto-resolved (the
+                # autonomy rule + reason), so the decision is self-explaining in
+                # the compliance query. Computed per-branch above.
+                autonomy_ref=decision_ref,
                 # Phase 2.6: pin the prompt chain that produced this
                 # auto-decision. Cards come out of the assessor stage,
                 # so the assessor's chain is the right one to capture.
@@ -325,6 +373,20 @@ async def _drive(run_id: str, prd_text: str) -> None:
             run_id=run_id, stage=Stage.DELIVER, status="completed",
             message=f"decisions.md written: {url}", payload={"decisions_md_url": url},
         ))
+    except ModelPolicyRefusal as refusal:
+        # Phase 4 (add-configuration-plane): a config/models.yaml refusal is a
+        # GOVERNED failure, not a crash — audit it. Write a ledger entry citing
+        # the model-policy rule (autonomy_ref=rule_ref) so the compliance query
+        # can explain WHY the run failed, then fail the run with an honest event.
+        _logger.warning("Model policy refused a stage: %s", refusal)
+        run.status = RunStatus.FAILED
+        await _write_model_refusal_entry(run, refusal)
+        await _push(run_id, StageEvent(
+            run_id=run_id, stage=run.current_stage, status="failed",
+            message=str(refusal),
+            payload={"model_policy_rule": refusal.rule_ref,
+                     "refused_model": refusal.model, "stage": refusal.stage},
+        ))
     except Exception as exc:
         _logger.exception("Pipeline crashed: %s", exc)
         run.status = RunStatus.FAILED
@@ -335,6 +397,31 @@ async def _drive(run_id: str, prd_text: str) -> None:
         if _ledger:
             await _ledger.save_run(run)
         await _push(run_id, None)  # sentinel: stream complete
+
+
+async def _write_model_refusal_entry(run: RunState, refusal: ModelPolicyRefusal) -> None:
+    """Persist a ledger entry for a model-policy refusal, citing the governing
+    rule in `autonomy_ref` (the same queryable audit field the autopilot/gate
+    paths use). Safe no-op when the ledger is disabled (tests / bootstrap)."""
+    if _ledger is None:
+        return
+    try:
+        await _ledger.write_decision(LedgerEntry(
+            team_id=run.team_id, run_id=run.run_id,
+            ambiguity_class="other",
+            resolution_text=(
+                f"model policy refused {refusal.model!r} at stage "
+                f"{refusal.stage!r}: {refusal.reason}"
+            ),
+            decision_kind="reject", created_by="model-policy@config-plane",
+            confidence_source="autopilot",
+            stage=refusal.stage,
+            # cite the governing model-policy rule — the audit answer the
+            # compliance query reads (same field the autonomy paths stamp).
+            autonomy_ref=refusal.rule_ref,
+        ))
+    except Exception as exc:  # pragma: no cover - defensive; never mask the failure
+        _logger.warning("could not write model-refusal ledger entry: %s", exc)
 
 
 async def _open_gate(run: RunState, stage: Stage) -> None:
@@ -519,14 +606,59 @@ async def save_agent(body: AgentSaveBody) -> dict:
 async def save_bundle(body: BundleSaveBody) -> dict:
     """Edit a standards bundle file → opens a PR. PR-ONLY (no live apply):
     live-editing the compliance standards would bypass committee review, which
-    is the entire governance story. The bundle takes effect only after merge."""
+    is the entire governance story. The bundle takes effect only after merge.
+
+    Phase 3 governance teeth (add-configuration-plane): before opening the PR,
+    a rules.yaml edit to an EXISTING bundle is validated — a diff that would
+    delete, unlock, de-classify, or downgrade a `phi_locked` rule is REFUSED
+    (HTTP 409) before any PR is created. PHI controls can only be strengthened.
+    This mirrors the autonomy invariant hard-lock: even a well-formed edit
+    cannot quietly relax a PHI rule. New bundle versions (no existing file) and
+    non-rules files (envelope/reviewers) skip this check.
+    """
     dept = _safe_seg(body.dept)
     version = _safe_seg(body.version)
     file = _safe_seg(body.file)
+    if file == "rules.yaml":
+        _validate_bundle_rules_edit(dept, version, body.content)
     return await _do_config_save(
         f"standards-bundles/{dept}/{version}/{file}", body,
         labels=["config-edit", "standards-change", f"dept/{dept}"],
     )
+
+
+def _validate_bundle_rules_edit(dept: str, version: str, proposed_content: str) -> None:
+    """Refuse a rules.yaml edit that weakens a phi_locked rule. No-op when the
+    bundle version is new (nothing to protect) or the proposed YAML is malformed
+    (the PR flow / CI surfaces the parse error; we don't 500 the editor here)."""
+    from .bundle_rules import (
+        Bundle,
+        PhiLockViolation,
+        load_bundle,
+        load_bundle_from_text,
+    )
+
+    try:
+        existing = load_bundle(dept, version)
+    except FileNotFoundError:
+        return  # brand-new bundle version — no existing rule to protect
+    except Exception as exc:  # pragma: no cover - defensive
+        _logger.warning("bundle-edit validation: could not load existing %s/%s: %s",
+                        dept, version, exc)
+        return
+    try:
+        proposed = load_bundle_from_text(proposed_content)
+    except Exception as exc:
+        # Malformed proposed YAML — let the PR/CI catch it rather than block here,
+        # UNLESS it drops PHI rules by being unparseable. Treat as empty to be safe.
+        _logger.info("bundle-edit validation: proposed YAML unparseable (%s); "
+                     "treating as rule-less for lock check", exc)
+        proposed = Bundle(dept=dept, version=version)
+    try:
+        from .bundle_rules import validate_bundle_edit
+        validate_bundle_edit(existing, proposed)
+    except PhiLockViolation as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.post("/api/config/prompts/save", tags=["Configuration"])
@@ -547,6 +679,19 @@ async def save_prompt(body: PromptSaveBody) -> dict:
     return await _do_config_save(
         rel, body, labels=["config-edit", "prompt", f"stage/{stage}"],
     )
+
+
+@app.get("/api/config/pins")
+async def get_pins() -> dict:
+    """Bundle-version pin matrix for the config UI (Phase 3, config-plane).
+
+    Returns {defaults, teams, available} from standards-bundles/PINS.yaml plus
+    the on-disk bundle versions per department, so the UI can render the
+    team→version matrix and offer a valid pin dropdown. Read-only — changing a
+    pin goes through the governed bundles PR flow, same as any standards change.
+    """
+    from .pins import read_pins
+    return read_pins()
 
 
 @app.post("/api/config/reload", tags=["Configuration"])
@@ -609,6 +754,16 @@ async def create_run(
             if not isinstance(val, dict):
                 raise HTTPException(400, f"stage_providers[{stage_key!r}] must be an object")
             overrides[stage_key] = {k: v for k, v in val.items() if k in ("provider", "model", "via_apim")}
+
+    # Configuration plane (Phase 1): resolve team_id against the org model. Once a
+    # customer has authored org.yaml, an unknown team is refused rather than
+    # written as an anonymous ledger entry (openspec: add-configuration-plane).
+    # With no org.yaml loaded (bootstrap/demo), resolution is permissive.
+    from .org_model import ORG_MODEL, UnknownTeamError
+    try:
+        ORG_MODEL.resolve_team(team_id)
+    except UnknownTeamError as exc:
+        raise HTTPException(422, str(exc))
 
     run = RunState(
         team_id=team_id, prd_blob_url=f"inline://{prd.filename}", mode=run_mode,
@@ -1059,6 +1214,14 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
     if decision.card_id and _ledger:
         card = next((c for c in run.cards if c.card_id == decision.card_id), None)
         if card:
+            from .autonomy import autonomy_ref as _autonomy_ref
+            # Config-plane Phase 2: a human decided this card because its class
+            # was gated (invariant hard-lock, matrix `gate`, or bootstrap default).
+            # Record WHY it required a human — the same audit field the autopilot
+            # path stamps, so every decision explains its gate/autopilot origin.
+            gate_ref = _autonomy_ref(
+                run.team_id, card.ambiguity_class, reason="human-gate",
+            )
             entry = LedgerEntry(
                 team_id=run.team_id, run_id=run.run_id, card_id=card.card_id,
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
@@ -1068,6 +1231,7 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
                 # the assessor, so stamp the assessor agent's bundle subscriptions
                 # so a human decision is governed-attributed to the same bundles.
                 bundle_refs=bundles_for_stage("assessor"),
+                autonomy_ref=gate_ref,
                 # Phase 2.6: same as the autopilot path — the assessor's
                 # resolved prompt chain is the audit trail for which prompt
                 # produced the ambiguity card the operator just decided on.
@@ -1438,11 +1602,17 @@ async def reject(run_id: str, decision: GateDecision) -> dict:
     if decision.card_id and _ledger:
         card = next((c for c in run.cards if c.card_id == decision.card_id), None)
         if card:
+            from .autonomy import autonomy_ref as _autonomy_ref
             await _ledger.write_decision(LedgerEntry(
                 team_id=run.team_id, run_id=run.run_id, card_id=card.card_id,
                 ambiguity_class=card.ambiguity_class, slot_value_hash=card.slot_value_hash,
                 resolution_text=decision.resolution_text or "(reject)",
                 decision_kind="reject", created_by=decision.actor,
+                # Config-plane Phase 2: a reject is still a human gate decision —
+                # record WHY the card required a human (same audit field).
+                autonomy_ref=_autonomy_ref(
+                    run.team_id, card.ambiguity_class, reason="human-gate-reject",
+                ),
             ))
     _release_gate(run_id)
     return {"ok": True}
@@ -1520,6 +1690,54 @@ async def telemetry_classes(window: str = "7d", team_id: str | None = None) -> d
     if _ledger is None:
         return {"window": window, "total_decisions": 0, "classes": []}
     return await query_classes(_ledger, window=window, team_id=team_id)
+
+
+# ---------- compliance query (THE acceptance query, config-plane Phase 5) ------
+@app.get("/api/compliance/decisions")
+async def compliance_decisions(
+    phi_class: str | None = None,
+    actor_kind: str | None = None,
+    team_id: str | None = None,
+    window: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    limit: int = 500,
+) -> dict:
+    """Unified compliance query (add-configuration-plane Phase 5 — the hero).
+
+    Returns, per AI decision: WHAT was decided, WHY (governing autonomy rule +
+    bundle rule VERSION), WHO (human UPN or agent principal), which MODEL, and
+    the COST — filterable by phi_class, date range, actor kind, and team, across
+    every decision-producing surface (one ledger container, no surface-specific
+    branch). This is the capability's acceptance test:
+
+        phi_class=high&window=30d  ->  complete, non-null rows.
+
+    `window` (24h|7d|30d) is a shortcut that resolves to `since`; an explicit
+    `since`/`until` (ISO) overrides it. Best-effort: empty payload on Cosmos
+    error, never a 500.
+    """
+    from .compliance_query import completeness_summary, query_compliance
+    from .telemetry_queries import parse_window
+
+    since_iso = since
+    if since_iso is None and window:
+        from datetime import datetime, timezone
+        since_iso = (datetime.now(timezone.utc) - parse_window(window)).isoformat()
+
+    if _ledger is None:
+        return {
+            "rows": [],
+            "summary": completeness_summary([]),
+            "filters": {
+                "phi_class": phi_class, "since": since_iso, "until": until,
+                "actor_kind": actor_kind, "team_id": team_id,
+            },
+        }
+    return await query_compliance(
+        _ledger, phi_class=phi_class, since_iso=since_iso, until_iso=until,
+        actor_kind=actor_kind, team_id=team_id, limit=limit,
+    )
 
 
 # ---------- runs index endpoint ----------------------------------------------
