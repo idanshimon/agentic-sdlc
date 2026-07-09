@@ -44,12 +44,12 @@ Goal: one real failed PR → autonomous remediation → re-review → PASS →
 
 ## Phase 4 — UX (observable dark factory)
 
-- [ ] 4.1 `apps/ledger-insights-ui/src/app/review-loop/page.tsx` — live loop table, attempt-timeline stepper, terminal-state chips, hop→ledger + PR/commit deep links. Mirror `app/decisions/page.tsx`; URL-state filters; tonal buttons; `var(--*)` tokens.
-- [ ] 4.2 `/autonomy` per-repo tier panel (beside per-class): tier, why-capped, who-graduated, last-10 outcomes sparkline.
-- [ ] 4.3 Escalation inbox — unresolved blockers + PR + "take it from here".
-- [ ] 4.4 API client method + types (`URLSearchParams`, skip empty); sidebar nav entry (Agent-HQ plane) + lucide icon import.
-- [ ] 4.5 DEMO MODE fixtures so the loop renders offline (parity with demo store).
-- [ ] 4.6 `cd apps/ledger-insights-ui && npm run build` (or `npx tsc --noEmit`) clean — do NOT claim UI works from a green Python suite alone.
+- [x] 4.1 `apps/ledger-insights-ui/src/app/review-loop/page.tsx` — DONE (PR-5). Live loop table, attempt-timeline stepper (parses `reviewloop/<tier>/<repo>/<action>@attempt=N` citations), terminal-state chips (MERGED/ESCALATED/ADVISORY/IN-PROGRESS), grouped by repo. `var(--*)` theme tokens (corrected to the real vocabulary: --text/--text-secondary/--surface/--border/--danger/--warning/--success/--info/--accent).
+- [x] 4.2 Per-repo tier panel — DONE (rendered on /review-loop rather than /autonomy): tier badge + why-capped per repo, bootstrap message when no repo graduated. Reads `GET /api/config/repo-autonomy` via `useRepoAutonomy()`.
+- [x] 4.3 Escalation inbox — DONE. First-class section listing escalated loops with repo, attempt count, escalation reason, and terminal chip. Surfaces only when escalations exist.
+- [x] 4.4 API client method (`orchestrator.repoAutonomy()`) + types (`RepoTier`, `RepoAutonomyPosture`, 3 loop runtime_kinds + `autonomy_ref`/`detail` on LedgerEntry); `useReviewLoops()` + `useRepoAutonomy()` hooks; sidebar nav entry (Agent-HQ plane, GitMerge icon already imported). DONE.
+- [~] 4.5 DEMO MODE — the loop page reads live ledger loop-hops via `ledgerMcp.query` (which already merges demo-store entries in demo mode). Dedicated loop fixtures in the demo store are DEFERRED (no demo loop run exists yet); the page renders an honest EmptyState offline. Parity comes when a demo loop run is added.
+- [x] 4.6 `npm run build` — DONE, CLEAN. `/review-loop` appears in the route table as a static page; `npx tsc --noEmit` exits 0 (after clearing stale .next/types cache from deleted autonomy/compliance pages — not from this change).
 
 ## Phase 5 — Compliance + hardening
 

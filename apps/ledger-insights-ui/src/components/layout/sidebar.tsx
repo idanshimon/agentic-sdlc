@@ -56,6 +56,7 @@ const nav = [
     items: [
       { href: "/agents", label: "Custom Agents", icon: Bot, plane: "agenthq" },
       { href: "/hooks", label: "Hooks", icon: Workflow, plane: "agenthq" },
+      { href: "/review-loop", label: "Review Loop", icon: GitMerge, plane: "agenthq" },
       { href: "/phi", label: "PHI Classifier", icon: ShieldCheck, plane: "agenthq" },
     ],
   },
