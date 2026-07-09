@@ -4,6 +4,10 @@ metadata:
   authors: ["@security-leadership"]
   date: 2026-06-05
   description: PHI handling rules + secret scanning + SBOM requirements
+  # Opt every BLOCK rule that carries a `pattern` into the CI enforcement
+  # lane (scripts/enforce_bundles.py). Semantic BLOCK rules without a pattern
+  # are still enforced only by pipeline_stages / ide_hooks / the review loop.
+  ci_checks_default: true
 
 rules:
   - id: PHI-001

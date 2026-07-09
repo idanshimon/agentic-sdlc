@@ -1,6 +1,6 @@
 "use client";
 import { FileSearch, ShieldAlert, CheckCircle2, AlertTriangle, User, Bot } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCompliance } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
@@ -31,7 +31,18 @@ const WINDOW_OPTS = [
   { v: "30d", label: "Last 30 days" },
 ];
 
+// useSearchParams() must sit under a Suspense boundary for static export
+// (Next.js CSR-bailout rule). The default export provides that boundary; the
+// real page lives in ComplianceInner.
 export default function CompliancePage() {
+  return (
+    <Suspense fallback={null}>
+      <ComplianceInner />
+    </Suspense>
+  );
+}
+
+function ComplianceInner() {
   const router = useRouter();
   const sp = useSearchParams();
 

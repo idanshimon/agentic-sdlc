@@ -140,7 +140,14 @@ export interface LedgerEntry {
     | "feedback_thumbs"
     | "decision_flagged"
     | "replay_requested"
-    | "class_paused";
+    | "class_paused"
+    | "review_remediation"
+    | "loop_converged"
+    | "loop_escalated";
+  /** Autonomous review loop: grep-able reviewloop/<tier>/<repo>/<action>@attempt=N citation. */
+  autonomy_ref?: string;
+  /** Autonomous review loop: one-line human-readable detail for the hop. */
+  detail?: string;
   /** Track B: pointer back to the decision this teaching signal acts on. */
   references_entry_id?: string;
   /** Track B: thumbs subkind, only set when runtime_kind=feedback_thumbs. */
@@ -208,4 +215,21 @@ export interface TelemetryClass {
   count: number;
   avg_cost_usd: number;
   resolution_modes: Record<string, number>;
+}
+
+// ── Autonomous review loop (add-autonomous-review-loop) ──────────────────────
+
+export type RepoTier = "A" | "B" | "C";
+
+export interface RepoAutonomyRow {
+  repo: string;
+  tier: RepoTier;
+  recent_phi_or_deny_blocker: boolean;
+  why_capped: string;
+}
+
+export interface RepoAutonomyPosture {
+  bootstrap: boolean;
+  default_tier: RepoTier;
+  repos: RepoAutonomyRow[];
 }

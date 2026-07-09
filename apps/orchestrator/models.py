@@ -184,6 +184,32 @@ class StageEvent(BaseModel):
     ts: str = Field(default_factory=_now)
 
 
+class Blocker(BaseModel):
+    """A single BLOCK-severity finding from the review-scan verdict.
+
+    Machine-consumable — the autonomous review loop (add-autonomous-review-loop)
+    reads these programmatically to dispatch bounded remediation to codegen.
+    """
+    check: str                       # human-readable check name, e.g. "secret-scan"
+    rule: str                        # structured citation: <dept>/v<ver>/<rule-id>
+    detail: str                      # one-line description of what tripped
+    file: str                        # path within the reviewed change
+    line: int                        # 1-indexed line number
+    phi: bool = False                # true => never inside the auto-remediation envelope
+
+
+class ReviewVerdict(BaseModel):
+    """Structured output of stage_review_scan — replaces the findings=0 stub.
+
+    Chainable across re-reviews via `attempt` + `prior_verdict_ref` so the
+    autonomous loop can reconstruct review → remediate → re-review.
+    """
+    status: Literal["PASS", "FAIL"]
+    blockers: list[Blocker] = Field(default_factory=list)
+    attempt: int = 1
+    prior_verdict_ref: str | None = None
+
+
 class GateDecision(BaseModel):
     """Approve / reject / demote action on an open gate.
 

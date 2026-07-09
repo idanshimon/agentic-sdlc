@@ -80,6 +80,63 @@ export function bulkApprovableCards<
   );
 }
 
+// Derive the gate's progress state + the ONE next action from the cards and
+// what's been decided. Pure + exported so the primary-button label and the
+// operator guidance line are unit-tested, not eyeballed. This is the fix for
+// "it's not clear the button must be pressed to move on": the label is now
+// state-driven and the phase names exactly what to do next.
+export interface GateProgress {
+  total: number;
+  decidedCount: number;
+  undecidedCount: number;
+  undecidedHardGatedCount: number;
+  allDecided: boolean;
+  onlyHardGatedRemain: boolean;
+  // Primary-button label + whether it should be disabled (locked cards remain).
+  primaryLabel: string;
+  primaryDisabled: boolean;
+  // Which guidance line to show: 'all-decided' | 'hard-gated' | 'partial' | 'none'.
+  phase: "all-decided" | "hard-gated" | "partial" | "none";
+}
+
+export function gateProgress<
+  T extends { card_id?: string; is_hard_gated?: boolean },
+>(gating: T[], decided: Record<string, unknown>): GateProgress {
+  const total = gating.length;
+  const undecided = gating.filter((c) => c.card_id && !decided[c.card_id]);
+  const undecidedHardGated = undecided.filter((c) => c.is_hard_gated);
+  const decidedCount = total - undecided.length;
+  const allDecided = total > 0 && undecided.length === 0;
+  const onlyHardGatedRemain =
+    undecided.length > 0 && undecided.every((c) => c.is_hard_gated);
+
+  const primaryLabel = allDecided
+    ? "Finalize & advance"
+    : onlyHardGatedRemain
+      ? "Decide the locked card to continue"
+      : "Approve all recommended";
+
+  const phase: GateProgress["phase"] = allDecided
+    ? "all-decided"
+    : onlyHardGatedRemain
+      ? "hard-gated"
+      : decidedCount > 0
+        ? "partial"
+        : "none";
+
+  return {
+    total,
+    decidedCount,
+    undecidedCount: undecided.length,
+    undecidedHardGatedCount: undecidedHardGated.length,
+    allDecided,
+    onlyHardGatedRemain,
+    primaryLabel,
+    primaryDisabled: onlyHardGatedRemain,
+    phase,
+  };
+}
+
 interface Props {
   runId: string;
   events: StageEvent[];
@@ -128,6 +185,22 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
     (s, c) => s + (c.blast_radius_cost_usd ?? 0),
     0,
   );
+
+  // How many gating cards still need a decision, and are any of the undecided
+  // ones hard-gated? gateProgress() (pure, unit-tested) derives the primary
+  // button label + the next-action guidance so the operator always knows the
+  // ONE control that advances the pipeline (the reported confusion).
+  const progress = useMemo(
+    () => gateProgress(gating, decided),
+    [gating, decided],
+  );
+  const {
+    decidedCount,
+    undecidedHardGatedCount,
+    allDecided,
+    onlyHardGatedRemain,
+    primaryLabel,
+  } = progress;
 
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
@@ -321,20 +394,49 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
               </>
             )}
           </p>
+          {/* State-aware next-action line so the operator is never left wondering
+              which control advances the pipeline (the reported confusion). */}
+          {allDecided ? (
+            <p className="text-xs mt-2 flex items-center gap-1.5 font-medium text-[var(--success)]">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              All {gating.length} cards decided. Click{" "}
+              <span className="font-semibold">“Finalize &amp; advance”</span> to close the gate and continue the pipeline.
+            </p>
+          ) : onlyHardGatedRemain ? (
+            <p className="text-xs mt-2 flex items-center gap-1.5 font-medium text-[var(--danger)]">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {undecidedHardGatedCount} locked card{undecidedHardGatedCount === 1 ? "" : "s"} (PHI/auth) still need your explicit decision below — they can’t be bulk-approved. Decide {undecidedHardGatedCount === 1 ? "it" : "them"}, then finalize.
+            </p>
+          ) : decidedCount > 0 ? (
+            <p className="text-xs mt-2 flex items-center gap-1.5 text-[var(--text-secondary)]">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--success)]" />
+              {decidedCount} of {gating.length} decided. “Approve all recommended” will accept the rest and advance.
+            </p>
+          ) : null}
         </div>
         <Button
           variant="primary"
           size="default"
           onClick={approveAll}
-          disabled={submitting}
-          className="shrink-0"
+          disabled={submitting || onlyHardGatedRemain}
+          className={cn(
+            "shrink-0",
+            allDecided && "ring-2 ring-[var(--success)] ring-offset-1 ring-offset-[var(--bg)]",
+          )}
+          title={
+            onlyHardGatedRemain
+              ? "Decide the locked (PHI/auth) card individually below, then this becomes Finalize & advance."
+              : allDecided
+                ? "All cards decided — finalize the gate and advance the pipeline."
+                : "Accept the recommended resolution for every non-locked card."
+          }
         >
           {submitting ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Approving…</>
+            <><Loader2 className="h-4 w-4 animate-spin" /> {allDecided ? "Finalizing…" : "Approving…"}</>
           ) : (
             <>
               <CheckCircle2 className="h-4 w-4" />
-              Approve all recommended
+              {primaryLabel}
             </>
           )}
         </Button>

@@ -1,0 +1,57 @@
+name: autonomous-review-loop
+
+# The external trigger surface for the autonomous review→remediate→re-review
+# loop (add-autonomous-review-loop). Fires when a Coding Agent (or anyone)
+# opens/updates a pull request on this repository — the "arbitrary Coding Agent
+# PR" case that never runs the orchestrator pipeline internally.
+#
+# This workflow NOTIFIES the orchestrator's review-loop controller. The loop
+# itself is bounded and governed server-side: the repo's autonomy tier
+# (repo_autonomy.yaml) decides whether it may auto-merge (Tier A), await a human
+# merge (Tier B), or only comment (Tier C — the default for any unlisted repo).
+# PHI/auth/deny blockers always force human escalation regardless of tier.
+#
+# ORCHESTRATOR_URL + a dispatch token are provided as repo/environment config on
+# the DELIVERY repo where the loop operates; on a repo without them the workflow
+# is a no-op (safe by absence — the loop never runs where it isn't configured).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write   # to post the advisory verdict comment
+
+jobs:
+  dispatch-loop:
+    name: dispatch-review-loop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard — only run where the loop is configured
+        id: guard
+        run: |
+          if [ -z "${{ vars.ORCHESTRATOR_URL }}" ]; then
+            echo "ORCHESTRATOR_URL not set — loop not configured on this repo; no-op."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify the review-loop controller
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          ORCHESTRATOR_URL: ${{ vars.ORCHESTRATOR_URL }}
+          DISPATCH_TOKEN: ${{ secrets.REVIEW_LOOP_DISPATCH_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The orchestrator resolves the repo's tier, runs the bounded loop, and
+          # writes the audited hop chain. A non-2xx here does NOT merge anything —
+          # merge only ever happens server-side after a converged Tier-A verdict.
+          curl -fsS -X POST "${ORCHESTRATOR_URL%/}/api/review-loops" \
+            -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"repo\":\"${REPO}\",\"pr_number\":${PR_NUMBER},\"head_sha\":\"${HEAD_SHA}\"}" \
+            || echo "::warning::review-loop dispatch failed; the PR is unmerged and safe."

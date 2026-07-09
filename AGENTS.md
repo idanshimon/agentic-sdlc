@@ -44,8 +44,24 @@ Reference design for a governed agentic SDLC: a four-plane architecture
 (Standards / Pipeline / Ledger+Doctor / Agent HQ runtime) where every AI-agent
 decision is auditable and every standards change is committee-approved.
 
+**This is a real, customer-neutral production system.** It is not tied to any
+one customer, engagement, or account. Nothing in this repo — code, specs,
+proposals, docs, comments, commit messages — may frame a change around a named
+engagement, deal, or customer contact. (Public company names as generic
+example/sample data are fine — see the NEVER rule below.)
+
 ## Hard rules — NEVER
 
+- **Never tie the repo to a named engagement, deal, or customer contact.** No
+  "motivating engagement," no "so-and-so asked for," no
+  meeting/deal/account references, no sales framing ("sellable," "on the call")
+  — in code, specs, OpenSpec proposals/design, docs, comments, or commit
+  messages. This is a customer-neutral production system: motivate every change
+  by the *architectural* need (e.g. "un-orchestrated agent PRs bypass both
+  enforcement surfaces"), never by who asked. **Public company names (payers,
+  providers, vendors — Humana, Aetna, HCA, etc.) as generic example/sample data
+  are FINE** — that is public knowledge and reveals no engagement. The line is
+  named-live-engagement vs. public-example, not "no company names."
 - **Never write raw PHI** (MRN, full DOB, SSN, full name + DOB, biometric IDs, treatment notes)
   to logs, telemetry, ledger, prompts, or sample data. PHI in samples must be obviously
   synthetic (Patient ID `PT-DEMO-0001`, DOB `1900-01-01`).

@@ -63,6 +63,9 @@ secrets.json
 *.sqlite3
 local-data/
 
+# Activated per-repo autonomy config (never commit real topology; .example is the template)
+config/repo_autonomy.yaml
+/repo_autonomy.yaml
 # Configuration plane — activated (real) config objects. Templates (*.example)
 # ARE committed; a customer's real org/autonomy/model policy must NEVER land in
 # the reference repo. Activate by copying the .example, then point the

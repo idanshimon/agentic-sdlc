@@ -366,6 +366,9 @@ export const orchestrator = {
       method: "POST",
     });
   },
+  repoAutonomy() {
+    return req<import("../types").RepoAutonomyPosture>("/api/config/repo-autonomy");
+  },
 };
 
 export interface ConfigSaveResponse {

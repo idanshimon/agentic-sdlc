@@ -634,13 +634,16 @@ async def stage_codegen(run: RunState) -> AsyncIterator[StageEvent]:
 
 # --- 6. REVIEW / SCAN ---------------------------------------------------------
 async def stage_review_scan(run: RunState) -> AsyncIterator[StageEvent]:
-    """Gate 3 — policy / static scan, fail-hard (design.md §2)."""
-    yield _ev(run, Stage.REVIEW_SCAN, "started", "Running GHAS/CodeQL/secrets/SBOM (mock)")
-    await asyncio.sleep(0.2)
-    findings = 0  # demo: stubbed clean
-    status = "completed" if findings == 0 else "failed"
-    yield _ev(run, Stage.REVIEW_SCAN, status,
-              f"Policy gate {'passed' if findings == 0 else 'failed'}", findings=findings)
+    """Gate 3 — policy / static scan, fail-hard (design.md §2).
+
+    Delegates to review_verdict.run_review_scan, which runs the deterministic
+    BLOCK+pattern bundle rules (shared with the CI enforcement lane) over the
+    generated code and emits a structured, chainable ReviewVerdict. This
+    replaced the old `findings = 0  # demo: stubbed clean` placeholder.
+    """
+    from .review_verdict import run_review_scan as _run_review_scan
+    async for ev in _run_review_scan(run):
+        yield ev
 
 
 # --- 7. DELIVER ---------------------------------------------------------------
