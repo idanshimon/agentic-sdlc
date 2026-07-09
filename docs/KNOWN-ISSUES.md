@@ -69,6 +69,22 @@ isolation. Instead make the scoping *visible and adjustable*:
 
 **KI-2** (resolver-gate button) — fixed earlier, see below.
 
+**Historical `cardiology`-partition decisions — DECISION (2026-07-08): leave in
+place.** Decisions written before the KI-1 #3 fix live in the `cardiology`
+Cosmos partition; the dashboard token reads `team-demo`, so they aren't shown.
+Options considered:
+- (A) Add a second read-token → `cardiology` in `LEDGER_MCP_TOKENS` (one JSON
+  edit; non-destructive; keeps isolation). Needs the UI to pick a team-token —
+  that IS the open KI-1 #2 per-run/team scoping work. **This is the durable path
+  when #2 is built.**
+- (B) One-time re-partition script (read cardiology rows, re-write under
+  team-demo, delete originals). Rejected: rewriting append-only audit-ledger rows
+  to fix a *display* is the wrong instinct for a governance product, and Cosmos
+  is VNet-fronted so it'd need to run inside the VNet or via the orchestrator.
+- (C) Leave them. **Chosen.** They're a handful of pre-fix demo-run rows with no
+  ongoing value; the audit trail is intact where it sits; all NEW runs are
+  correct after redeploy. No ledger mutation for cosmetics.
+
 ---
 
 ## KI-2 · Resolver-gate "Approve" button did not signal it must be pressed — FIXED (2026-07-08)
