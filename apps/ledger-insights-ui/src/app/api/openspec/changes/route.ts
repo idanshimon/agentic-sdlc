@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { CHANGES_DIR } from "@/lib/openspec/paths";
+import { deriveStatus, type ChangeStatus } from "@/lib/openspec/status";
 
 /* GET /api/openspec/changes
  * Returns the list of OpenSpec change proposals on disk.
@@ -19,7 +20,7 @@ import { CHANGES_DIR } from "@/lib/openspec/paths";
 interface ChangeMeta {
   id: string;
   title: string;
-  status: "draft" | "in-review" | "merged";
+  status: ChangeStatus;
   authors: string[];
   date?: string;
   capabilities_touched: string[];
@@ -28,6 +29,7 @@ interface ChangeMeta {
   task_done: number;
   spec_count: number;
   proposal_path: string;
+  archived: boolean;
 }
 
 const STATUS_RX = /^>\s*\*\*Status:\*\*\s*([A-Z][A-Za-z\s\-/]+)/m;
@@ -36,13 +38,6 @@ const DATE_RX = /^>\s*\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})/m;
 const CAPS_RX = /^>\s*\*\*Capabilities touched:\*\*\s*(.+)$/m;
 const TITLE_RX = /^#\s+(.+)$/m;
 const WHY_RX = /^##\s+Why\s*\n+([\s\S]*?)(?=\n##\s)/m;
-
-function normalizeStatus(raw: string): ChangeMeta["status"] {
-  const lower = raw.trim().toLowerCase();
-  if (lower.includes("merged") || lower.includes("shipped")) return "merged";
-  if (lower.includes("review") || lower.includes("approved")) return "in-review";
-  return "draft";
-}
 
 async function exists(p: string): Promise<boolean> {
   try {
@@ -53,8 +48,9 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-async function readChange(id: string): Promise<ChangeMeta | null> {
-  const dir = path.join(CHANGES_DIR, id);
+async function readChange(id: string, archived = false): Promise<ChangeMeta | null> {
+  const baseDir = archived ? path.join(CHANGES_DIR, "archive") : CHANGES_DIR;
+  const dir = path.join(baseDir, id);
   const proposalPath = path.join(dir, "proposal.md");
   if (!(await exists(proposalPath))) return null;
 
@@ -83,10 +79,11 @@ async function readChange(id: string): Promise<ChangeMeta | null> {
     spec_count = entries.length;
   }
 
+  const archivePrefix = archived ? "archive/" : "";
   return {
     id,
     title: titleMatch?.[1]?.trim() ?? id,
-    status: normalizeStatus(statusMatch?.[1] ?? "draft"),
+    status: deriveStatus(statusMatch?.[1] ?? "draft", archived, task_total, task_done),
     authors: (authorsMatch?.[1] ?? "")
       .split(",")
       .map((s) => s.trim())
@@ -100,7 +97,8 @@ async function readChange(id: string): Promise<ChangeMeta | null> {
     task_total,
     task_done,
     spec_count,
-    proposal_path: `openspec/changes/${id}/proposal.md`,
+    proposal_path: `openspec/changes/${archivePrefix}${id}/proposal.md`,
+    archived,
   };
 }
 
@@ -108,15 +106,36 @@ export async function GET() {
   if (!(await exists(CHANGES_DIR))) {
     return NextResponse.json({ changes: [] });
   }
-  const ids = (await readdir(CHANGES_DIR)).filter(
-    (n) => !n.startsWith("."),
-  );
+  const entries = (await readdir(CHANGES_DIR)).filter((n) => !n.startsWith("."));
+  const activeIds = entries.filter((n) => n !== "archive");
+
+  // Archived changes (merged) live under openspec/changes/archive/<id>/.
+  let archivedIds: string[] = [];
+  const archiveDir = path.join(CHANGES_DIR, "archive");
+  if (await exists(archiveDir)) {
+    archivedIds = (await readdir(archiveDir)).filter((n) => !n.startsWith("."));
+  }
+
   const changes = (
-    await Promise.all(ids.map(readChange))
+    await Promise.all([
+      ...activeIds.map((id) => readChange(id, false)),
+      ...archivedIds.map((id) => readChange(id, true)),
+    ])
   ).filter((c): c is ChangeMeta => c !== null);
-  // Sort: drafts first, then alphabetical
+
+  // Sort: active work first (ready → in-progress → draft), then merged; within
+  // each group, most task-progress first, then alphabetical.
+  const order: Record<ChangeMeta["status"], number> = {
+    ready: 0,
+    "in-progress": 1,
+    draft: 2,
+    merged: 3,
+  };
   changes.sort((a, b) => {
-    if (a.status !== b.status) return a.status.localeCompare(b.status);
+    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+    const aPct = a.task_total ? a.task_done / a.task_total : 0;
+    const bPct = b.task_total ? b.task_done / b.task_total : 0;
+    if (aPct !== bPct) return bPct - aPct;
     return a.id.localeCompare(b.id);
   });
   return NextResponse.json({ changes });
