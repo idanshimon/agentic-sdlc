@@ -20,9 +20,11 @@
 !standards-bundles
 !prompts
 # UI /api/hooks route reads .github/hooks/*.json from disk at request time.
-!.github
-.github/workflows
-.github/agents
+# Whitelist ONLY that subtree (not workflows/agents). Order matters: this must
+# come after the top-level `*` and NOT be re-ignored by a later `.github` rule.
+!.github/
+!.github/hooks/
+!.github/hooks/**
 
 # Re-ignore noise inside the whitelisted paths.
 apps/ledger-insights-ui/node_modules
@@ -43,4 +45,5 @@ openspec/changes/archive/.DS_Store
 
 # Git metadata (we explicitly do not want this in the image).
 .git
-.github
+.github/workflows
+.github/agents
