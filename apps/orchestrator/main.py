@@ -71,7 +71,60 @@ async def lifespan(app: FastAPI):
         await _ledger.close()
 
 
-app = FastAPI(title="Agentic SDLC Orchestrator", version="0.1.0", lifespan=lifespan)
+# ── OpenAPI metadata ─────────────────────────────────────────────────────────
+# Single source of truth for the product version. Bump here on release; the
+# badge in README + the /docs + /redoc pages all read this.
+API_VERSION = os.environ.get("API_VERSION", "0.7.0")
+
+API_DESCRIPTION = """\
+The **Agentic SDLC Orchestrator** turns a Product Requirements Document into a
+delivered pull request through a governed, human-gated agent pipeline.
+
+**Pipeline:** Ingest → Assessor → *Resolver gate (human)* → Architect →
+*Design-review gate* → Test-plan → Codegen → Review/Scan → Deliver.
+
+Every meaningful decision is written to an append-only **decision ledger** with
+its bundle citations, model, and cost. Hard-gated classes (PHI, auth) can never
+be auto-resolved — they require an explicit, attributed human decision.
+
+### Conventions
+- **Streaming:** `GET /api/runs/{id}/stream` is a Server-Sent-Events stream of
+  stage transitions. Everything else is plain JSON.
+- **Auth:** gateway-fronted; the API trusts its ingress. CORS origins are
+  env-driven (`CORS_ALLOWED_ORIGINS`).
+- **Errors:** standard HTTP status codes with a `{ "detail": "..." }` body.
+- **Interactive docs:** this page (`/docs`), ReDoc at `/redoc`, raw schema at
+  `/openapi.json`.
+"""
+
+# Tag groups so /docs renders as a sectioned, navigable explorer instead of a
+# flat list of 30+ operations. `x-displayName` + ordering are honored by ReDoc.
+OPENAPI_TAGS = [
+    {"name": "Runs", "description": "Create runs from a PRD, fetch state, stream progress, and control the run lifecycle (pause / resume / rerun / undo)."},
+    {"name": "Gates & Decisions", "description": "Resolve ambiguity cards and release human gates: approve, reject, demote, finalize. Hard-gated (PHI/auth) classes require explicit individual decisions."},
+    {"name": "Decision Ledger", "description": "Append-only audit trail of every agent + human decision, with bundle citations, model, and cost."},
+    {"name": "Review Loop", "description": "Autonomous review→remediate→re-review loop controls and the Tier-B human merge touch-point."},
+    {"name": "Self-Heal", "description": "Pipeline-doctor heal proposals and their human approval."},
+    {"name": "Telemetry", "description": "Cost, latency, and decision-class analytics for dashboards."},
+    {"name": "Configuration", "description": "Read + governed-PR write-back for agents, bundles, prompts, autonomy tiers, and hard-gate posture."},
+    {"name": "Prompt Library", "description": "The versioned prompt catalog each stage resolves against."},
+    {"name": "System", "description": "Liveness, health, and administrative maintenance."},
+]
+
+
+app = FastAPI(
+    title="Agentic SDLC Orchestrator",
+    version=API_VERSION,
+    summary="Governed, human-gated agentic software-delivery pipeline API.",
+    description=API_DESCRIPTION,
+    openapi_tags=OPENAPI_TAGS,
+    contact={
+        "name": "Agentic SDLC",
+        "url": "https://github.com/idanshimon/agentic-sdlc",
+    },
+    license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
+    lifespan=lifespan,
+)
 
 # CORS — allow Resolver UI + localhost dev to call the API + open SSE stream.
 # Allowlist is env-driven so VNET migrations / new ingress FQDNs don't require
@@ -305,13 +358,13 @@ def _release_gate(run_id: str) -> None:
 
 
 # ---------- routes ------------------------------------------------------------
-@app.get("/healthz")
+@app.get("/healthz", tags=["System"])
 async def healthz() -> dict:
     """Liveness probe (no external deps touched)."""
     return {"status": "ok", "runs_in_memory": len(_runs)}
 
 
-@app.get("/api/config/hard-gate-classes")
+@app.get("/api/config/hard-gate-classes", tags=["Configuration"])
 async def get_hard_gate_classes() -> dict:
     """Tier-2 governance posture: which ambiguity classes can never be
     auto-resolved or bulk/soft-approved (each requires an explicit, attributed,
@@ -332,7 +385,7 @@ async def get_hard_gate_classes() -> dict:
     }
 
 
-@app.get("/api/config/repo-autonomy")
+@app.get("/api/config/repo-autonomy", tags=["Configuration"])
 async def get_repo_autonomy() -> dict:
     """Per-repo autonomy posture for the autonomous review loop.
 
@@ -356,7 +409,7 @@ class ReviewLoopMergeBody(BaseModel):
 from .merge_pr import merge_pull_request  # noqa: E402
 
 
-@app.post("/api/review-loops/merge")
+@app.post("/api/review-loops/merge", tags=["Review Loop"])
 async def review_loop_merge(body: ReviewLoopMergeBody) -> dict:
     """The Tier-B human merge touch-point.
 
@@ -448,7 +501,7 @@ async def _do_config_save(rel_path: str, body: _ConfigSaveBase, labels: list[str
     }
 
 
-@app.post("/api/config/agents/save")
+@app.post("/api/config/agents/save", tags=["Configuration"])
 async def save_agent(body: AgentSaveBody) -> dict:
     """Edit a custom agent (.github/agents/<name>.agent.md) → opens a PR.
 
@@ -462,7 +515,7 @@ async def save_agent(body: AgentSaveBody) -> dict:
     )
 
 
-@app.post("/api/config/bundles/save")
+@app.post("/api/config/bundles/save", tags=["Configuration"])
 async def save_bundle(body: BundleSaveBody) -> dict:
     """Edit a standards bundle file → opens a PR. PR-ONLY (no live apply):
     live-editing the compliance standards would bypass committee review, which
@@ -476,7 +529,7 @@ async def save_bundle(body: BundleSaveBody) -> dict:
     )
 
 
-@app.post("/api/config/prompts/save")
+@app.post("/api/config/prompts/save", tags=["Configuration"])
 async def save_prompt(body: PromptSaveBody) -> dict:
     """Save a new prompt version (prompts/<scope>/<persona>/<stage>/v<N>.yaml)
     → opens a PR. The editor picks the next version; the YAML carries
@@ -496,7 +549,7 @@ async def save_prompt(body: PromptSaveBody) -> dict:
     )
 
 
-@app.post("/api/config/reload")
+@app.post("/api/config/reload", tags=["Configuration"])
 async def reload_config() -> dict:
     """Hot-reload the running orchestrator's agent-bundle + prompt caches so an
     edit takes effect in THIS session without redeploy. Prompts/agents only —
@@ -513,7 +566,7 @@ async def reload_config() -> dict:
     return {"ok": True, "reloaded": reloaded}
 
 
-@app.post("/api/run")
+@app.post("/api/run", tags=["Runs"])
 async def create_run(
     prd: UploadFile = File(...),
     team_id: str = Form("cardiology"),
@@ -563,7 +616,7 @@ async def create_run(
     return {"run_id": run.run_id, "stream_url": f"/api/runs/{run.run_id}/stream"}
 
 
-@app.post("/api/runs/{run_id}/rerun")
+@app.post("/api/runs/{run_id}/rerun", tags=["Runs"])
 async def rerun(run_id: str, body: dict | None = None) -> dict:
     """Start a fresh run with the same PRD + team_id as `run_id`, optionally
     in a different mode. The original run is left untouched for A/B comparison.
@@ -611,7 +664,7 @@ async def rerun(run_id: str, body: dict | None = None) -> dict:
     }
 
 
-@app.get("/api/runs/{run_id}")
+@app.get("/api/runs/{run_id}", tags=["Runs"])
 async def get_run(run_id: str) -> RunState:
     """Return the run state. See design.md §2.
 
@@ -646,7 +699,7 @@ async def get_run(run_id: str) -> RunState:
     raise HTTPException(404, "run not found")
 
 
-@app.get("/api/runs/{run_id}/ledger")
+@app.get("/api/runs/{run_id}/ledger", tags=["Decision Ledger"])
 async def get_run_ledger(run_id: str) -> dict:
     """Return ledger entries written for this run.
 
@@ -716,7 +769,7 @@ async def get_run_ledger(run_id: str) -> dict:
 # openspec change add-prompt-editor-github-pr-flow).
 # ---------------------------------------------------------------------------
 
-@app.get("/api/prompts/catalog")
+@app.get("/api/prompts/catalog", tags=["Prompt Library"])
 async def list_prompts() -> dict:
     """Return every prompt file in the catalog, grouped for UI tree browse.
 
@@ -786,7 +839,7 @@ async def list_prompts() -> dict:
     }
 
 
-@app.get("/api/prompts/{prompt_id}")
+@app.get("/api/prompts/{prompt_id}", tags=["Prompt Library"])
 async def get_prompt_detail(prompt_id: str, version: str | None = None) -> dict:
     """Return one prompt's full content + all versions.
 
@@ -851,7 +904,7 @@ async def get_prompt_detail(prompt_id: str, version: str | None = None) -> dict:
     }
 
 
-@app.post("/api/runs/{run_id}/pause")
+@app.post("/api/runs/{run_id}/pause", tags=["Runs"])
 async def pause_run(run_id: str) -> dict:
     """Flip run to MANUAL mode mid-flight. Pipeline does not interrupt the
     currently-executing stage, but the NEXT gate boundary respects the new
@@ -868,7 +921,7 @@ async def pause_run(run_id: str) -> dict:
     return {"ok": True, "previous_mode": previous_mode.value, "current_mode": "manual"}
 
 
-@app.post("/api/runs/{run_id}/resume")
+@app.post("/api/runs/{run_id}/resume", tags=["Runs"])
 async def resume_run(run_id: str, body: dict | None = None) -> dict:
     """Flip a paused run back to its pre-pause mode (autopilot/hybrid).
 
@@ -894,7 +947,7 @@ async def resume_run(run_id: str, body: dict | None = None) -> dict:
     return {"ok": True, "previous_mode": previous_mode.value, "current_mode": target_mode.value}
 
 
-@app.get("/api/runs/{run_id}/stream")
+@app.get("/api/runs/{run_id}/stream", tags=["Runs"])
 async def stream_run(run_id: str) -> EventSourceResponse:
     """SSE stream of StageEvents — UI listens here for live pipeline progress."""
     if run_id not in _queues:
@@ -912,7 +965,7 @@ async def stream_run(run_id: str) -> EventSourceResponse:
     return EventSourceResponse(gen())
 
 
-@app.post("/api/runs/{run_id}/approve")
+@app.post("/api/runs/{run_id}/approve", tags=["Gates & Decisions"])
 async def approve(run_id: str, decision: GateDecision) -> dict:
     """Record an Accept/Swap decision on the open gate (design.md §3).
 
@@ -1026,7 +1079,7 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
     return {"ok": True, "decisions_count": len(run.decisions), "resolution_text": final_text}
 
 
-@app.post("/api/admin/runs/{run_id}/mark_failed")
+@app.post("/api/admin/runs/{run_id}/mark_failed", tags=["System"])
 async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
     """Admin: force a run to status=failed durably in Cosmos.
 
@@ -1069,7 +1122,7 @@ async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
     return {"ok": True, "run_id": run_id, "status": "failed", "reason": reason}
 
 
-@app.post("/api/runs/{run_id}/finalize")
+@app.post("/api/runs/{run_id}/finalize", tags=["Gates & Decisions"])
 async def finalize_gate(run_id: str, body: dict | None = None) -> dict:
     """Close the open Resolver gate explicitly after the human reviews all decisions.
 
@@ -1140,7 +1193,7 @@ async def _write_heal_ledger(
                         heal_id, runtime_kind, exc)
 
 
-@app.post("/api/runs/{run_id}/heal")
+@app.post("/api/runs/{run_id}/heal", tags=["Self-Heal"])
 async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
     """Open a heal session for a run. HUMAN-INVOKED ONLY — at a gate
     (awaiting_gate) or at run end (completed/failed). Never a daemon.
@@ -1216,7 +1269,7 @@ async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
     }
 
 
-@app.get("/api/heal/{heal_id}")
+@app.get("/api/heal/{heal_id}", tags=["Self-Heal"])
 async def get_heal_session(heal_id: str) -> dict:
     """Fetch the current state of a heal session."""
     sess = _heal_sessions.get(heal_id)
@@ -1234,7 +1287,7 @@ async def get_heal_session(heal_id: str) -> dict:
     }
 
 
-@app.post("/api/heal/{heal_id}/approve")
+@app.post("/api/heal/{heal_id}/approve", tags=["Self-Heal"])
 async def approve_heal(heal_id: str, body: dict | None = None) -> dict:
     """Human approves (or declines) the proposed heal. On approval, the
     config-selected executor lands the heal and the chain is pinned.
@@ -1303,7 +1356,7 @@ async def approve_heal(heal_id: str, body: dict | None = None) -> dict:
     }
 
 
-@app.post("/api/runs/{run_id}/undo")
+@app.post("/api/runs/{run_id}/undo", tags=["Runs"])
 async def undo_decision(run_id: str, body: dict) -> dict:
     """Undo a resolved decision on a Resolver card, re-opening it for re-decision.
 
@@ -1367,7 +1420,7 @@ async def undo_decision(run_id: str, body: dict) -> dict:
     return {"ok": True, "card_id": card_id, "decisions_count": len(run.decisions)}
 
 
-@app.post("/api/runs/{run_id}/reject")
+@app.post("/api/runs/{run_id}/reject", tags=["Gates & Decisions"])
 async def reject(run_id: str, decision: GateDecision) -> dict:
     """Reject-with-note — one-keystroke default per design.md §3."""
     run = _runs.get(run_id)
@@ -1388,7 +1441,7 @@ async def reject(run_id: str, decision: GateDecision) -> dict:
     return {"ok": True}
 
 
-@app.post("/api/runs/{run_id}/demote")
+@app.post("/api/runs/{run_id}/demote", tags=["Gates & Decisions"])
 async def demote(run_id: str, precedent_id: str, actor: str = "demo-user@hca") -> dict:
     """Synchronous demote — invalidates caches; back-trace report is async (§4).
 
@@ -1425,7 +1478,7 @@ async def demote(run_id: str, precedent_id: str, actor: str = "demo-user@hca") -
 # against Cosmos (decision-ledger + pipeline-runs). If the ledger client is
 # unavailable (e.g. local dev with LEDGER_DISABLED=1), they return empty payloads
 # rather than 503 — the UI shows "no data yet" instead of an error toast.
-@app.get("/api/telemetry/decisions")
+@app.get("/api/telemetry/decisions", tags=["Telemetry"])
 async def telemetry_decisions(
     team_id: str | None = None,
     kind: str | None = None,
@@ -1441,7 +1494,7 @@ async def telemetry_decisions(
     return {"items": items, "count": len(items)}
 
 
-@app.get("/api/telemetry/cost")
+@app.get("/api/telemetry/cost", tags=["Telemetry"])
 async def telemetry_cost(window: str = "24h", team_id: str | None = None) -> dict:
     """Cost + latency rollup across pipeline-runs in the window."""
     if _ledger is None:
@@ -1454,7 +1507,7 @@ async def telemetry_cost(window: str = "24h", team_id: str | None = None) -> dic
     return await query_cost(_ledger, window=window, team_id=team_id)
 
 
-@app.get("/api/telemetry/classes")
+@app.get("/api/telemetry/classes", tags=["Telemetry"])
 async def telemetry_classes(window: str = "7d", team_id: str | None = None) -> dict:
     """Ambiguity-class drift signal: counts, acceptance, blast, trend arrows."""
     if _ledger is None:
@@ -1463,7 +1516,7 @@ async def telemetry_classes(window: str = "7d", team_id: str | None = None) -> d
 
 
 # ---------- runs index endpoint ----------------------------------------------
-@app.get("/api/runs")
+@app.get("/api/runs", tags=["Runs"])
 async def list_runs(
     team_id: str | None = None,
     status: str | None = None,
@@ -1484,7 +1537,7 @@ async def list_runs(
 
 
 # ---------- prompt-library endpoints -----------------------------------------
-@app.get("/api/prompt-library")
+@app.get("/api/prompt-library", tags=["Prompt Library"])
 async def prompt_library_catalog() -> dict:
     """Per-stage prompt variants by model — the registry the APIM circuit
     breaker consults to pick a compat prompt after a provider failover.
@@ -1496,7 +1549,7 @@ async def prompt_library_catalog() -> dict:
     return build_catalog_view()
 
 
-@app.get("/api/prompt-library/{stage}")
+@app.get("/api/prompt-library/{stage}", tags=["Prompt Library"])
 async def prompt_library_lookup(
     stage: str,
     model: str | None = None,
