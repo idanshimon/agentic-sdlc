@@ -1,0 +1,33 @@
+# repo_autonomy.yaml — per-repo autonomy tiers for the autonomous review loop
+#
+# THIS IS A CUSTOMER-NEUTRAL TEMPLATE. Copy to an ACTIVATED location the loader
+# reads (env REPO_AUTONOMY_PATH, or /app/repo_autonomy.yaml, or ./repo_autonomy.yaml)
+# — never edit this .example in place; the loader deliberately never reads it.
+#
+# Tiers:
+#   A — autonomous merge (human-out). Only for repos explicitly graduated here
+#       AND with a clean recent history. Setting tier A on a repo whose
+#       recent_phi_or_deny_blocker is true is REFUSED at load (RepoTierUnlockError).
+#   B — autonomous review, human clicks merge. The default for opted-in repos.
+#   C — advisory only. The implicit default for EVERY repo not listed below.
+#
+# Deploying the image with no activated file leaves every repo at Tier C — the
+# review loop comments but changes nothing until a human graduates a repo here.
+
+repos:
+  # A repo graduated to full autonomy: the loop reviews, remediates within
+  # bounds, and auto-merges a converged PR with no human in the merge path.
+  contoso-delivery-autonomous:
+    tier: A
+    recent_phi_or_deny_blocker: false
+    note: "Graduated after a 30-day clean window; no PHI/deny blocker."
+
+  # A repo where the loop runs to PASS but a human still clicks merge.
+  contoso-delivery-reviewed:
+    tier: B
+    note: "Autonomous review, human merge — the safe default for opted-in repos."
+
+  # A repo explicitly held at advisory (same as omitting it).
+  contoso-engine:
+    tier: C
+    note: "Advisory only — the loop comments, never remediates or merges."
