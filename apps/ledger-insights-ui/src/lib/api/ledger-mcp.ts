@@ -1,5 +1,6 @@
 import type { LedgerEntry, StandardsBundle } from "../types";
 import { isDemoMode, listDemoLedgerEntries } from "@/lib/demo";
+import { mergeLedgerEntries } from "./merge-ledger";
 
 /* Browser-side ledger MCP client.
    All MCP calls go through SAME-ORIGIN Next.js route handlers under
@@ -44,14 +45,16 @@ export const ledgerMcp = {
   },
   async query(filter: { team_id?: string; run_id?: string; entry_type?: string; limit?: number }) {
     if (isDemoMode()) {
-      // Demo Mode: merge demo ledger entries with live entries (live may be
-      // empty if the orchestrator is unreachable — that's fine, demo wins).
+      // Demo Mode: merge demo ledger entries with live entries. The merge
+      // de-dupes by id (live wins) and sorts newest-first, so a just-written
+      // live decision surfaces at the TOP instead of being appended below the
+      // demo seed block (the "decisions table shows nothing new / 2d ago" bug).
       const demoEntries = listDemoLedgerEntries(filter) as unknown as LedgerEntry[];
       try {
         const live = await proxy<{ entries: LedgerEntry[] }>("/api/ledger/query", filter);
-        return { entries: [...demoEntries, ...live.entries] };
+        return { entries: mergeLedgerEntries(demoEntries, live.entries ?? []) };
       } catch {
-        return { entries: demoEntries };
+        return { entries: mergeLedgerEntries(demoEntries, []) };
       }
     }
     return proxy<{ entries: LedgerEntry[] }>("/api/ledger/query", filter);
