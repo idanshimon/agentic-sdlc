@@ -92,6 +92,11 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DELIVER_PROVIDER',         value: 'github' }
             { name: 'LEDGER_MCP_URL',           value: 'http://ca-ledger-mcp/' }
             { name: 'LEDGER_MCP_TOKEN',         secretRef: 'ledger-mcp-token' }
+            // Partition every run's decisions under the SAME team the dashboard
+            // token reads (ledgerMcpTokensJson maps the token -> team-demo).
+            // If these diverge, decisions write to a partition the dashboard
+            // cannot read and the Decisions view looks empty (KI-1 Bug B).
+            { name: 'LEDGER_TEAM_ID',           value: 'team-demo' }
           ]
         }
       ]
