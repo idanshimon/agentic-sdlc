@@ -9,45 +9,54 @@ a blank page.
 
 ## KI-1 · Decisions table does not show a just-completed run's decisions
 
-**Status:** diagnosed, NOT fixed. Read-path bug (writes are correct).
+**Status:** root-caused. Bug A (merge ordering) FIXED; Bug B (team scoping) is
+by-design tenant isolation — mitigation is a visibility/UX change, tracked below.
 
 **Symptom (reported 2026-07-08):** After finishing a live run and deciding all
 resolver-gate cards, the `/decisions` page still shows a stale set (33 entries,
 newest "2d ago"). The fresh decisions do not appear even when sorting by *When*
 descending.
 
-**Grounding done:**
-- The **write path is correct.** `POST /api/runs/{id}/approve`
-  (`apps/orchestrator/main.py`) builds a `LedgerEntry` and calls
-  `_ledger.write_decision(entry)`. `LedgerEntry.created_at` defaults to
-  `_now()` (UTC ISO), so timestamps are current on write.
-- The **demo store path is also correct** — `approveDemoRun()`
-  (`apps/ledger-insights-ui/src/lib/demo/index.ts`) stamps
-  `created_at: nowIso()` on each entry, and `listDemoLedgerEntries()` sorts
-  newest-first.
-- The `/decisions` page reads via `ledgerMcp.query()` →
-  `/api/ledger/query` → `forwardToLedgerMcp("/tools/ledger.query")` → the
-  decision-ledger MCP server.
+**Root cause — CONFIRMED (two compounding bugs):**
 
-**Suspected root cause (two candidates, not yet disambiguated):**
-1. **Team-partition mismatch (most likely).** If `ledger.query` on the MCP
-   server default-scopes to a specific `team_id` partition (the seed data shows
-   `team-demo` / `idan@microsoft.com` partitions) but the fresh run wrote under a
-   different `team_id`, the new entries live in a partition the page never reads.
-   The stable 33-count of only old entries points here.
-2. **Demo-mode blending.** If the deployed UI has `NEXT_PUBLIC_DEMO_MODE=1`, the
-   page merges demo-store + live entries; a live run's Cosmos writes never enter
-   the demo store, and the seed demo entries carry old timestamps.
+The deployment runs with **`NEXT_PUBLIC_DEMO_MODE=1`** (hardcoded in
+`infra/apps.bicep:199`, `infra/apps-vnet.bicep:199`, `apps/ledger-insights-ui/Dockerfile:23`).
+In demo mode the Decisions view blends the demo seed store with live Cosmos
+entries. Two independent defects made fresh decisions invisible:
 
-**Next step:** confirm which by (a) reading the MCP `ledger.query` handler for a
-default team filter / cross-partition behavior, (b) checking what `team_id` the
-screenshot run (`db0148b7-…`) wrote under vs. what the page queries, and (c)
-checking `NEXT_PUBLIC_DEMO_MODE` on the deployment. Fix is then one of: make
-`ledger.query` cross-partition (or default to the run's team), have the page pass
-the active team, or reconcile demo-vs-live blending.
+- **Bug A — the blend didn't sort or de-dupe (FIXED 2026-07-08).**
+  `ledgerMcp.query()` did `[...demoEntries, ...live.entries]` — live rows were
+  appended *below* the 33-entry demo seed block and never re-sorted, so a
+  just-written decision sank to the bottom (and dupes showed twice). Fixed by
+  `src/lib/api/merge-ledger.ts::mergeLedgerEntries()` — de-dupes by id (live
+  wins) and sorts newest-first. 6 unit tests. Now a fresh live entry surfaces at
+  the top regardless of demo seed timestamps.
 
-**Not done in this change** — resolver-gate UX (KI-2) was fixed here; this
-read-path bug is filed for a focused follow-up rather than guessed at.
+- **Bug B — live query is single-team by design (NOT a code bug).** The MCP
+  proxy attaches one bearer token (`LEDGER_MCP_TOKEN`); the MCP server maps each
+  token to exactly one `team_id` and refuses cross-team reads (tenant isolation,
+  `apps/decision-ledger-mcp/src/server.ts`). The `/decisions` page calls
+  `ledgerMcp.query()` with no `team_id`, so live results come back only for the
+  dashboard token's team. A run created under a *different* `team_id` (e.g. a
+  PRD upload that set its own team) writes to a partition the dashboard token
+  cannot read — so those entries are genuinely absent, not just mis-sorted.
+
+**Why the "sort by When" test still showed 2d-ago:** the decision *table* does
+sort by `created_at` desc (`decision-table.tsx`), so if live entries had been in
+the dataset they'd have surfaced. They weren't — Bug B kept them out of the
+result entirely, and Bug A guaranteed that even when present they'd sink. Both
+had to be addressed.
+
+**Remaining (Bug B mitigation — UX, not a security change):** don't weaken
+isolation. Instead make the scoping *visible and adjustable*:
+1. Show which team the Decisions view is querying (a small "team: …" chip).
+2. Let the operator scope Decisions to a specific run (run detail already knows
+   its `team_id`) so cross-team runs are reachable when intended.
+3. Ensure demo/live runs and the dashboard token share a `team_id` in the
+   deployment env (align `LEDGER_TEAM_ID` used by runs with the dashboard
+   token's team) — the cleanest fix for the reported scenario if they diverged.
+
+**KI-2** (resolver-gate button) — fixed earlier, see below.
 
 ---
 
