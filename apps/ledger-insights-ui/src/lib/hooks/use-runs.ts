@@ -118,6 +118,36 @@ export function useDecisions(filter?: { team_id?: string; run_id?: string; limit
   });
 }
 
+// ── Autonomous review loop (add-autonomous-review-loop) ──────────────────────
+
+const LOOP_KINDS = new Set(["review_remediation", "loop_converged", "loop_escalated"]);
+
+/** Read the review-loop hop entries from the ledger (the 3 loop runtime_kinds)
+ *  and group them by PR reference into a per-loop timeline. */
+export function useReviewLoops(filter?: { team_id?: string; limit?: number }) {
+  return useQuery({
+    queryKey: ["review-loops", filter],
+    queryFn: async () => {
+      const res = await ledgerMcp.query({ limit: 200, ...filter });
+      const hops = (res.entries ?? []).filter(
+        (e) => e.runtime_kind && LOOP_KINDS.has(e.runtime_kind),
+      );
+      return { hops };
+    },
+    refetchInterval: 10_000,
+  });
+}
+
+/** Per-repo autonomy tier posture (which repos are graduated to auto-merge). */
+export function useRepoAutonomy() {
+  return useQuery({
+    queryKey: ["repo-autonomy"],
+    queryFn: () => orchestrator.repoAutonomy(),
+    refetchInterval: 30_000,
+  });
+}
+
+
 export function usePromptLibrary() {
   return useQuery({
     queryKey: ["prompt-library"],
