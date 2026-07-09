@@ -10,12 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { useAssistantContext } from "@/lib/assist/context";
+import { STATUS_LABEL, STATUS_HELP } from "@/lib/openspec/status";
 import { cn } from "@/lib/utils";
 
 interface ChangeMeta {
   id: string;
   title: string;
-  status: "draft" | "in-review" | "merged";
+  status: "draft" | "in-progress" | "ready" | "merged";
   authors: string[];
   date?: string;
   capabilities_touched: string[];
@@ -24,6 +25,7 @@ interface ChangeMeta {
   task_done: number;
   spec_count: number;
   proposal_path: string;
+  archived: boolean;
 }
 
 interface ChangeDetail {
@@ -35,7 +37,8 @@ interface ChangeDetail {
 
 function statusVariant(status: ChangeMeta["status"]) {
   if (status === "merged") return "success" as const;
-  if (status === "in-review") return "warning" as const;
+  if (status === "ready") return "success" as const;
+  if (status === "in-progress") return "warning" as const;
   return "secondary" as const;
 }
 
@@ -63,9 +66,10 @@ export default function ChangesPage() {
     return <ChangeDetailView change={selectedChange} onBack={() => setSelected(null)} />;
   }
 
-  // Group by status for clearer visual hierarchy.
+  // Group by the derived status for a clear "what needs attention" hierarchy.
   const byStatus = {
-    "in-review": changes.filter((c) => c.status === "in-review"),
+    ready: changes.filter((c) => c.status === "ready"),
+    "in-progress": changes.filter((c) => c.status === "in-progress"),
     draft: changes.filter((c) => c.status === "draft"),
     merged: changes.filter((c) => c.status === "merged"),
   };
@@ -78,7 +82,7 @@ export default function ChangesPage() {
       <PageHeader
         plane="standards"
         title="OpenSpec changes"
-        description="Every meaningful architecture or standards change goes through here. Each proposal lives at openspec/changes/<id>/ on disk, gets reviewed by the bundle's pinned roster, and produces typed spec deltas + a tasks checklist. The same OpenSpec methodology used by every contributor — agents, humans, and Pipeline Doctor."
+        description="A live index of every proposed change to how this system works — read straight from openspec/changes/ on disk. Each card is one change: what it does, why, which capabilities it touches, and how far along it is."
         actions={
           <Button variant="ghost" size="sm" asChild>
             <a
@@ -93,15 +97,58 @@ export default function ChangesPage() {
         }
       />
 
+      {/* Plain-English orientation — what this page is and how to use it, for
+          anyone who hasn't met OpenSpec before. */}
+      <Card className="p-4 border-[var(--plane-standards)]/30 bg-[var(--plane-standards)]/[0.03]">
+        <div className="flex items-start gap-3">
+          <FileText className="h-5 w-5 text-[var(--plane-standards)] shrink-0 mt-0.5" />
+          <div className="space-y-2 text-xs text-[var(--text-secondary)] leading-relaxed">
+            <p>
+              <span className="font-semibold text-[var(--text)]">What is this?</span>{" "}
+              OpenSpec is how any non-trivial change here gets proposed before it&apos;s built —
+              by a human or an agent. Each change is a folder on disk with a{" "}
+              <span className="mono text-[10px]">proposal.md</span> (the why + what),
+              a <span className="mono text-[10px]">tasks.md</span> checklist (the work),
+              and typed <span className="mono text-[10px]">spec deltas</span> (the exact
+              capability changes). This page just renders those files.
+            </p>
+            <p>
+              <span className="font-semibold text-[var(--text)]">Why it&apos;s here:</span>{" "}
+              it&apos;s the audit trail for <em>intent</em> — the same governance the pipeline
+              applies to code, applied to its own design. Click any card to read the full
+              proposal, tick through its task checklist, and see the spec deltas.
+            </p>
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+              <span className="font-semibold text-[var(--text)]">Status is derived from the work, not a label:</span>
+              {(["ready", "in-progress", "draft", "merged"] as const).map((s) => (
+                <span key={s} className="inline-flex items-center gap-1.5">
+                  <Badge variant={statusVariant(s)} className="text-[10px]">{STATUS_LABEL[s]}</Badge>
+                  <span className="text-[var(--text-tertiary)]">{STATUS_HELP[s]}</span>
+                </span>
+              ))}
+            </p>
+          </div>
+        </div>
+      </Card>
+
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4 space-y-1">
           <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
-            Open proposals
+            Ready to merge
           </div>
-          <div className="text-2xl font-semibold tabular">{byStatus["draft"].length + byStatus["in-review"].length}</div>
+          <div className="text-2xl font-semibold tabular">{byStatus["ready"].length}</div>
           <div className="text-[10px] text-[var(--text-tertiary)]">
-            {byStatus["draft"].length} draft · {byStatus["in-review"].length} in-review
+            all tasks complete
+          </div>
+        </Card>
+        <Card className="p-4 space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+            In progress
+          </div>
+          <div className="text-2xl font-semibold tabular">{byStatus["in-progress"].length}</div>
+          <div className="text-[10px] text-[var(--text-tertiary)]">
+            {byStatus["draft"].length} not started yet
           </div>
         </Card>
         <Card className="p-4 space-y-1">
@@ -112,24 +159,15 @@ export default function ChangesPage() {
             {totalDone} <span className="text-sm text-[var(--text-tertiary)]">/ {totalTasks}</span>
           </div>
           <div className="text-[10px] text-[var(--text-tertiary)]">
-            {totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0}% complete
+            {totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0}% across all changes
           </div>
-        </Card>
-        <Card className="p-4 space-y-1">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
-            Spec deltas
-          </div>
-          <div className="text-2xl font-semibold tabular">
-            {changes.reduce((acc, c) => acc + c.spec_count, 0)}
-          </div>
-          <div className="text-[10px] text-[var(--text-tertiary)]">capabilities touched</div>
         </Card>
         <Card className="p-4 space-y-1">
           <div className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
             Merged
           </div>
           <div className="text-2xl font-semibold tabular">{byStatus["merged"].length}</div>
-          <div className="text-[10px] text-[var(--text-tertiary)]">shipped to main</div>
+          <div className="text-[10px] text-[var(--text-tertiary)]">shipped &amp; archived</div>
         </Card>
       </div>
 
@@ -141,16 +179,17 @@ export default function ChangesPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {(["in-review", "draft", "merged"] as const).map((status) => {
+          {(["ready", "in-progress", "draft", "merged"] as const).map((status) => {
             const list = byStatus[status];
             if (list.length === 0) return null;
             return (
               <div key={status} className="space-y-3">
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-semibold capitalize">
-                    {status.replace("-", " ")}
+                    {STATUS_LABEL[status]}
                   </h2>
                   <Badge variant="secondary" className="text-[10px]">{list.length}</Badge>
+                  <span className="text-[11px] text-[var(--text-tertiary)]">{STATUS_HELP[status]}</span>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   {list.map((c) => (
@@ -199,7 +238,7 @@ function ChangeCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Badge variant={statusVariant(change.status)} className="text-[10px]">
-              {change.status}
+              {STATUS_LABEL[change.status]}
             </Badge>
             {change.date && (
               <span className="text-[10px] text-[var(--text-tertiary)] tabular">
@@ -294,7 +333,7 @@ function ChangeDetailView({ change, onBack }: { change: ChangeMeta; onBack: () =
         description={
           <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--text-tertiary)]">
             <Badge variant={statusVariant(change.status)} className="text-[10px]">
-              {change.status}
+              {STATUS_LABEL[change.status]}
             </Badge>
             <code className="mono text-[var(--text-secondary)]">{change.id}</code>
             {change.authors.length > 0 && (
