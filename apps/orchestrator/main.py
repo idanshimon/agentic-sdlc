@@ -331,6 +331,20 @@ async def get_hard_gate_classes() -> dict:
     }
 
 
+@app.get("/api/config/repo-autonomy")
+async def get_repo_autonomy() -> dict:
+    """Per-repo autonomy posture for the autonomous review loop.
+
+    Which repos have been graduated to autonomous merge (Tier A), autonomous
+    review + human merge (Tier B), or advisory only (Tier C — the default for
+    every repo not listed). A repo with a recent PHI/deny blocker can never hold
+    Tier A (graduation must be earned). Read-only — changing a tier is a config
+    edit (governed PR); PHI/auth/deny always force runtime escalation regardless.
+    """
+    from . import repo_autonomy as _ra
+    return _ra.REPO_AUTONOMY.posture_summary()
+
+
 # ── Editing plane (#3): governed PR write-back ────────────────────────────────
 # The Agents / Bundles / Prompts editors save real config files the pipeline
 # reads. Per the four-plane governance model, an edit opens a PR (committee /

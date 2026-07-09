@@ -62,3 +62,7 @@ secrets.json
 *.sqlite
 *.sqlite3
 local-data/
+
+# Activated per-repo autonomy config (never commit real topology; .example is the template)
+config/repo_autonomy.yaml
+/repo_autonomy.yaml

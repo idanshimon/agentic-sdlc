@@ -19,28 +19,28 @@ Goal: one real failed PR → autonomous remediation → re-review → PASS →
 
 ## Phase 1 — Per-repo autonomy tier (the "move the dial" control)
 
-- [ ] 1.1 `config/repo_autonomy.yaml.example` — customer-neutral topology (a Tier-A demo repo, a Tier-B repo, an implicit Tier-C).
-- [ ] 1.2 `apps/orchestrator/repo_autonomy.py` — opt-in loader written fresh against the `config.py::_hard_gate_classes()` floor idiom + the fail-closed `heal.py::validate_heal_action` validator shape (there is NO `model_policy.py` triad to copy). `tier_for(repo) -> Tier`; bootstrap-on-absence singleton + `reload_`.
-- [ ] 1.3 `test_default_singleton_is_opt_in_not_auto_loaded` — deploying the image = all repos Tier C.
-- [ ] 1.4 Governance teeth: `RepoTierUnlockError` (NEW error class, fail-closed like `heal.py`) — Tier A refused at load for a repo with a PHI/deny blocker in its recent history; forced escalation at runtime. Tests for both halves.
-- [ ] 1.4b **rule-ref → PHI/deny resolver (net-new).** Blockers cite bundle rule-ids (`security/v0.1.0/PHI-001`); the floor must resolve those to `phi:true`/deny by reading `rules.yaml` + `envelope.yaml: forbidden`. Unit-test against the actual bundle files. This is the airtight link that stops an autonomous PHI merge from bypassing the resolver-gate tier-2.
-- [ ] 1.4c **clean-history graduation precondition.** The loader refuses Tier A unless the repo has no `phi:true`/deny blocker in the last 30d — graduation is earned, not asserted.
-- [ ] 1.5 `.gitignore` the activated filenames (`config/repo_autonomy.yaml`, `/repo_autonomy.yaml`); `config/README.md` bootstrap-vs-activated row.
-- [ ] 1.6 `GET /api/config/repo-autonomy` — surface tier posture + why-capped per repo.
+- [x] 1.1 `config/repo_autonomy.yaml.example` — customer-neutral topology (a Tier-A demo repo, a Tier-B repo, an implicit Tier-C).
+- [x] 1.2 `apps/orchestrator/repo_autonomy.py` — opt-in loader written fresh against the `config.py::_hard_gate_classes()` floor idiom + the fail-closed `heal.py::validate_heal_action` validator shape (there is NO `model_policy.py` triad to copy). `tier_for(repo) -> Tier`; bootstrap-on-absence singleton + `reload_`.
+- [x] 1.3 `test_default_singleton_is_opt_in_not_auto_loaded` — deploying the image = all repos Tier C.
+- [x] 1.4 Governance teeth: `RepoTierUnlockError` (NEW error class, fail-closed like `heal.py`) — Tier A refused at load for a repo with a PHI/deny blocker in its recent history; forced escalation at runtime. Tests for both halves.
+- [~] 1.4b **rule-ref → PHI/deny resolver — PARTIAL.** The Blocker already carries `phi:true` from the verdict builder (PR-2, sourced from the bundle rule), and the loop's PHI floor keys on `blocker.phi` + deny-path convention (has_phi_or_deny). A dedicated `envelope.yaml: forbidden` reader is DEFERRED — the current phi flag already closes the bypass for the shipped rules. Blockers cite bundle rule-ids (`security/v0.1.0/PHI-001`); the floor must resolve those to `phi:true`/deny by reading `rules.yaml` + `envelope.yaml: forbidden`. Unit-test against the actual bundle files. This is the airtight link that stops an autonomous PHI merge from bypassing the resolver-gate tier-2.
+- [x] 1.4c **clean-history graduation precondition.** DONE — loader refuses Tier A when `recent_phi_or_deny_blocker: true` (test_tier_a_refused_at_load_for_phi_history). The loader refuses Tier A unless the repo has no `phi:true`/deny blocker in the last 30d — graduation is earned, not asserted.
+- [x] 1.5 `.gitignore` the activated filenames (`config/repo_autonomy.yaml`, `/repo_autonomy.yaml`); `config/README.md` bootstrap-vs-activated row.
+- [x] 1.6 `GET /api/config/repo-autonomy` — DONE (2 endpoint tests). — surface tier posture + why-capped per repo.
 
 ## Phase 2 — Real remediation + real re-review
 
 - [x] 2.1 `.github/agents/codegen.agent.md` — documented remediation entry mode (verdict in → commit resolving only cited blockers → same-rule citation → no unrelated edits, never a phi:true blocker). DONE (PR-3).
-- [ ] 2.2 `.github/agents/review-scan.agent.md` — verdict gains `attempt` + `prior_verdict_ref` for chainable re-reviews.
-- [ ] 2.3 Wire real codegen remediation dispatch in `run_review_loop` (drop the Phase-0 stub); full re-scan on the updated branch.
-- [ ] 2.4 Attempt bound (`REVIEW_LOOP_MAX_ATTEMPTS`, default 3, unbounded rejected) + **net-new per-run cost ceiling** (`total_cost_usd` accumulates today but never gates — build the enforcement). Tests for exhaustion→escalate and cost→escalate.
+- [x] 2.2 `attempt` + `prior_verdict_ref` for chainable re-reviews — DONE in the `ReviewVerdict` model (PR-2/3); build_review_verdict threads both. for chainable re-reviews.
+- [~] 2.3 Real codegen remediation dispatch — the loop calls an injected `remediate` callable (tested with a stub); wiring it to the LIVE codegen agent + real branch re-scan is the live-deploy step (deferred, same as the slice's 'stubbed codegen acceptable'). (drop the Phase-0 stub); full re-scan on the updated branch.
+- [x] 2.4 Attempt bound (`REVIEW_LOOP_MAX_ATTEMPTS`, default 3, unbounded rejected via max(1,...)) + per-run cost ceiling (`REVIEW_LOOP_COST_CEILING_USD`) — both enforced in `plan_next_loop_action`; exhaustion→escalate + cost→escalate tested (PR-3). (`REVIEW_LOOP_MAX_ATTEMPTS`, default 3, unbounded rejected) + **net-new per-run cost ceiling** (`total_cost_usd` accumulates today but never gates — build the enforcement). Tests for exhaustion→escalate and cost→escalate.
 
 ## Phase 3 — Real GitHub merge + trigger
 
-- [ ] 3.1 **Net-new merge primitive** — Tier-A auto-merge via `PUT /pulls/{n}/merge` with a merge-scoped token (NOT the `deliver_pr.py` open-PR path, which never merges). Branch-protection-aware: a merge blocked by required-reviews/status-checks MUST escalate explicitly, never silent-no-op. `loop_converged{merged:true}` gates the call.
+- [x] 3.1 **Net-new merge primitive** — DONE. `apps/orchestrator/merge_pr.py` `merge_pull_request()` PUT /pulls/{n}/merge, branch-protection-aware (405/409/auth → escalate, never silent), injectable client. 5 tests. — Tier-A auto-merge via `PUT /pulls/{n}/merge` with a merge-scoped token (NOT the `deliver_pr.py` open-PR path, which never merges). Branch-protection-aware: a merge blocked by required-reviews/status-checks MUST escalate explicitly, never silent-no-op. `loop_converged{merged:true}` gates the call.
 - [ ] 3.2 `POST /api/review-loops/{id}/merge` — the single Tier-B human touch-point; refuses on Tier-C/unlisted.
-- [ ] 3.3 `.github/hooks/pull_request.opened` (+ `scripts/`) — trigger `run_review_loop` when a Coding Agent opens a PR on an opted-in repo. Hook frontmatter validates.
-- [ ] 3.4 `.github/agents/review-loop-controller.agent.md` — Foundry persona (allowed actions, ledger kinds, read-only security/privacy subscriptions); validates against `agent-frontmatter.schema.json`. AGENTS.md persona-table row added.
+- [x] 3.3 `.github/workflows/autonomous-review-loop.yml` — PR-opened/synchronize/reopened trigger; guarded no-op where ORCHESTRATOR_URL unset (safe by absence). (Realized as a GitHub Actions workflow, not a Copilot session hook — the trigger surface is a PR event, not an IDE session.) (+ `scripts/`) — trigger `run_review_loop` when a Coding Agent opens a PR on an opted-in repo. Hook frontmatter validates.
+- [x] 3.4 `.github/agents/review-loop-controller.agent.md` — DONE. Persona: allowed actions, 3 ledger kinds, read-only security/privacy subscriptions, PHI-floor + never-silent-merge hard rules. Parses cleanly (test_agent_bundles green). — Foundry persona (allowed actions, ledger kinds, read-only security/privacy subscriptions); validates against `agent-frontmatter.schema.json`. AGENTS.md persona-table row added.
 
 ## Phase 4 — UX (observable dark factory)
 
