@@ -19,6 +19,10 @@
 !openspec
 !standards-bundles
 !prompts
+# UI /api/hooks route reads .github/hooks/*.json from disk at request time.
+!.github
+.github/workflows
+.github/agents
 
 # Re-ignore noise inside the whitelisted paths.
 apps/ledger-insights-ui/node_modules

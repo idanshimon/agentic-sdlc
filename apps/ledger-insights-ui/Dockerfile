@@ -66,6 +66,11 @@ COPY --chown=nextjs:nodejs openspec ./openspec
 # because .dockerignore whitelisted only apps/ledger-insights-ui and openspec/.
 COPY --chown=nextjs:nodejs standards-bundles ./standards-bundles
 
+# /api/hooks reads .github/hooks/*.json from disk at request time (the Hooks
+# page renders the real lifecycle hooks). Same /app cwd, so they must live at
+# /app/.github/hooks/. Whitelisted in .dockerignore.
+COPY --chown=nextjs:nodejs .github/hooks ./.github/hooks
+
 USER nextjs
 EXPOSE 3000
 CMD ["node", "server.js"]
