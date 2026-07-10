@@ -9,14 +9,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DecisionCard } from "@/components/domain/decision-card";
 import { isDemoRun, getDemoArtifacts } from "@/lib/demo";
+import { architectureFromEvents } from "@/lib/artifacts";
 import { ledgerMcp } from "@/lib/api/ledger-mcp";
 import { useQuery } from "@tanstack/react-query";
-import type { LedgerEntry } from "@/lib/types";
+import type { LedgerEntry, StageEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
   runId: string;
   status: string;
+  events?: ReadonlyArray<StageEvent>;
 }
 
 type TabKey = "decisions" | "architecture" | "test_plan" | "code" | "decisions_md";
@@ -29,12 +31,18 @@ const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?
   { key: "decisions_md", label: "decisions.md", icon: ScrollText },
 ];
 
-export function RunArtifactsPanel({ runId, status }: Props) {
+export function RunArtifactsPanel({ runId, status, events }: Props) {
   const [tab, setTab] = useState<TabKey>("decisions");
   const [expanded, setExpanded] = useState(true);
 
   const isDemo = isDemoRun(runId);
   const artifacts = isDemo ? getDemoArtifacts(runId) : null;
+
+  // Live runs don't populate demo artifacts. The orchestrator emits the
+  // drafted architecture on the ARCHITECT event payload, so on the live
+  // path we read it from the event stream (Fix A). Demo fixtures still
+  // win when present (they carry the richer curated markdown).
+  const liveArchitecture = architectureFromEvents(events);
 
   // Pull ledger entries for this run (works in both demo and live mode —
   // demo branch goes through the ledgerMcp.query() guard).
@@ -46,7 +54,8 @@ export function RunArtifactsPanel({ runId, status }: Props) {
   });
   const entries: LedgerEntry[] = ledger?.entries ?? [];
 
-  const hasArchitecture = !!artifacts?.architecture;
+  const resolvedArchitecture = artifacts?.architecture || liveArchitecture;
+  const hasArchitecture = !!resolvedArchitecture;
   const hasTestPlan = !!artifacts?.test_plan;
   const hasCode = !!artifacts?.code;
   const hasDecisionsMd = !!artifacts?.decisions_md;
@@ -153,8 +162,8 @@ export function RunArtifactsPanel({ runId, status }: Props) {
                 </div>
               </div>
             )}
-            {tab === "architecture" && artifacts?.architecture && (
-              <ArtifactView content={artifacts.architecture} kind="md" />
+            {tab === "architecture" && resolvedArchitecture && (
+              <ArtifactView content={resolvedArchitecture} kind="md" />
             )}
             {tab === "test_plan" && artifacts?.test_plan && (
               <ArtifactView content={artifacts.test_plan} kind="md" />

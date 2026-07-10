@@ -314,7 +314,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
             </div>
           </Card>
 
-          <RunArtifactsPanel runId={runId} status={run.status} />
+          <RunArtifactsPanel runId={runId} status={run.status} events={allEvents} />
 
           <RunSummaryPanel run={run} />
         </>

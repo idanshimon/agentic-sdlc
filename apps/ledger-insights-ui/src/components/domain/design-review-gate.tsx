@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { orchestrator } from "@/lib/api/orchestrator";
+import { architectureFromEvents } from "@/lib/artifacts";
 import type { RunState } from "@/lib/types";
 
 interface Props {
@@ -39,13 +40,16 @@ export function DesignReviewGate({ runId, run, onApproved }: Props) {
 
   // Try to surface the architecture artifact so the operator has
   // something to review before approving. Multiple shapes the
-  // orchestrator might land on; defensive read.
+  // orchestrator might land on; defensive read. Live runs don't populate
+  // run.artifacts.architecture — fall back to the ARCHITECT event payload
+  // (Fix A, architectureFromEvents), which is where the live pipeline
+  // actually emits the drafted architecture.
   const architecture =
     // @ts-expect-error: artifacts.architecture is a runtime-extra field
-    (run.artifacts?.architecture as string | undefined) ??
+    (run.artifacts?.architecture as string | undefined) ||
     // @ts-expect-error: same
-    (run.architecture as string | undefined) ??
-    "";
+    (run.architecture as string | undefined) ||
+    architectureFromEvents(run.events);
 
   const handleApprove = async () => {
     setSubmitting(true);
