@@ -113,7 +113,29 @@ export function useTelemetryClasses() {
 export function useDecisions(filter?: { team_id?: string; run_id?: string; limit?: number }) {
   return useQuery({
     queryKey: ["decisions", filter],
-    queryFn: () => ledgerMcp.query({ limit: 50, ...filter }),
+    queryFn: async () => {
+      const res = await ledgerMcp.query({ limit: 50, ...filter });
+      // Live Cosmos rows store actor as flat actor_kind/actor_id and null out
+      // decision/rationale/model_used/phi_class. Normalize once here so every
+      // downstream consumer (cards, insights, lifecycle panel, lineage) sees a
+      // canonical LedgerEntry and never crashes on entry.actor.kind / null.trim().
+      const entries = (res.entries ?? []).map((e) => {
+        const r = e as unknown as Record<string, unknown>;
+        return {
+          ...e,
+          actor: e.actor && typeof e.actor === "object"
+            ? e.actor
+            : { kind: ((r.actor_kind as string) ?? "agent") as "agent" | "human", id: (r.actor_id as string) ?? (r.created_by as string) ?? "unknown" },
+          decision: e.decision ?? (r.resolution_text as string) ?? (r.ambiguity_class as string) ?? "",
+          rationale: e.rationale ?? "",
+          model_used: e.model_used ?? "",
+          phi_class: e.phi_class ?? "none",
+          bundle_refs: Array.isArray(e.bundle_refs) ? e.bundle_refs : [],
+          created_at: e.created_at ?? "",
+        } as typeof e;
+      });
+      return { ...res, entries };
+    },
     refetchInterval: 10_000,
   });
 }
@@ -128,11 +150,34 @@ export function useReviewLoops(filter?: { team_id?: string; limit?: number }) {
   return useQuery({
     queryKey: ["review-loops", filter],
     queryFn: async () => {
-      const res = await ledgerMcp.query({ limit: 200, ...filter });
-      const hops = (res.entries ?? []).filter(
-        (e) => e.runtime_kind && LOOP_KINDS.has(e.runtime_kind),
-      );
-      return { hops };
+      try {
+        const durable = await orchestrator.reviewLoops();
+        const hops = durable.items.flatMap((record) => {
+          const loopHops = Array.isArray(record.ledger_hops) ? record.ledger_hops : [];
+          return loopHops.map((hop, index) => ({
+            ...hop,
+            id: String((hop as Record<string, unknown>).id ?? `${record.loop_id}:${index}`),
+            entry_type: "runtime",
+            actor: { kind: "agent", id: "review-loop-controller" },
+            decision: String((hop as Record<string, unknown>).detail ?? "review loop hop"),
+            rationale: String((hop as Record<string, unknown>).detail ?? ""),
+            phi_class: "none",
+            cost_usd: 0,
+            model_used: "deterministic-review",
+            bundle_refs: [],
+            created_at: String(record.updated_at ?? record.created_at ?? ""),
+            check_url: record.check_url,
+            comment_url: record.comment_url,
+          })) as import("@/lib/types").LedgerEntry[];
+        });
+        return { hops };
+      } catch {
+        const res = await ledgerMcp.query({ limit: 200, ...filter });
+        const hops = (res.entries ?? []).filter(
+          (e) => e.runtime_kind && LOOP_KINDS.has(e.runtime_kind),
+        );
+        return { hops };
+      }
     },
     refetchInterval: 10_000,
   });

@@ -17,7 +17,7 @@
  */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ShieldAlert, ShieldCheck, ShieldOff, User, Bot,
   ChevronDown, ChevronRight, Filter, Search, X,
@@ -102,7 +102,13 @@ const DEFAULT_FILTERS: Filters = {
   lineage: "",
 };
 
-export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
+export function DecisionTable({
+  entries,
+  initialFilters,
+}: {
+  entries: LedgerEntry[];
+  initialFilters?: Partial<Filters>;
+}) {
   const normalized = useMemo(() => entries.map((e) => normalize(e as RawEntry)), [entries]);
 
   // Reconstruct the teaching-loop relationship graph (taught / reused / flagged
@@ -125,7 +131,15 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
     return m;
   }, [normalized]);
 
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<Filters>(() => {
+    // initialFilters may carry undefined values (e.g. scope.q with no ?q= in the
+    // URL). A spread would overwrite DEFAULT_FILTERS' "" with undefined and then
+    // filters.search.trim() throws. Drop undefined keys so defaults hold.
+    const clean = Object.fromEntries(
+      Object.entries(initialFilters ?? {}).filter(([, v]) => v !== undefined),
+    );
+    return { ...DEFAULT_FILTERS, ...clean } as Filters;
+  });
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -214,6 +228,25 @@ export function DecisionTable({ entries }: { entries: LedgerEntry[] }) {
       return next;
     });
   };
+
+  // Deep-link support: the "What's been happening" feed links to
+  // #decision-<id>. On load / hash change, expand that row and scroll it
+  // into view so a dev leader lands directly on the decision they clicked.
+  useEffect(() => {
+    const focusFromHash = () => {
+      const m = window.location.hash.match(/^#decision-(.+)$/);
+      if (!m) return;
+      const id = decodeURIComponent(m[1]);
+      setExpanded((prev) => new Set(prev).add(id));
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`decision-${id}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    };
+    focusFromHash();
+    window.addEventListener("hashchange", focusFromHash);
+    return () => window.removeEventListener("hashchange", focusFromHash);
+  }, []);
 
   const filterCount =
     (filters.search ? 1 : 0) +
@@ -515,8 +548,9 @@ function DecisionRow({
   return (
     <>
       <tr
+        id={`decision-${entry.id}`}
         className={cn(
-          "hover:bg-[var(--overlay)]/50 cursor-pointer transition-colors",
+          "hover:bg-[var(--overlay)]/50 cursor-pointer transition-colors scroll-mt-24",
           expanded && "bg-[var(--overlay)]/30",
         )}
         onClick={onToggle}

@@ -1,20 +1,36 @@
 "use client";
 import { Scale, Table as TableIcon, LayoutGrid, Search, X, Users, FlaskConical, AlertTriangle } from "lucide-react";
-import { useState, useMemo } from "react";
+import { Suspense, useState, useMemo } from "react";
 import { useDecisions } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
 import { DecisionCard } from "@/components/domain/decision-card";
 import { DecisionTable } from "@/components/domain/decision-table";
 import { DecisionsInsights } from "@/components/domain/decisions-insights";
+import { DecisionActivity } from "@/components/domain/decision-activity";
 import { EmptyState } from "@/components/domain/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
+import { useSearchParams } from "next/navigation";
+import { parseDecisionQuery } from "@/lib/decision-query";
 import type { LedgerEntry } from "@/lib/types";
 
 type ViewMode = "table" | "cards";
 
 export default function DecisionsPage() {
-  const { data, isLoading } = useDecisions();
+  return (
+    <Suspense fallback={<div className="space-y-3">{[1, 2, 3, 4].map((i) => <div key={i} className="skeleton h-12 rounded-lg" />)}</div>}>
+      <DecisionsContent />
+    </Suspense>
+  );
+}
+
+function DecisionsContent() {
+  const searchParams = useSearchParams();
+  const scope = useMemo(() => parseDecisionQuery(new URLSearchParams(searchParams.toString())), [searchParams]);
+  const { data, isLoading } = useDecisions({
+    run_id: scope.run,
+    team_id: scope.team,
+  });
   const entries = data?.entries ?? [];
 
   // Persist the operator's view choice across navigations within the
@@ -49,6 +65,11 @@ export default function DecisionsPage() {
           data source turns that into visible, understandable state. */}
       {!isLoading && (
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          {scope.run && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--primary)]/40 bg-[var(--primary)]/[0.06] text-[var(--primary)]">
+              run <span className="mono font-medium">{scope.run}</span>
+            </span>
+          )}
           {data?.team_id && (
             <span
               className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--border-default)] bg-[var(--card)]"
@@ -78,17 +99,30 @@ export default function DecisionsPage() {
       )}
 
       {!isLoading && entries.length > 0 && <DecisionsInsights entries={entries} />}
+      {!isLoading && entries.length > 0 && <DecisionActivity entries={entries} />}
 
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => <div key={i} className="skeleton h-12 rounded-lg" />)}
         </div>
       ) : entries.length === 0 ? (
-        <EmptyState
-          icon={Scale}
-          title="No decisions logged yet"
-          description="As soon as the orchestrator runs a stage or you write a meta entry via the MCP server, it shows up here. Submit a run from the Runs page or POST directly to ledger.write_runtime."
-        />
+        data?.live_unreachable ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="Live ledger unavailable"
+            description={scope.run
+              ? `The run scope ${scope.run} is active, but the live ledger could not be reached. Demo data contains no matching decisions. Retry when the ledger connection is restored.`
+              : "The live ledger could not be reached. Demo data contains no matching decisions. Retry when the ledger connection is restored."}
+          />
+        ) : (
+          <EmptyState
+            icon={Scale}
+            title={scope.run ? "No decisions for this run" : "No decisions logged yet"}
+            description={scope.run
+              ? `The ledger read succeeded, but no decisions matched run ${scope.run}.`
+              : "As soon as the orchestrator runs a stage or you write a meta entry via the MCP server, it shows up here. Submit a run from the Runs page or POST directly to ledger.write_runtime."}
+          />
+        )
       ) : (
         <>
           <div className="flex items-center justify-end gap-2">
@@ -109,7 +143,19 @@ export default function DecisionsPage() {
           </div>
 
           {view === "table" ? (
-            <DecisionTable entries={entries} />
+            <DecisionTable
+              key={searchParams.toString()}
+              entries={entries}
+              initialFilters={{
+                search: scope.q,
+                stage: scope.stage,
+                team_id: scope.team,
+                actorKind: scope.actor === "human" || scope.actor === "agent" ? scope.actor : undefined,
+                phi: scope.phi === "none" || scope.phi === "low" || scope.phi === "high" ? scope.phi : undefined,
+                runtimeKind: scope.kind,
+                lineage: scope.lineage === "taught" || scope.lineage === "reused" || scope.lineage === "flagged" || scope.lineage === "heal" ? scope.lineage : undefined,
+              }}
+            />
           ) : (
             <DecisionCardsView entries={entries} />
           )}

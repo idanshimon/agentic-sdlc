@@ -35,8 +35,8 @@ function normalize(raw: RawEntry): LedgerEntry {
   const actor = raw.actor && typeof raw.actor === "object" && "kind" in raw.actor
     ? raw.actor
     : {
-        kind: "agent" as const,
-        id: raw.created_by ?? "unknown",
+        kind: ((raw as Record<string, unknown>).actor_kind as "agent" | "human") ?? "agent",
+        id: ((raw as Record<string, unknown>).actor_id as string) ?? raw.created_by ?? "unknown",
       };
   return {
     id: raw.id ?? "unknown",
@@ -105,7 +105,7 @@ function teachingSignalSummary(entry: LedgerEntry): {
         title: "Flagged as wrong",
         detail:
           entry.rationale?.trim()
-            ? `${who} flagged this — it won’t be reused as precedent. Reason: ${entry.rationale.trim()}`
+            ? `${who} flagged this — it won’t be reused as precedent. Reason: ${entry.rationale?.trim()}`
             : `${who} flagged this decision — it won’t be reused as precedent.`,
       };
     case "replay_requested":
@@ -118,7 +118,7 @@ function teachingSignalSummary(entry: LedgerEntry): {
         title: `Autopilot paused${entry.paused_class ? ` for “${entry.paused_class}”` : ""}`,
         detail:
           entry.rationale?.trim()
-            ? `${who} paused auto-resolution for this class. Reason: ${entry.rationale.trim()}`
+            ? `${who} paused auto-resolution for this class. Reason: ${entry.rationale?.trim()}`
             : `${who} paused auto-resolution for this whole class.`,
       };
     default:
