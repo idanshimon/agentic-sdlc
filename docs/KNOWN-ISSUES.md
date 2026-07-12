@@ -7,6 +7,31 @@ a blank page.
 
 ---
 
+## KI-0 · Cosmos/MCP token hardcoded and committed in seed script
+
+**Status:** open — flagged 2026-07-12, deferred. Not urgent-blocking but a real
+secret-hygiene gap.
+
+**Symptom:** `experiments/sbm-cardiology/seed_to_cosmos.py:39` defines
+`DEFAULT_TOKEN = "<live ledger-mcp bearer token>"` as a literal, committed in
+history (commit `c8eea84`). This is the same bearer token that authenticates the
+UI/orchestrator to the Decision Ledger MCP and is stored live as the
+`ledger-mcp-token` Container Apps secret. Anyone with repo read access has the
+production ledger token.
+
+**Impact:** a leaked bearer grants read/write to the deployed Decision Ledger for
+`team-demo`. Rotating requires updating the `ledger-mcp-token` secret on
+`ca-ledger-ui-vnet` + `ca-ledger-mcp-vnet` and any consumer env.
+
+**Next step (deferred):**
+1. Rotate the ledger-mcp token; update the Container Apps secret refs.
+2. Change `seed_to_cosmos.py` to read the token from env (`LEDGER_MCP_TOKEN`),
+   no literal default.
+3. Optionally scrub the value from git history (BFG / filter-repo) — lower
+   priority since rotation neutralizes the leaked value.
+
+---
+
 ## KI-1 · Decisions table does not show a just-completed run's decisions
 
 **Status:** root-caused. Bug A (merge ordering) FIXED; Bug B (team scoping) is
