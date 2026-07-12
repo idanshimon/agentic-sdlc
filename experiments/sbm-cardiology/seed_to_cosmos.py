@@ -34,9 +34,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 RUNS_DIR = REPO_ROOT / "experiments" / "sbm-cardiology" / "runs"
 
 DEFAULT_MCP_URL = (
-    "https://ca-ledger-mcp.whitewater-f74a5db8.eastus2.azurecontainerapps.io"
+    "https://ca-ledger-mcp-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io"
 )
-DEFAULT_TOKEN = "REDACTED_ROTATED_TOKEN"
+# No hardcoded default: the ledger-mcp bearer token must be supplied at runtime
+# via the LEDGER_MCP_TOKEN env var (Container Apps secret `ledger-mcp-token`).
+# Committing a live token is a secret-hygiene violation (see docs/KNOWN-ISSUES.md
+# KI-0). The script fails fast below if the env var is absent.
+DEFAULT_TOKEN = os.environ.get("LEDGER_MCP_TOKEN", "")
 
 
 def post_runtime(url: str, token: str, entry: dict[str, Any]) -> tuple[int, dict | str]:
@@ -114,6 +118,14 @@ def main() -> int:
                     help="team_id to write under (must match the MCP's bearer token mapping)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+
+    if not args.token and not args.dry_run:
+        print(
+            "ERROR: no ledger-mcp bearer token. Set LEDGER_MCP_TOKEN "
+            "(Container Apps secret `ledger-mcp-token`) or pass --token. "
+            "This script no longer ships a hardcoded token (see KI-0)."
+        )
+        return 2
 
     if not RUNS_DIR.exists():
         print(f"ERROR: {RUNS_DIR} not found")
