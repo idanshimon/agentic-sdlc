@@ -19,6 +19,8 @@
 !openspec
 !standards-bundles
 !prompts
+# orchestrator review_verdict.py imports scripts/enforce_bundles.py at runtime.
+!scripts
 # UI /api/hooks route reads .github/hooks/*.json from disk at request time.
 # Whitelist ONLY that subtree (not workflows/agents). Order matters: this must
 # come after the top-level `*` and NOT be re-ignored by a later `.github` rule.

@@ -1,0 +1,14 @@
+# Ownership boundaries for governance-sensitive configuration.
+# Replace @idanshimon with organization teams when this reference is adopted.
+
+/AGENTS.md @idanshimon
+/.github/agents/ @idanshimon
+/.github/hooks/ @idanshimon
+/.github/instructions/ @idanshimon
+/.github/workflows/ @idanshimon
+/prompts/ @idanshimon
+/standards-bundles/ @idanshimon
+/openspec/ @idanshimon
+/apps/orchestrator/ @idanshimon
+/packages/ledger-core/ @idanshimon
+/infra/ @idanshimon

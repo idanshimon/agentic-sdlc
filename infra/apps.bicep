@@ -34,6 +34,14 @@ param ledgerMcpImageTag string = '0.7.0-rc1'
 param pipelineDoctorImageTag string = '0.7.0-rc1'
 param ledgerUiImageTag string = '0.7.0-rc1'
 
+@description('Shared secret injected only by the validating identity ingress')
+@secure()
+param trustedProxySecret string
+
+@description('Bearer token for the GitHub review-loop workload')
+@secure()
+param reviewLoopDispatchToken string
+
 @description('Bearer token for the demo team. Mapped to team-demo in LEDGER_MCP_TOKENS. Generated at deploy time.')
 @secure()
 param ledgerMcpDemoToken string
@@ -57,6 +65,8 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
       activeRevisionsMode: 'Single'
       secrets: [
         { name: 'ledger-mcp-token', value: ledgerMcpDemoToken }
+        { name: 'trusted-proxy-secret', value: trustedProxySecret }
+        { name: 'review-loop-dispatch-token', value: reviewLoopDispatchToken }
       ]
       ingress: {
         external: true
@@ -90,6 +100,10 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_CLIENT_ID',          value: workloadMiClientId }
             { name: 'APPINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'DELIVER_PROVIDER',         value: 'github' }
+            { name: 'EXECUTION_PROFILE',         value: 'production' }
+            { name: 'AUTH_MODE',                 value: 'trusted_headers' }
+            { name: 'TRUSTED_PROXY_SECRET',      secretRef: 'trusted-proxy-secret' }
+            { name: 'REVIEW_LOOP_DISPATCH_TOKEN', secretRef: 'review-loop-dispatch-token' }
             { name: 'LEDGER_MCP_URL',           value: 'http://ca-ledger-mcp/' }
             { name: 'LEDGER_MCP_TOKEN',         secretRef: 'ledger-mcp-token' }
             // Partition every run's decisions under the SAME team the dashboard

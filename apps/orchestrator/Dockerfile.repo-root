@@ -37,6 +37,15 @@ COPY apps/orchestrator /app/orchestrator
 # hits a wired stage — caught on first deploy of v5 (run 40f34d2a).
 COPY prompts /app/prompts
 
+# review_verdict.py imports scripts/enforce_bundles.py and reads standards-bundles/
+# via _REPO_ROOT = parents[2], which resolves to "/" inside this image
+# (/app/orchestrator/review_verdict.py -> parents[2] == /). Ship both at the
+# container root so the deterministic BLOCK-rule scan resolves at import time.
+# Without these the orchestrator crash-loops with ModuleNotFoundError:
+# 'enforce_bundles' (caught on first deploy of the review-verdict path).
+COPY scripts /scripts
+COPY standards-bundles /standards-bundles
+
 EXPOSE 8000
 # Run as a package so the dotted imports (.config, .stages …) resolve.
 CMD ["uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]

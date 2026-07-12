@@ -44,6 +44,14 @@ param ledgerMcpImageTag string = '0.7.0-rc1'
 param ledgerInsightsImageTag string = '0.7.0-rc1'
 param pipelineDoctorImageTag string = '0.7.0-rc1'
 
+@description('Shared secret injected only by the validating identity ingress')
+@secure()
+param trustedProxySecret string
+
+@description('Bearer token for the GitHub review-loop workload')
+@secure()
+param reviewLoopDispatchToken string
+
 // ---------- Log Analytics + App Insights ----------
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'law-agentic-${suffix}'
@@ -252,6 +260,10 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: cae.id
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: [
+        { name: 'trusted-proxy-secret', value: trustedProxySecret }
+        { name: 'review-loop-dispatch-token', value: reviewLoopDispatchToken }
+      ]
       ingress: {
         external: true
         targetPort: 8000
@@ -280,6 +292,10 @@ resource caOrchestrator 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_CLIENT_ID',          value: workloadMi.properties.clientId }
             { name: 'APPINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
             { name: 'DELIVER_PROVIDER',         value: 'github' }
+            { name: 'EXECUTION_PROFILE',         value: 'production' }
+            { name: 'AUTH_MODE',                 value: 'trusted_headers' }
+            { name: 'TRUSTED_PROXY_SECRET',      secretRef: 'trusted-proxy-secret' }
+            { name: 'REVIEW_LOOP_DISPATCH_TOKEN', secretRef: 'review-loop-dispatch-token' }
           ]
         }
       ]

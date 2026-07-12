@@ -47,11 +47,10 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # The orchestrator resolves the repo's tier, runs the bounded loop, and
-          # writes the audited hop chain. A non-2xx here does NOT merge anything —
-          # merge only ever happens server-side after a converged Tier-A verdict.
-          curl -fsS -X POST "${ORCHESTRATOR_URL%/}/api/review-loops" \
+          test -n "${DISPATCH_TOKEN}" || { echo "REVIEW_LOOP_DISPATCH_TOKEN is required" >&2; exit 1; }
+          # The token is validated server-side and maps only to github_workload.
+          curl -fsS --retry 2 --retry-all-errors -X POST "${ORCHESTRATOR_URL%/}/api/review-loops" \
             -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
+            -H "Idempotency-Key: ${REPO}:${PR_NUMBER}:${HEAD_SHA}" \
             -H "Content-Type: application/json" \
-            -d "{\"repo\":\"${REPO}\",\"pr_number\":${PR_NUMBER},\"head_sha\":\"${HEAD_SHA}\"}" \
-            || echo "::warning::review-loop dispatch failed; the PR is unmerged and safe."
+            -d "{\"repo\":\"${REPO}\",\"pr_number\":${PR_NUMBER},\"head_sha\":\"${HEAD_SHA}\"}"
