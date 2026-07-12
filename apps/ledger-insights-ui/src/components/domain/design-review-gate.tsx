@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { orchestrator } from "@/lib/api/orchestrator";
+import { orchestrator, operatorErrorMessage } from "@/lib/api/orchestrator";
 import { architectureFromEvents } from "@/lib/artifacts";
 import type { RunState } from "@/lib/types";
 
@@ -61,13 +61,14 @@ export function DesignReviewGate({ runId, run, onApproved }: Props) {
         gate: "design_review",
         resolution_text: "Architecture reviewed and approved.",
         card_id: `design-review-${runId}`,
+        expected_gate_version: run.pending_gate?.version ?? run.checkpoint_version,
       });
       toast.success("Design review approved", {
         description: "Pipeline advancing to Test Plan stage.",
       });
       onApproved();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to approve design review";
+      const msg = operatorErrorMessage(e);
       toast.error("Design review approve failed", { description: msg });
     } finally {
       setSubmitting(false);
@@ -84,13 +85,14 @@ export function DesignReviewGate({ runId, run, onApproved }: Props) {
         gate: "design_review",
         resolution_text: "Architecture rejected — needs re-architect.",
         card_id: `design-review-${runId}`,
+        expected_gate_version: run.pending_gate?.version ?? run.checkpoint_version,
       });
       toast.success("Design review rejected", {
-        description: "Pipeline will re-run architect with feedback.",
+        description: "Rejection recorded. The gate remains paused until a revised architecture is submitted or the run is retried.",
       });
       onApproved();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to reject design review";
+      const msg = operatorErrorMessage(e);
       toast.error("Design review reject failed", { description: msg });
     } finally {
       setSubmitting(false);
@@ -127,7 +129,7 @@ export function DesignReviewGate({ runId, run, onApproved }: Props) {
             ) : (
               <>
                 <XCircle className="h-4 w-4" />
-                Reject + re-architect
+                Reject architecture and keep paused
               </>
             )}
           </Button>

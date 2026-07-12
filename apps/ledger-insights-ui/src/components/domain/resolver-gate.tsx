@@ -4,7 +4,7 @@ import { CheckCircle2, AlertTriangle, FileWarning, ChevronDown, ChevronRight, Lo
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { orchestrator } from "@/lib/api/orchestrator";
+import { orchestrator, operatorErrorMessage } from "@/lib/api/orchestrator";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { StageEvent } from "@/lib/types";
@@ -140,10 +140,11 @@ export function gateProgress<
 interface Props {
   runId: string;
   events: StageEvent[];
+  gateVersion?: number;
   onApproved: () => void;
 }
 
-export function ResolverGate({ runId, events, onApproved }: Props) {
+export function ResolverGate({ runId, events, gateVersion, onApproved }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   // Tier-2 + operator-agency: track per-card decided state so the page gives
@@ -231,6 +232,7 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
           actor: "operator@dashboard",
           confidence_source: "human",
           approval_path: "bulk",
+          expected_gate_version: gateVersion,
         });
         nextDecided[c.card_id!] = { label: c.options[idx]?.label ?? "Recommended", custom: false };
         approved += 1;
@@ -241,7 +243,7 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
       // How many gating cards still need an explicit individual decision?
       const remaining = gating.filter((c) => c.card_id && !merged[c.card_id]);
       if (remaining.length === 0) {
-        await orchestrator.finalizeGate(runId);
+        await orchestrator.finalizeGate(runId, gateVersion);
         toast.success(`Approved ${approved} ${approved === 1 ? "card" : "cards"}`, {
           description: "Resolver gate closed — pipeline advancing to Architect.",
         });
@@ -260,7 +262,7 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
         onApproved();
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to approve gate";
+      const msg = operatorErrorMessage(e);
       toast.error(
         approved > 0 ? `Partial approve (${approved} of ${gating.length})` : "Approve failed",
         { description: msg },
@@ -282,6 +284,7 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
         actor: "operator@dashboard",
         confidence_source: "human",
         approval_path: "individual",
+        expected_gate_version: gateVersion,
       });
       setDecided((d) => ({
         ...d,
@@ -292,7 +295,7 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
       });
       onApproved();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to approve card";
+      const msg = operatorErrorMessage(e);
       toast.error("Approve card failed", { description: msg });
     }
   };
@@ -311,6 +314,7 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
         actor: "operator@dashboard",
         confidence_source: "human",
         approval_path: "individual",
+        expected_gate_version: gateVersion,
       });
       setDecided((d) => ({
         ...d,
@@ -322,7 +326,7 @@ export function ResolverGate({ runId, events, onApproved }: Props) {
       });
       onApproved();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to record custom resolution";
+      const msg = operatorErrorMessage(e);
       toast.error("Custom resolution failed", { description: msg });
     }
   };

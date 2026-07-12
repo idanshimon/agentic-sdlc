@@ -5,6 +5,16 @@ import { orchestrator } from "@/lib/api/orchestrator";
 import { isDemoMode, isDemoRun, subscribeDemoRun } from "@/lib/demo";
 import type { StageEvent } from "@/lib/types";
 
+export function streamGenerationAfterError(generation: number): number {
+  return generation + 1;
+}
+
+export function reconnectDelayMs(attempt: number, random: () => number = Math.random): number {
+  const base = Math.min(30_000, 1_000 * 2 ** Math.max(0, attempt));
+  const jitter = Math.floor(base * 0.2 * random());
+  return Math.min(30_000, base + jitter);
+}
+
 /** Subscribe to live stage events via SSE.
  *
  * Phase 4 (2026-06-16): when a new SSE event arrives, also invalidate
@@ -23,6 +33,8 @@ import type { StageEvent } from "@/lib/types";
 export function useRunStream(runId: string | undefined) {
   const [events, setEvents] = useState<StageEvent[]>([]);
   const [connected, setConnected] = useState(false);
+  const [streamGeneration, setStreamGeneration] = useState(0);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -40,7 +52,12 @@ export function useRunStream(runId: string | undefined) {
       };
     }
     const src = new EventSource(orchestrator.streamUrl(runId));
-    src.onopen = () => setConnected(true);
+    let reconnectTimer: number | undefined;
+    let disposed = false;
+    src.onopen = () => {
+      setConnected(true);
+      setReconnectAttempt(0);
+    };
     src.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data) as StageEvent;
@@ -67,28 +84,21 @@ export function useRunStream(runId: string | undefined) {
     };
     src.onerror = () => {
       setConnected(false);
-      // Phase 4: SSE drops happen in production (load balancer idle timeout,
-      // network blip, Container App revision swap during deploy). Browser
-      // EventSource does auto-reconnect with backoff, but if the *server*
-      // closed the connection (revision swap), we need to drop and recreate
-      // the EventSource. The close+effect-cleanup pattern below ensures the
-      // effect's next run creates a fresh EventSource — caught after the
-      // v6 → v7 deploy when SSE streams to active runs went silent and
-      // operators saw "Streaming" badge flip to "Idle" forever.
-      //
-      // The 5s gate gives the server time to come back up before we
-      // hammer it with reconnects on every error tick.
-      window.setTimeout(() => {
-        src.close();
-        // No-op if the effect already re-ran; otherwise lets the next
-        // queryClient invalidation tick recreate the connection.
-      }, 5000);
+      src.close();
+      const delay = reconnectDelayMs(reconnectAttempt);
+      reconnectTimer = window.setTimeout(() => {
+        if (disposed) return;
+        setReconnectAttempt((attempt) => attempt + 1);
+        setStreamGeneration(streamGenerationAfterError);
+      }, delay);
     };
     return () => {
+      disposed = true;
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
       src.close();
       setConnected(false);
     };
-  }, [runId, queryClient]);
+  }, [runId, queryClient, streamGeneration, reconnectAttempt]);
 
   return { events, connected };
 }

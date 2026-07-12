@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DecisionCard } from "@/components/domain/decision-card";
 import { isDemoRun, getDemoArtifacts } from "@/lib/demo";
-import { architectureFromEvents } from "@/lib/artifacts";
+import { architectureFromEvents, projectArtifactsFromEvents } from "@/lib/artifacts";
 import { ledgerMcp } from "@/lib/api/ledger-mcp";
 import { useQuery } from "@tanstack/react-query";
 import type { LedgerEntry, StageEvent } from "@/lib/types";
@@ -21,13 +21,14 @@ interface Props {
   events?: ReadonlyArray<StageEvent>;
 }
 
-type TabKey = "decisions" | "architecture" | "test_plan" | "code" | "decisions_md";
+type TabKey = "decisions" | "architecture" | "test_plan" | "implementation" | "tests" | "decisions_md";
 
 const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "decisions", label: "Decisions", icon: Scale },
   { key: "architecture", label: "Architecture", icon: Building2 },
   { key: "test_plan", label: "Test plan", icon: FlaskConical },
-  { key: "code", label: "Code", icon: Code2 },
+  { key: "implementation", label: "Implementation", icon: Code2 },
+  { key: "tests", label: "Tests", icon: FileCheck },
   { key: "decisions_md", label: "decisions.md", icon: ScrollText },
 ];
 
@@ -38,10 +39,9 @@ export function RunArtifactsPanel({ runId, status, events }: Props) {
   const isDemo = isDemoRun(runId);
   const artifacts = isDemo ? getDemoArtifacts(runId) : null;
 
-  // Live runs don't populate demo artifacts. The orchestrator emits the
-  // drafted architecture on the ARCHITECT event payload, so on the live
-  // path we read it from the event stream (Fix A). Demo fixtures still
-  // win when present (they carry the richer curated markdown).
+  // Project live artifacts from the orchestrator's actual event payload contract.
+  // Demo fixtures can enrich missing fields, but can never hide fresher live output.
+  const liveArtifacts = projectArtifactsFromEvents(events);
   const liveArchitecture = architectureFromEvents(events);
 
   // Pull ledger entries for this run (works in both demo and live mode —
@@ -54,22 +54,29 @@ export function RunArtifactsPanel({ runId, status, events }: Props) {
   });
   const entries: LedgerEntry[] = ledger?.entries ?? [];
 
-  const resolvedArchitecture = artifacts?.architecture || liveArchitecture;
+  const resolvedArchitecture = liveArtifacts.architecture || artifacts?.architecture || liveArchitecture;
+  const resolvedTestPlan = liveArtifacts.testPlan || artifacts?.test_plan || "";
+  const resolvedImplementation = liveArtifacts.implementation || artifacts?.code || "";
+  const resolvedTests = liveArtifacts.tests || "";
+  const resolvedDecisionsMd = liveArtifacts.decisionsMd || artifacts?.decisions_md || "";
+  const resolvedPrUrl = liveArtifacts.prUrl || artifacts?.pr_url || "";
   const hasArchitecture = !!resolvedArchitecture;
-  const hasTestPlan = !!artifacts?.test_plan;
-  const hasCode = !!artifacts?.code;
-  const hasDecisionsMd = !!artifacts?.decisions_md;
+  const hasTestPlan = !!resolvedTestPlan;
+  const hasImplementation = !!resolvedImplementation;
+  const hasTests = !!resolvedTests;
+  const hasDecisionsMd = !!resolvedDecisionsMd;
   const hasDecisions = entries.length > 0;
 
   // Hide entirely until something is ready to show.
-  const ready = hasDecisions || hasArchitecture || hasTestPlan || hasCode || hasDecisionsMd;
+  const ready = hasDecisions || hasArchitecture || hasTestPlan || hasImplementation || hasTests || hasDecisionsMd || !!resolvedPrUrl || !!liveArtifacts.deliveryStatus || liveArtifacts.artifactFiles.length > 0;
   if (!ready) return null;
 
   const tabAvailable: Record<TabKey, boolean> = {
     decisions: hasDecisions,
     architecture: hasArchitecture,
     test_plan: hasTestPlan,
-    code: hasCode,
+    implementation: hasImplementation,
+    tests: hasTests,
     decisions_md: hasDecisionsMd,
   };
 
@@ -96,16 +103,21 @@ export function RunArtifactsPanel({ runId, status, events }: Props) {
         <div className="flex-1">
           <h3 className="text-sm font-semibold">Pipeline artifacts</h3>
           <p className="text-xs text-[var(--text-tertiary)]">
-            Resolver decisions · architecture · test plan · code · audit trail
+            Decisions · architecture · test plan · implementation · tests · delivery
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {liveArtifacts.deliveryStatus && (
+            <Badge variant={liveArtifacts.deliveryStatus === "delivered" ? "success" : "warning"} className="text-[10px]">
+              {liveArtifacts.deliveryStatus.replaceAll("_", " ")}
+            </Badge>
+          )}
           {hasDecisions && (
             <Badge variant="info" className="text-[10px]">
               {entries.length} {entries.length === 1 ? "decision" : "decisions"}
             </Badge>
           )}
-          {artifacts?.pr_url && (
+          {resolvedPrUrl && (
             <Badge variant="success" className="text-[10px]">
               PR opened
             </Badge>
@@ -115,6 +127,14 @@ export function RunArtifactsPanel({ runId, status, events }: Props) {
 
       {expanded && (
         <>
+          {(resolvedPrUrl || liveArtifacts.deliveryReason || liveArtifacts.artifactFiles.length > 0) && (
+            <div className="mx-4 mt-3 rounded border border-[var(--border-muted)] p-3 text-xs space-y-2">
+              <div className="font-medium">Delivery evidence</div>
+              {liveArtifacts.deliveryReason && <p className="text-[var(--text-secondary)]">{liveArtifacts.deliveryReason}</p>}
+              {resolvedPrUrl && <a className="text-[var(--info)] inline-flex items-center gap-1" href={resolvedPrUrl} target="_blank" rel="noreferrer">Open pull request <ExternalLink className="h-3 w-3" /></a>}
+              {liveArtifacts.artifactFiles.length > 0 && <p className="mono text-[10px] text-[var(--text-tertiary)]">{liveArtifacts.artifactFiles.join(" · ")}</p>}
+            </div>
+          )}
           {/* Tabs */}
           <div className="flex items-center gap-1 px-4 pt-3 border-b border-[var(--border-muted)] flex-wrap">
             {TABS.map((t) => {
@@ -165,18 +185,21 @@ export function RunArtifactsPanel({ runId, status, events }: Props) {
             {tab === "architecture" && resolvedArchitecture && (
               <ArtifactView content={resolvedArchitecture} kind="md" />
             )}
-            {tab === "test_plan" && artifacts?.test_plan && (
-              <ArtifactView content={artifacts.test_plan} kind="md" />
+            {tab === "test_plan" && resolvedTestPlan && (
+              <ArtifactView content={resolvedTestPlan} kind="md" />
             )}
-            {tab === "code" && artifacts?.code && (
-              <ArtifactView content={artifacts.code} kind="py" />
+            {tab === "implementation" && resolvedImplementation && (
+              <ArtifactView content={resolvedImplementation} kind="py" />
             )}
-            {tab === "decisions_md" && artifacts?.decisions_md && (
+            {tab === "tests" && resolvedTests && (
+              <ArtifactView content={resolvedTests} kind="py" />
+            )}
+            {tab === "decisions_md" && resolvedDecisionsMd && (
               <div className="space-y-3">
-                <ArtifactView content={artifacts.decisions_md} kind="md" />
-                {artifacts.pr_url && (
+                <ArtifactView content={resolvedDecisionsMd} kind="md" />
+                {resolvedPrUrl && (
                   <a
-                    href={artifacts.pr_url}
+                    href={resolvedPrUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-[var(--primary)] hover:underline"

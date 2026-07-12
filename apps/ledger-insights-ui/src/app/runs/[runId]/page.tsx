@@ -1,7 +1,8 @@
 "use client";
-import { use, useMemo } from "react";
+import { use, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, GitPullRequest, ExternalLink, AlertTriangle } from "lucide-react";
+import { ChevronLeft, GitPullRequest, ExternalLink, AlertTriangle, Scale } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRun } from "@/lib/hooks/use-runs";
 import { useRunStream } from "@/lib/hooks/use-run-stream";
@@ -15,6 +16,9 @@ import { ResolverGate } from "@/components/domain/resolver-gate";
 import { DesignReviewGate } from "@/components/domain/design-review-gate";
 import { RunArtifactsPanel } from "@/components/domain/run-artifacts-panel";
 import { RunSummaryPanel } from "@/components/domain/run-summary-panel";
+import { RunOutcomePanel } from "@/components/domain/run-outcome-panel";
+import { classifyRunOutcome } from "@/lib/run-outcome";
+import { orchestrator } from "@/lib/api/orchestrator";
 import { PageHeader } from "@/components/layout/page-header";
 import { relativeTime, shortId, fmtUsd, eventTimeLabel } from "@/lib/utils";
 import type { Stage, StageEvent } from "@/lib/types";
@@ -29,6 +33,8 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
   const { data: run, isLoading } = useRun(runId);
   const { events: liveEvents, connected } = useRunStream(runId);
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const [retrying, setRetrying] = useState(false);
 
   // Phase 4 (2026-06-16): dedup events from server + live SSE so each
   // stage transition only renders once. Without this, the event-stream
@@ -48,6 +54,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
     return Array.from(map.values());
   }, [run?.events, liveEvents]);
   const awaitingGate = run?.status === "awaiting_gate";
+  const outcome = useMemo(() => run ? classifyRunOutcome(run) : null, [run]);
 
   // Memoize the payload object so its identity is stable across renders that
   // don't change status/stage. Inline `payload: {status, stage}` literals at
@@ -67,6 +74,16 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
     label: run ? `Run ${shortId(runId, 8)}` : "Run",
     payload: assistPayload,
   });
+
+  const onRetry = async () => {
+    setRetrying(true);
+    try {
+      const rerun = await orchestrator.rerun(runId);
+      router.push(`/runs/${rerun.run_id}`);
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const onApproved = () => {
     // Force-refetch run state immediately after approval so the gate panel
@@ -113,6 +130,12 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
         actions={
           run && (
             <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/decisions?run=${encodeURIComponent(runId)}`}>
+                  <Scale className="h-3.5 w-3.5" />
+                  View decisions
+                </Link>
+              </Button>
               <Badge variant={connected ? "success" : "default"}>
                 <StatusDot status={connected ? "running" : "idle"} pulse={connected} />
                 {connected ? "Streaming" : "Idle"}
@@ -178,11 +201,14 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
                 <ResolverGate
                   runId={runId}
                   events={allEvents}
+                  gateVersion={run.pending_gate?.version ?? run.checkpoint_version}
                   onApproved={onApproved}
                 />
               )}
             </div>
           )}
+
+          {outcome && <RunOutcomePanel outcome={outcome} onRetry={onRetry} retrying={retrying} />}
 
           <Card className="p-4">
             <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)] mb-3">
@@ -209,7 +235,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
             </div>
           </Card>
 
-          <Card className="overflow-hidden">
+          <Card id="event-stream" className="overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-[var(--border-muted)]">
               <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
                 Event stream

@@ -8,10 +8,26 @@ import {
 } from "@/lib/demo";
 import type { RunState, RunMode, Stage } from "../types";
 
-class ApiError extends Error {
-  constructor(public status: number, message: string) {
+function stableCommandKey(runId: string, action: string, payload: unknown): string {
+  const raw = JSON.stringify(payload, Object.keys((payload as Record<string, unknown>) ?? {}).sort());
+  let hash = 2166136261;
+  for (let i = 0; i < raw.length; i += 1) hash = Math.imul(hash ^ raw.charCodeAt(i), 16777619);
+  return `${runId}:${action}:${(hash >>> 0).toString(16)}`;
+}
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string, public detail?: string) {
     super(message);
   }
+}
+
+export function operatorErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 409) {
+    if (error.detail?.includes("stale_gate_version")) return "This gate changed in another session. Refresh before deciding again.";
+    if (error.detail?.includes("idempotency_conflict")) return "This action key was already used for a different decision. Refresh and retry.";
+    return "This run changed in another session. Refresh before retrying.";
+  }
+  return error instanceof Error ? error.message : "Request failed";
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -24,7 +40,13 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     cache: "no-store",
   });
   if (!res.ok) {
-    throw new ApiError(res.status, `${path} -> HTTP ${res.status}`);
+    const raw = await res.text().catch(() => "");
+    let detail = raw;
+    try {
+      const parsed = JSON.parse(raw) as { detail?: string };
+      detail = parsed.detail ?? raw;
+    } catch { /* keep raw body */ }
+    throw new ApiError(res.status, `${path} -> HTTP ${res.status}${detail ? `: ${detail}` : ""}`, detail);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -52,6 +74,7 @@ export interface ApproveBody {
   // "individual" = explicit per-card decision. The server rejects "bulk" on
   // hard-gated classes (PHI/auth) with 409. Defaults to "individual" server-side.
   approval_path?: "bulk" | "individual";
+  expected_gate_version?: number;
 }
 
 /**
@@ -204,7 +227,7 @@ export const orchestrator = {
       new Blob([input.prd_text], { type: "text/markdown" }),
       input.filename,
     );
-    fd.append("team_id", input.team_id ?? "cardiology");
+    fd.append("team_id", input.team_id ?? "team-demo");
     fd.append("mode", input.mode ?? "manual");
     if (input.stage_providers && Object.keys(input.stage_providers).length > 0) {
       fd.append("stage_providers", JSON.stringify(input.stage_providers));
@@ -265,19 +288,28 @@ export const orchestrator = {
       if (!r) throw new ApiError(404, `Demo run ${runId} not found`);
       return Promise.resolve(r);
     }
-    return req<{ ok: boolean; decisions_count: number; resolution_text: string }>(
+    const idempotencyKey = stableCommandKey(runId, "approve", body);
+    return req<{ ok: boolean; decisions_count: number; resolution_text: string; run_version: number; gate_version: number }>(
       `/api/runs/${runId}/approve`,
-      { method: "POST", body: JSON.stringify(body) },
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(body),
+      },
     );
   },
-  finalizeGate(runId: string) {
+  finalizeGate(runId: string, expectedGateVersion?: number) {
     if (isDemoRun(runId)) {
       // Demo runs auto-close gates inside approveDemoRun; finalize is a no-op.
       return Promise.resolve({ ok: true });
     }
-    return req<{ ok: boolean; gate_closed: boolean; decisions_count: number; next_stage: string }>(
+    return req<{ ok: boolean; gate_closed: boolean; decisions_count: number; next_stage: string; run_version: number; gate_version: number }>(
       `/api/runs/${runId}/finalize`,
-      { method: "POST", body: JSON.stringify({}) },
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": stableCommandKey(runId, "finalize", { expected_gate_version: expectedGateVersion }) },
+        body: JSON.stringify({ expected_gate_version: expectedGateVersion }),
+      },
     );
   },
   reject(runId: string, body: { reason: string }) {
@@ -365,6 +397,9 @@ export const orchestrator = {
     return req<{ ok: boolean; reloaded: string[] }>("/api/config/reload", {
       method: "POST",
     });
+  },
+  reviewLoops() {
+    return req<{ items: Array<Record<string, unknown>>; count: number }>("/api/review-loops");
   },
   repoAutonomy() {
     return req<import("../types").RepoAutonomyPosture>("/api/config/repo-autonomy");

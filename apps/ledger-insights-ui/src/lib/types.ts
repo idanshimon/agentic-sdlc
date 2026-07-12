@@ -63,6 +63,9 @@ export interface RunState {
   /** Output artifact sizes, keyed by name (architecture_chars, etc.). */
   artifact_sizes?: Record<string, number>;
   /** Experiment-namespace provenance (set by the SBM harness seeder). */
+  /** Durable gate command version used for optimistic concurrency. */
+  pending_gate?: { gate_id?: string; stage?: string; version?: number; status?: string } | null;
+  checkpoint_version?: number;
   namespace?: string;
   model?: string;
   model_slug?: string;
@@ -148,6 +151,22 @@ export interface LedgerEntry {
   autonomy_ref?: string;
   /** Autonomous review loop: one-line human-readable detail for the hop. */
   detail?: string;
+  /** Structured loop identity; legacy entries may have only autonomy_ref. */
+  loop_id?: string;
+  repo?: string;
+  pr_number?: number;
+  head_sha?: string;
+  attempt?: number;
+  tier?: string;
+  verdict_ref?: string;
+  disposition?: "IN_PROGRESS" | "SNAPSHOT_READY" | "PASSED_AWAITING_MERGE" | "MERGED" | "ESCALATED" | "ADVISORY" | "FAILED";
+  check_url?: string;
+  comment_url?: string;
+  deterministic_policy?: "pass" | "fail" | "not_run" | "unknown";
+  build_tests?: "pass" | "fail" | "not_run" | "unknown";
+  dependency_security?: "pass" | "fail" | "not_run" | "unknown";
+  semantic_review?: "pass" | "fail" | "not_run" | "unknown";
+  mandatory_human?: "pass" | "fail" | "not_run" | "unknown";
   /** Track B: pointer back to the decision this teaching signal acts on. */
   references_entry_id?: string;
   /** Track B: thumbs subkind, only set when runtime_kind=feedback_thumbs. */
@@ -171,6 +190,7 @@ export interface LedgerEntry {
    *     (distinct from actor.kind for plan_proposed-style entries).
    *   - heal_id: ties the 3-entry self-heal chain (proposed → decided → executed).
    */
+  card_id?: string;
   slot_value_hash?: string;
   precedent_id?: string | null;
   decision_kind?: "accept" | "swap" | "reject";

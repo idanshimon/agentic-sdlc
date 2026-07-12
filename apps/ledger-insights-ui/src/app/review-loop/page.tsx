@@ -5,6 +5,9 @@ import { useReviewLoops, useRepoAutonomy } from "@/lib/hooks/use-runs";
 import { EmptyState } from "@/components/domain/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
+import { projectReviewLoops, type ReviewLoopProjection as Loop } from "@/lib/review-loop";
+import { deriveAssurance } from "@/lib/assurance";
+import { AssurancePanel } from "@/components/domain/assurance-panel";
 import type { LedgerEntry, RepoTier } from "@/lib/types";
 
 /** Parse a reviewloop/<tier>/<repo>/<action>@attempt=N[:reason] citation. */
@@ -18,39 +21,6 @@ function parseRef(ref?: string): {
   return { tier: m[1], repo: m[2], action: m[3], attempt: Number(m[4]), reason };
 }
 
-type Loop = {
-  repo: string;
-  tier?: string;
-  hops: LedgerEntry[];
-  terminal: "converged" | "escalated" | "advisory" | "in_progress";
-  attempts: number;
-};
-
-/** Group loop hops by repo into ordered timelines with a terminal state. */
-function groupLoops(hops: LedgerEntry[]): Loop[] {
-  const byRepo = new Map<string, LedgerEntry[]>();
-  for (const h of hops) {
-    const { repo } = parseRef(h.autonomy_ref);
-    const key = repo ?? "unknown";
-    if (!byRepo.has(key)) byRepo.set(key, []);
-    byRepo.get(key)!.push(h);
-  }
-  const loops: Loop[] = [];
-  for (const [repo, entries] of byRepo) {
-    const sorted = [...entries].sort((a, b) =>
-      String(a.created_at).localeCompare(String(b.created_at)));
-    const last = sorted[sorted.length - 1];
-    let terminal: Loop["terminal"] = "in_progress";
-    if (last?.runtime_kind === "loop_converged") terminal = "converged";
-    else if (last?.runtime_kind === "loop_escalated") {
-      terminal = parseRef(last.autonomy_ref).action === "comment_only" ? "advisory" : "escalated";
-    }
-    const attempts = sorted.filter((h) => h.runtime_kind === "review_remediation").length;
-    loops.push({ repo, tier: parseRef(last?.autonomy_ref).tier, hops: sorted, terminal, attempts });
-  }
-  return loops;
-}
-
 const TIER_TONE: Record<RepoTier, string> = {
   A: "var(--danger)",       // most autonomous = highest scrutiny color
   B: "var(--warning)",
@@ -59,9 +29,11 @@ const TIER_TONE: Record<RepoTier, string> = {
 
 function TerminalChip({ state }: { state: Loop["terminal"] }) {
   const map = {
-    converged: { label: "MERGED", icon: GitMerge, color: "var(--success)" },
+    merged: { label: "MERGED", icon: GitMerge, color: "var(--success)" },
+    passed_awaiting_merge: { label: "PASSED · AWAITING MERGE", icon: ShieldCheck, color: "var(--warning)" },
     escalated: { label: "ESCALATED", icon: AlertTriangle, color: "var(--danger)" },
     advisory: { label: "ADVISORY", icon: MessageSquare, color: "var(--text-secondary)" },
+    failed: { label: "FAILED", icon: AlertTriangle, color: "var(--danger)" },
     in_progress: { label: "IN PROGRESS", icon: Workflow, color: "var(--info)" },
   }[state];
   const Icon = map.icon;
@@ -109,8 +81,8 @@ export default function ReviewLoopPage() {
   const { data: loopData, isLoading } = useReviewLoops();
   const { data: posture } = useRepoAutonomy();
 
-  const loops = useMemo(() => groupLoops(loopData?.hops ?? []), [loopData]);
-  const escalations = loops.filter((l) => l.terminal === "escalated");
+  const loops = useMemo(() => projectReviewLoops(loopData?.hops ?? []), [loopData]);
+  const escalations = loops.filter((l) => l.terminal === "escalated" || l.terminal === "failed");
 
   return (
     <div className="space-y-5">
@@ -127,9 +99,9 @@ export default function ReviewLoopPage() {
         </h2>
         {posture?.bootstrap !== false ? (
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            No repo graduated — every repository is <strong>Tier C (advisory)</strong> by default.
-            Deploying the image changes no repo&apos;s behavior until a human graduates one in
-            <code className="mx-1 rounded px-1" style={{ background: "var(--surface)" }}>repo_autonomy.yaml</code>.
+            No repo graduated — every repository is <strong>Tier C (advisory)</strong> by default.{" "}
+            Deploying the image changes no repo&apos;s behavior until a human graduates one in{" "}
+            <code className="rounded px-1" style={{ background: "var(--surface)" }}>repo_autonomy.yaml</code>.
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -162,7 +134,7 @@ export default function ReviewLoopPage() {
               const last = l.hops[l.hops.length - 1];
               const { reason } = parseRef(last?.autonomy_ref);
               return (
-                <div key={l.repo} className="flex items-center justify-between rounded-lg border p-3"
+                <div key={l.loopId} className="flex items-center justify-between rounded-lg border p-3"
                   style={{ borderColor: "var(--border)" }}>
                   <div>
                     <span className="font-mono text-sm">{l.repo}</span>
@@ -200,8 +172,15 @@ export default function ReviewLoopPage() {
             </thead>
             <tbody>
               {loops.map((l) => (
-                <tr key={l.repo} className="border-t" style={{ borderColor: "var(--border)" }}>
-                  <td className="px-4 py-3 font-mono text-xs">{l.repo}</td>
+                <tr key={l.loopId} className="border-t" style={{ borderColor: "var(--border)" }}>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    <div>{l.repo}</div>
+                    <div className="mt-1 text-[10px] text-[var(--text-secondary)]">PR #{l.prNumber ?? "?"} · {(l.headSha ?? "unknown").slice(0, 12)}</div>
+                    <div className="mt-1 flex gap-2">
+                      {l.hops.at(-1)?.check_url && <a className="text-[var(--info)]" href={l.hops.at(-1)?.check_url} target="_blank" rel="noreferrer">check</a>}
+                      {l.hops.at(-1)?.comment_url && <a className="text-[var(--info)]" href={l.hops.at(-1)?.comment_url} target="_blank" rel="noreferrer">comment</a>}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     {l.tier && (
                       <span className="rounded px-2 py-0.5 text-xs font-bold"
@@ -211,7 +190,12 @@ export default function ReviewLoopPage() {
                     )}
                   </td>
                   <td className="px-4 py-3"><Timeline hops={l.hops} /></td>
-                  <td className="px-4 py-3"><TerminalChip state={l.terminal} /></td>
+                  <td className="px-4 py-3">
+                    <div className="space-y-2">
+                      <TerminalChip state={l.terminal} />
+                      <AssurancePanel assurance={deriveAssurance((l.hops.at(-1) as unknown as Record<string, unknown>) ?? {})} />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
