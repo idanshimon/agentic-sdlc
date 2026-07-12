@@ -24,6 +24,10 @@ lands on one auditable ledger; every standards change is a committee-reviewed PR
    invisible to compliance — we see what landed in main, not WHY the agent chose it.
    v0.7 closes that with four planes: Standards / Pipeline / Ledger+Doctor / Agent HQ.
 
+   > On Tab B (Decisions), lead with the **"What's been happening"** feed — it reads
+   > in plain English ("The agent resolved '…' on its own"), flags learning events,
+   > and each row clicks through to the full audited record below.
+
 2. RUNS (Tab A)
    Show the list of completed runs with model badges + cost. Click one completed run.
    On the run-detail page point at: stage duration bars, per-stage model routing,

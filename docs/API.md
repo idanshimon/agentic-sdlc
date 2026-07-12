@@ -67,6 +67,7 @@ _Autonomous review→remediate→re-review loop controls and the Tier-B human me
 
 | Method | Path | Summary |
 |---|---|---|
+| `POST` | `/api/review-loops` | Dispatch Review Loop |
 | `POST` | `/api/review-loops/merge` | Review Loop Merge |
 
 ### Self-Heal
@@ -123,4 +124,4 @@ _Liveness, health, and administrative maintenance._
 | `GET` | `/healthz` | Healthz |
 
 ---
-_32 endpoints across 9 groups._
+_33 endpoints across 9 groups._

@@ -80,6 +80,16 @@ each decision is stamped with the deciding agent's `bundle_refs`. The deliver
 stage opens a **real GitHub PR** with the run's artifacts (or an honest "PR not
 opened" — never a fabricated URL).
 
+## Production hardening references
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Authentication](docs/AUTHENTICATION.md)
+- [Security model](SECURITY.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Run recovery](docs/RUN-RECOVERY.md)
+- [GitHub enforcement](docs/GITHUB-ENFORCEMENT.md)
+- [Generated API reference](docs/API.md)
+
 ## Repository layout
 
 ```

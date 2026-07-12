@@ -2,6 +2,22 @@
 
 All notable changes to the v0.7 reference design.
 
+## [0.8.0] — 2026-07-12 — legible Decisions surface for dev leaders
+
+The `/decisions` page led with an internal lifecycle grid (raw entry GUIDs and
+`proposed·missing / required·missing` phase chips) that non-specialist leaders
+could not read, and it pushed the actually-useful clickable ledger table below
+the fold. Replaced it with a **plain-language "What's been happening" activity
+feed**: one human sentence per entry (who decided what, agent-on-autopilot vs. a
+person, and when), a **learning-event count** that surfaces where humans taught
+the system (feedback / flag / pause) or where autopilot reused a prior human
+decision, and **click-through** on every row — activating a row deep-links to
+`#decision-<id>` and expands + scrolls the full record (rationale, provenance,
+model, cost, PHI, bundle citations, teaching signals) in the table below. The
+feed derives only from ledger entries and never invents actors or outcomes.
+Covered by `decision-activity.test.ts` (classifier + sentence builder) and the
+`redesign-decision-lifecycle-control-plane` spec delta.
+
 ## [0.7.22] — 2026-06-23 — config editing plane + real delivery PRs (no more fakes)
 
 Four threads shipped. (1) The **config editing plane** turned three display-only
