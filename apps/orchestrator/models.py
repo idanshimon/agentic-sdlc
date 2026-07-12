@@ -98,6 +98,8 @@ class AmbiguityCard(BaseModel):
 
 
 class LedgerEntry(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     """Decision Ledger row. See design.md §4 typed schema.
 
     NOTE 2026-06-16: ledger-core's CosmosLedger.write_entry() (in
@@ -232,6 +234,7 @@ class GateDecision(BaseModel):
     # REJECTS bulk decisions on hard-gated classes (PHI/auth) with 409 so a
     # client cannot rubber-stamp a class that must be owned explicitly.
     approval_path: Literal["bulk", "individual"] = "individual"
+    expected_gate_version: Optional[int] = None
 
 
 class RunState(BaseModel):
@@ -277,3 +280,25 @@ class RunState(BaseModel):
     # "architect", "test_plan", "codegen", "codegen-tests"); values
     # are the chain_as_list() output (list[dict] — JSON-safe).
     prompt_chain_by_stage: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    # Execution provenance: demo/test provider fallbacks are explicit and can
+    # never be delivered as production artifacts.
+    contains_synthetic_output: bool = False
+    synthetic_stages: list[str] = Field(default_factory=list)
+    # Content-addressed bytes accepted by Review Scan; Deliver must match.
+    reviewed_artifact_manifest: list[dict[str, str]] = Field(default_factory=list)
+    # Durable execution/checkpoint foundation. These fields round-trip through
+    # Cosmos and are authoritative over process-local queues/events.
+    input_ref: str = ""
+    input_sha256: str = ""
+    run_version: int = 1
+    checkpoint_version: int = 0
+    cursor_stage: Stage = Stage.INGEST
+    cursor_state: Literal["pending", "running", "awaiting_gate", "completed", "failed"] = "pending"
+    pending_gate: Optional[dict[str, Any]] = None
+    lease_owner: Optional[str] = None
+    lease_expires_at: Optional[str] = None
+    # Replay-safe mutation results. Keyed by authenticated subject + route + key.
+    command_records: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Cross-container decision outbox. Run/CAS is authoritative; ledger delivery
+    # is retried until each item reaches delivered status.
+    decision_outbox: list[dict[str, Any]] = Field(default_factory=list)

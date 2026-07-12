@@ -28,8 +28,17 @@ class _FakeLedger:
     def __init__(self):
         self.entries = []
 
+    async def write_decision_strict(self, entry):
+        self.entries.append(entry)
+
     async def write_decision(self, entry):
         self.entries.append(entry)
+
+    async def save_run_cas(self, run):
+        return None
+
+    async def save_run(self, run):
+        return None
 
 
 @pytest.fixture
@@ -88,9 +97,10 @@ def test_swap_entry_is_precedent_shaped(client, seeded_run, fake_ledger):
     # same slot_value_hash as the card → findPrecedent matches the bucket
     assert e.slot_value_hash == "slot-hash-xyz"
     assert e.ambiguity_class == "data-retention"
-    # recorded as a swap, authored by the operator
+    # Recorded as a swap; actor is derived from the authenticated principal,
+    # never the spoofable request-body actor field.
     assert e.decision_kind == "swap"
-    assert e.created_by == "operator@dashboard"
+    assert e.created_by == "development-principal"
     # precedent-eligible: runtime_kind unset OR "stage_decision" (NOT a
     # teaching-signal kind that findPrecedent's candidate filter excludes)
     rk = getattr(e, "runtime_kind", None)

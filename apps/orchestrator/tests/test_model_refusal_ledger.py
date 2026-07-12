@@ -24,6 +24,8 @@ def test_model_refusal_writes_ledger_entry_citing_rule(monkeypatch):
         async def write_decision(self, entry):
             captured.append(entry)
             return entry
+        async def save_run_cas(self, run):
+            return None
         async def save_run(self, run):
             return None
 
@@ -67,6 +69,8 @@ def test_drive_marks_run_failed_on_model_refusal(monkeypatch):
     class FakeLedger:
         async def write_decision(self, entry):
             captured.append(entry)
+        async def save_run_cas(self, run):
+            return None
         async def save_run(self, run):
             return None
 

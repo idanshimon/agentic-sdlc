@@ -52,7 +52,7 @@ def test_design_review_approve_with_synthetic_card_id_passes(monkeypatch):
 
     captured: dict = {}
 
-    async def fake_release(rid: str) -> None:
+    def fake_release(rid: str) -> None:
         captured["released"] = rid
 
     monkeypatch.setattr(om, "_release_gate", fake_release)

@@ -103,7 +103,8 @@ def test_full_heal_loop_stub_path(client, failed_run, monkeypatch):
     r = client.get(f"/api/heal/{heal_id}")
     state = r.json()
     assert state["decision"]["approved"] is True
-    assert state["decision"]["approver_id"] == "idan@microsoft.com"
+    # Client-provided approver_id is untrusted; audit identity comes from auth.
+    assert state["decision"]["approver_id"] == "development-principal"
     assert state["execution"]["success"] is True
 
 

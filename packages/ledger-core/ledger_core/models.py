@@ -97,6 +97,8 @@ class CanaryMetrics(BaseModel):
 
 # --- the entry itself --------------------------------------------------------
 class LedgerEntry(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     """Decision Ledger row — runtime OR meta.
 
     The discriminator is `entry_type`. Validation enforces required fields per type.

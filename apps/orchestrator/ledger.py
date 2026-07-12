@@ -46,6 +46,10 @@ class Ledger(LedgerClient):
             runs_container=runs_container or settings.cosmos_runs_container,
         )
 
+    async def write_decision_strict(self, entry: LedgerEntry) -> LedgerEntry:
+        """Command/outbox path: failures remain visible and retryable."""
+        return await self.write_entry_strict(entry)
+
     async def write_decision(self, entry: LedgerEntry) -> LedgerEntry:
         """v0.6 alias for `write_entry`. May raise `InvariantWriteBlocked`."""
         return await self.write_entry(entry)

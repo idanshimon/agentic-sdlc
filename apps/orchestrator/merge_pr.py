@@ -38,6 +38,7 @@ async def merge_pull_request(
     client: Any = None,
     merge_method: str = "merge",
     commit_title: Optional[str] = None,
+    expected_head_sha: Optional[str] = None,
 ) -> MergeResult:
     """Merge a PR via the REST API. Branch-protection-aware, fail-loud.
 
@@ -61,6 +62,8 @@ async def merge_pull_request(
 
     url = f"{_GH_API}/repos/{repo}/pulls/{pr_number}/merge"
     payload: dict[str, Any] = {"merge_method": merge_method}
+    if expected_head_sha:
+        payload["sha"] = expected_head_sha
     if commit_title:
         payload["commit_title"] = commit_title
     headers = {

@@ -312,13 +312,13 @@ def test_rerun_404_when_source_missing(client):
     assert resp.status_code == 404
 
 
-def test_rerun_409_when_prd_not_cached(client, seeded_run):
-    """If the PRD wasn't cached (e.g. seeded test fixture), rerun returns 409."""
+def test_rerun_409_when_prd_unavailable(client, seeded_run):
+    """If neither cache nor durable input exists, rerun returns 409."""
     from apps.orchestrator.main import _prd_cache
     _prd_cache.pop(seeded_run.run_id, None)  # ensure not cached
     resp = client.post(f"/api/runs/{seeded_run.run_id}/rerun")
     assert resp.status_code == 409
-    assert "cache" in resp.text.lower()
+    assert "unavailable" in resp.text.lower()
 
 
 def test_rerun_inverts_mode_when_not_specified(client, seeded_run):

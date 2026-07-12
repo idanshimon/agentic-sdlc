@@ -45,6 +45,20 @@ class LedgerClient:
         await self._cred.close()
 
     # ---- writes -----------------------------------------------------------
+    async def write_entry_strict(self, entry: LedgerEntry) -> LedgerEntry:
+        """Persist an entry and surface failures for command/outbox workflows."""
+        if entry.entry_type == "runtime" and entry.ambiguity_class in INVARIANT_CLASSES:
+            existing = await self._find_invariant(entry.ambiguity_class, entry.slot_value_hash or "")
+            if existing is not None and entry.decision_kind == "swap":
+                raise InvariantWriteBlocked(
+                    f"invariant precedent exists for {entry.ambiguity_class}/{entry.slot_value_hash}: "
+                    f"{existing.get('resolution_text')!r}"
+                )
+        doc = entry.model_dump(mode="json", exclude_none=False)
+        doc["id"] = entry.id
+        await self._ledger.upsert_item(doc)
+        return entry
+
     async def write_entry(self, entry: LedgerEntry) -> LedgerEntry:
         """Persist a ledger entry. Validates schema per entry_type."""
         if entry.entry_type == "runtime" and entry.ambiguity_class in INVARIANT_CLASSES:
@@ -228,6 +242,20 @@ class LedgerClient:
         return None
 
     # ---- run state --------------------------------------------------------
+    async def save_run_cas(self, run) -> dict:
+        """Refresh the authoritative ETag and conditionally replace the snapshot."""
+        current = await self.get_run(run.run_id)
+        if current is None or not current.get("_etag"):
+            raise RuntimeError("authoritative run version unavailable")
+        authoritative = type(run).model_validate(current)
+        incoming = run.model_dump(mode="json")
+        # Never erase replay/concurrency state committed by another command.
+        incoming["command_records"] = authoritative.command_records | run.command_records
+        incoming["decision_outbox"] = authoritative.decision_outbox or run.decision_outbox
+        incoming["run_version"] = max(authoritative.run_version, run.run_version)
+        incoming["checkpoint_version"] = max(authoritative.checkpoint_version, run.checkpoint_version)
+        return await self.replace_run_strict(incoming, expected_etag=current["_etag"])
+
     async def save_run(self, doc) -> None:
         """Save a serialized run state. Accepts a dict OR a pydantic model.
 
@@ -273,6 +301,93 @@ class LedgerClient:
                 type(exc).__name__,
                 exc,
             )
+
+    async def create_run_strict(self, doc) -> dict:
+        """Create a run and surface persistence/conflict failures to the caller."""
+        if hasattr(doc, "model_dump"):
+            payload = doc.model_dump(mode="json")
+        else:
+            payload = dict(doc)
+        payload["id"] = payload.get("run_id") or payload.get("id")
+        if not payload["id"]:
+            raise ValueError("create_run_strict: doc must have run_id or id")
+        return await self._runs.create_item(payload)
+
+    async def replace_run_strict(self, doc, *, expected_etag: str) -> dict:
+        """Conditionally replace a run; stale ETags remain observable conflicts."""
+        if hasattr(doc, "model_dump"):
+            payload = doc.model_dump(mode="json")
+        else:
+            payload = dict(doc)
+        payload["id"] = payload.get("run_id") or payload.get("id")
+        if not payload["id"]:
+            raise ValueError("replace_run_strict: doc must have run_id or id")
+        try:
+            from azure.core import MatchConditions
+            return await self._runs.replace_item(
+                item=payload["id"], body=payload,
+                etag=expected_etag, match_condition=MatchConditions.IfNotModified,
+            )
+        except ImportError:  # pragma: no cover - azure-core ships with cosmos
+            return await self._runs.replace_item(
+                item=payload["id"], body=payload, etag=expected_etag,
+            )
+
+    async def create_review_loop_strict(self, record: dict) -> dict:
+        payload = dict(record)
+        payload["id"] = payload["loop_id"]
+        payload["run_id"] = payload["loop_id"]
+        payload["document_type"] = "review_loop"
+        return await self._runs.create_item(payload)
+
+    async def save_review_loop_strict(self, record: dict, *, expected_etag: str) -> dict:
+        payload = dict(record)
+        payload["id"] = payload["loop_id"]
+        payload["run_id"] = payload["loop_id"]
+        payload["document_type"] = "review_loop"
+        try:
+            from azure.core import MatchConditions
+            return await self._runs.replace_item(
+                item=payload["id"], body=payload, etag=expected_etag,
+                match_condition=MatchConditions.IfNotModified,
+            )
+        except ImportError:  # pragma: no cover
+            return await self._runs.replace_item(
+                item=payload["id"], body=payload, etag=expected_etag,
+            )
+
+    async def get_review_loop(self, loop_id: str) -> Optional[dict]:
+        try:
+            return await self._runs.read_item(item=loop_id, partition_key=loop_id)
+        except CosmosResourceNotFoundError:
+            return None
+
+    async def list_review_loops(self, limit: int = 100) -> list[dict]:
+        query = (
+            "SELECT TOP @n * FROM c WHERE c.document_type = 'review_loop' "
+            "ORDER BY c.created_at DESC"
+        )
+        out: list[dict] = []
+        async for item in self._runs.query_items(
+            query=query, parameters=[{"name": "@n", "value": limit}],
+        ):
+            out.append(item)
+        return out
+
+    async def query_nonterminal_runs(self, limit: int = 100) -> list[dict]:
+        """Return restart candidates; callers acquire a conditional lease before work."""
+        query = (
+            "SELECT TOP @n * FROM c WHERE "
+            "(NOT IS_DEFINED(c.document_type) OR c.document_type != 'review_loop') "
+            "AND c.status IN ('running','awaiting_gate')"
+        )
+        out: list[dict] = []
+        async for item in self._runs.query_items(
+            query=query,
+            parameters=[{"name": "@n", "value": limit}],
+        ):
+            out.append(item)
+        return out
 
     async def get_run(self, run_id: str) -> Optional[dict]:
         try:

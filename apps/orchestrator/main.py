@@ -21,12 +21,20 @@ import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from .auth import (
+    AuthConfigurationError, Principal, authorize_mutation, principal_from_request,
+    require_team, validate_auth_configuration,
+)
+from .commands import begin_command, cas_command, finish_command
+from .decision_outbox import enqueue_decision, flush_decision_outbox
 from .decisions_md import write_decisions_md
+from .execution_store import ExecutionInputStore
 from .heal import (
     HealDecision, HealProposal, HealTrigger, HealValidationOutcome,
     assert_human_invoked, validate_heal_action,
@@ -46,6 +54,16 @@ from .stages import (
 )
 from ._pipeline_stages import ModelPolicyRefusal
 from .prompt_library import build_catalog_view, get_prompt, UnknownStageError
+from .recovery import PIPELINE_ORDER, checkpoint
+from .recovery_worker import recover_nonterminal_runs
+from .leases import LeaseConflict, maintain_lease, release_lease
+from .review_dispatch import (
+    ReviewLoopDispatch, ReviewLoopRegistry, identity_for,
+)
+from .github_pr_snapshot import SnapshotError, fetch_pr_snapshot
+from .github_outcomes import publish_review_outcome
+from .review_loop import run_review_loop
+from .review_verdict import build_review_verdict
 from .telemetry import init_telemetry, record_gate_wall_clock, span
 from .telemetry_queries import query_classes, query_cost, query_decisions, query_recent_runs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -59,13 +77,68 @@ _gate_events: dict[str, asyncio.Event] = {}
 _gate_started: dict[str, float] = {}
 _prd_cache: dict[str, str] = {}  # raw PRD text per run — enables rerun without re-upload
 _ledger: Ledger | None = None
+_input_store: ExecutionInputStore | None = None
+_review_loop_registry = ReviewLoopRegistry()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _ledger
+    global _ledger, _input_store
+    validate_auth_configuration()
     init_telemetry()
     _ledger = Ledger()
+    _input_store = ExecutionInputStore()
+
+    async def resume_recovered(run: RunState, plan) -> None:
+        _runs[run.run_id] = run
+        _queues.setdefault(run.run_id, asyncio.Queue())
+        if plan.action == "await_gate":
+            # Recreate the local wake-up surface, then continue from the boundary
+            # after the durable gate command resolves it.
+            gate_event = _gate_events.setdefault(run.run_id, asyncio.Event())
+
+            async def continue_after_recovered_gate() -> None:
+                await gate_event.wait()
+                run.pending_gate = None
+                run.status = RunStatus.RUNNING
+                checkpoint(run, plan.stage, "completed")
+                next_stage = {
+                    Stage.RESOLVER: Stage.ARCHITECT,
+                    Stage.DESIGN_REVIEW: Stage.TEST_PLAN,
+                }.get(plan.stage)
+                if next_stage is None:
+                    run.status = RunStatus.FAILED
+                    await _push(run.run_id, StageEvent(
+                        run_id=run.run_id, stage=plan.stage or run.current_stage,
+                        status="failed", message="Recovered gate has no safe continuation boundary",
+                    ))
+                    return
+                if _input_store is None or not run.input_ref or not run.input_sha256:
+                    run.status = RunStatus.FAILED
+                    return
+                raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
+                asyncio.create_task(_drive_from_stage(run.run_id, raw, next_stage))
+
+            asyncio.create_task(continue_after_recovered_gate())
+            return
+        if _input_store is None or not run.input_ref or not run.input_sha256:
+            _logger.error("Cannot resume %s: durable input unavailable", run.run_id)
+            return
+        raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
+        _prd_cache[run.run_id] = raw
+        if plan.stage not in {Stage.ARCHITECT, Stage.TEST_PLAN, Stage.CODEGEN, Stage.REVIEW_SCAN, Stage.DELIVER}:
+            _logger.error("Cannot safely resume %s from unsupported boundary %s", run.run_id, plan.stage)
+            return
+        asyncio.create_task(_drive_from_stage(run.run_id, raw, plan.stage))
+
+    try:
+        summary = await recover_nonterminal_runs(
+            _ledger, owner=os.getenv("HOSTNAME", "orchestrator-local"),
+            resume=resume_recovered,
+        )
+        _logger.info("Startup recovery scan: %s", summary)
+    except Exception as exc:
+        _logger.warning("Startup recovery scan failed safely: %s", exc)
     yield
     if _ledger:
         await _ledger.close()
@@ -147,6 +220,34 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def api_auth_boundary(request: Request, call_next):
+    """Authenticate every non-public API request; mutations also get coarse RBAC."""
+    public = {"/api/health", "/health", "/openapi.json", "/docs", "/redoc"}
+    if request.url.path.startswith("/api/") and request.url.path not in public and request.method not in {"OPTIONS"}:
+        try:
+            principal = principal_from_request(request)
+            if request.method not in {"GET", "HEAD"}:
+                authorize_mutation(principal, request.url.path)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        request.state.principal = principal
+    return await call_next(request)
+
+
+def _principal(request: Request) -> Principal:
+    principal = getattr(request.state, "principal", None)
+    if principal is None:
+        principal = principal_from_request(request)
+    return principal
+
+
+def _authorize_run(request: Request, run: RunState) -> Principal:
+    principal = _principal(request)
+    require_team(principal, run.team_id)
+    return principal
+
+
 # ---------- helpers -----------------------------------------------------------
 async def _push(run_id: str, ev: StageEvent | None) -> None:
     """Push an event to any open SSE subscriber AND durably persist the
@@ -181,7 +282,7 @@ async def _push(run_id: str, ev: StageEvent | None) -> None:
         run = _runs.get(run_id)
         if run is not None:
             try:
-                await _ledger.save_run(run)
+                await _ledger.save_run_cas(run)
             except Exception as exc:
                 _logger.warning(
                     "Per-event Cosmos save_run failed for %s on event "
@@ -318,6 +419,71 @@ async def _run_autopilot(run: RunState) -> None:
                 run.autopilot_overrides.append(card.card_id)
 
 
+def _generators_from_stage(run: RunState, prd_text: str, start: Stage):
+    """Build downstream generators without replaying completed boundaries."""
+    ordered = [
+        (Stage.ARCHITECT, lambda: stage_architect(run)),
+        (Stage.TEST_PLAN, lambda: stage_test_plan(run, prd_text=prd_text)),
+        (Stage.CODEGEN, lambda: stage_codegen(run)),
+        (Stage.REVIEW_SCAN, lambda: stage_review_scan(run)),
+        (Stage.DELIVER, lambda: stage_deliver(run)),
+    ]
+    start_index = next((i for i, (stage, _) in enumerate(ordered) if stage == start), None)
+    if start_index is None:
+        raise ValueError(f"stage-specific continuation unsupported for {start.value}")
+    return [(stage, factory()) for stage, factory in ordered[start_index:]]
+
+
+async def _drive_from_stage(run_id: str, prd_text: str, start: Stage) -> None:
+    """Continue only stage boundaries safe to replay from durable artifacts."""
+    run = _runs[run_id]
+    owner = os.getenv("HOSTNAME", "orchestrator-local")
+    lease_stop = asyncio.Event()
+    lease_lost = asyncio.Event()
+    lease_task = (
+        asyncio.create_task(maintain_lease(
+            _ledger, run_id=run_id, owner=owner, stop=lease_stop, lost=lease_lost,
+        )) if _ledger and run.lease_owner == owner else None
+    )
+    try:
+        for _, generator in _generators_from_stage(run, prd_text, start):
+            if lease_lost.is_set():
+                raise LeaseConflict("recovery lease lost; stopping stage execution")
+            async for ev in generator:
+                if lease_lost.is_set():
+                    raise LeaseConflict("recovery lease lost; stopping stage execution")
+                await _push(run_id, ev)
+                if ev.status == "completed":
+                    checkpoint(run, ev.stage, "completed")
+                if ev.status == "failed":
+                    run.status = RunStatus.FAILED
+                    return
+        run.status = RunStatus.COMPLETED
+        url = await write_decisions_md(run)
+        await _push(run_id, StageEvent(
+            run_id=run_id, stage=Stage.DELIVER, status="completed",
+            message=f"decisions.md written: {url}", payload={"decisions_md_url": url},
+        ))
+    except Exception as exc:
+        _logger.exception("Recovered pipeline crashed: %s", exc)
+        run.status = RunStatus.FAILED
+        await _push(run_id, StageEvent(
+            run_id=run_id, stage=run.current_stage, status="failed", message=str(exc),
+        ))
+    finally:
+        lease_stop.set()
+        if lease_task:
+            await lease_task
+        try:
+            if run.lease_owner == owner:
+                release_lease(run, owner)
+        except Exception as exc:
+            _logger.warning("Recovery lease release failed for %s: %s", run_id, exc)
+        if _ledger:
+            await _ledger.save_run_cas(run)
+        await _push(run_id, None)
+
+
 async def _drive(run_id: str, prd_text: str) -> None:
     """Background task: walks the pipeline graph, pausing at gates."""
     run = _runs[run_id]
@@ -363,6 +529,8 @@ async def _drive(run_id: str, prd_text: str) -> None:
         ):
             async for ev in gen:
                 await _push(run_id, ev)
+                if ev.status == "completed":
+                    checkpoint(run, ev.stage, "completed")
                 if ev.status == "failed":
                     run.status = RunStatus.FAILED
                     return
@@ -395,7 +563,7 @@ async def _drive(run_id: str, prd_text: str) -> None:
         ))
     finally:
         if _ledger:
-            await _ledger.save_run(run)
+            await _ledger.save_run_cas(run)
         await _push(run_id, None)  # sentinel: stream complete
 
 
@@ -427,18 +595,37 @@ async def _write_model_refusal_entry(run: RunState, refusal: ModelPolicyRefusal)
 async def _open_gate(run: RunState, stage: Stage) -> None:
     """Block until a gate decision arrives, recording human-attention wall-clock."""
     run.status = RunStatus.AWAITING_GATE
+    checkpoint(run, stage, "awaiting_gate")
+    run.pending_gate = {
+        "gate_id": f"{run.run_id}:{stage.value}:{run.checkpoint_version}",
+        "stage": stage.value,
+        "version": run.checkpoint_version,
+        "status": "open",
+    }
+    # Persist the durable gate before registering/waiting on the local wake-up.
+    if _ledger:
+        await _ledger.save_run_cas(run)
     ev = asyncio.Event()
     _gate_events[run.run_id] = ev
+    # An approval may have committed between persistence and local registration.
+    if run.pending_gate and run.pending_gate.get("status") == "resolved":
+        ev.set()
     _gate_started[run.run_id] = time.monotonic()
     with span(f"gate.{stage}"):
         await ev.wait()
     elapsed = time.monotonic() - _gate_started.pop(run.run_id, time.monotonic())
     run.gate_wall_clock_seconds += elapsed
     record_gate_wall_clock(stage.value, elapsed)
+    run.pending_gate = None
     run.status = RunStatus.RUNNING
+    checkpoint(run, stage, "completed")
 
 
 def _release_gate(run_id: str) -> None:
+    run = _runs.get(run_id)
+    if run is not None and run.pending_gate:
+        run.pending_gate["status"] = "resolved"
+        run.run_version += 1
     ev = _gate_events.pop(run_id, None)
     if ev:
         ev.set()
@@ -487,9 +674,146 @@ async def get_repo_autonomy() -> dict:
 
 
 class ReviewLoopMergeBody(BaseModel):
-    repo: str
-    pr_number: int
+    loop_id: str
+    expected_head_sha: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
     merge_method: str = "merge"
+
+
+@app.get("/api/review-loops", tags=["Review Loop"])
+async def list_review_loops(request: Request, limit: int = 100) -> dict:
+    principal = _principal(request)
+    if not principal.has_any_role("operator", "release_manager", "standards_reviewer"):
+        raise HTTPException(403, "principal is not authorized to read review loops")
+    if _ledger:
+        records = await _ledger.list_review_loops(min(max(limit, 1), 200))
+    else:
+        records = list(_review_loop_registry._items.values())[-limit:]
+    clean = [{k: v for k, v in record.items() if not k.startswith("_")} for record in records]
+    return {"items": clean, "count": len(clean)}
+
+
+@app.post("/api/review-loops", tags=["Review Loop"], status_code=202)
+async def dispatch_review_loop(body: ReviewLoopDispatch, request: Request) -> dict:
+    """Accept an authenticated GitHub workload dispatch for an exact PR head.
+
+    The deterministic loop identity makes workflow retries safe. Snapshot fetch,
+    review execution, and GitHub outcome publishing are subsequent workers.
+    """
+    principal = _principal(request)
+    identity = identity_for(body)
+    supplied_key = request.headers.get("idempotency-key", "")
+    expected_key = f"{body.repo}:{body.pr_number}:{body.head_sha}"
+    if supplied_key != expected_key:
+        raise HTTPException(409, "review-loop idempotency key must bind repo, PR, and head SHA")
+    record, created = _review_loop_registry.get_or_create(identity, principal.subject)
+    if _ledger:
+        durable = await _ledger.get_review_loop(identity.loop_id)
+        if durable:
+            record.clear()
+            record.update({k: v for k, v in durable.items() if not k.startswith("_")})
+            created = False
+        elif created:
+            persisted = await _ledger.create_review_loop_strict(record)
+            record["_etag"] = persisted.get("_etag")
+    if created:
+        token = os.getenv("DELIVER_GH_TOKEN") or os.getenv("GH_TOKEN") or ""
+        if not token:
+            record["disposition"] = "FAILED"
+            record["reason"] = "GitHub token is not configured"
+            raise HTTPException(503, record["reason"])
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                snapshot = await fetch_pr_snapshot(
+                    repo=body.repo, pr_number=body.pr_number,
+                    expected_head_sha=body.head_sha, token=token, client=client,
+                )
+            record["snapshot_files"] = sorted(snapshot.files)
+            record["snapshot_file_count"] = len(snapshot.files)
+            record["disposition"] = "SNAPSHOT_READY"
+
+            from . import repo_autonomy as _ra
+            tier = _ra.REPO_AUTONOMY.tier_for(body.repo)
+
+            async def review(files: dict):
+                return build_review_verdict(files, team="defaults")
+
+            async def remediate(verdict, files: dict):
+                # Fail-safe bounded behavior: no model remediator is wired for
+                # external PRs yet, so preserve bytes and let the attempt bound
+                # escalate rather than inventing a fix.
+                return dict(files)
+
+            async def merge(repo: str):
+                result = await merge_pull_request(
+                    repo=repo, pr_number=body.pr_number, token=token,
+                    expected_head_sha=body.head_sha,
+                )
+                if not result.merged:
+                    raise RuntimeError(result.reason)
+                return f"https://github.com/{repo}/pull/{body.pr_number}"
+
+            loop_result = await run_review_loop(
+                repo=body.repo, tier=tier, code_files=snapshot.files,
+                review=review, remediate=remediate, do_merge=merge,
+            )
+            disposition = {
+                "converged": "MERGED",
+                "awaiting_human_merge": "PASSED_AWAITING_MERGE",
+                "escalated": "ESCALATED",
+                "advisory": "ADVISORY",
+            }[loop_result.outcome]
+            assurance = {
+                "deterministic_policy": "pass" if disposition in {"MERGED", "PASSED_AWAITING_MERGE", "ADVISORY"} else "fail",
+                "build_tests": "not_run",
+                "dependency_security": "not_run",
+                "semantic_review": "pass" if disposition in {"MERGED", "PASSED_AWAITING_MERGE"} else "unknown",
+                "mandatory_human": "not_run" if tier in {"A", "B"} else "unknown",
+            }
+            record.update({
+                "tier": tier,
+                "attempt": max(1, loop_result.attempts + 1),
+                "disposition": disposition,
+                "merged": loop_result.merged,
+                "assurance": assurance,
+                "ledger_hops": [
+                    {
+                        **hop,
+                        "loop_id": identity.loop_id,
+                        "repo": identity.repo,
+                        "pr_number": identity.pr_number,
+                        "head_sha": identity.head_sha,
+                        "tier": tier,
+                        "disposition": disposition,
+                        **assurance,
+                    }
+                    for hop in loop_result.ledger_hops
+                ],
+            })
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                published = await publish_review_outcome(
+                    client=client, repo=body.repo, pr_number=body.pr_number,
+                    head_sha=body.head_sha, token=token, disposition=disposition,
+                    summary=f"{disposition}; attempts={loop_result.attempts}",
+                )
+            record.update({
+                "check_id": published.check_id, "check_url": published.check_url,
+                "comment_id": published.comment_id, "comment_url": published.comment_url,
+            })
+            if _ledger:
+                etag = record.pop("_etag", None)
+                if not etag:
+                    durable = await _ledger.get_review_loop(identity.loop_id)
+                    etag = (durable or {}).get("_etag")
+                if not etag:
+                    raise HTTPException(503, "review-loop durable version unavailable")
+                persisted = await _ledger.save_review_loop_strict(record, expected_etag=etag)
+                record["_etag"] = persisted.get("_etag")
+        except SnapshotError as exc:
+            record["disposition"] = "FAILED"
+            record["reason"] = str(exc)
+            raise HTTPException(409, str(exc)) from exc
+    return {**record, "created": created}
 
 
 # Imported at module level so tests can monkeypatch main.merge_pull_request.
@@ -497,7 +821,7 @@ from .merge_pr import merge_pull_request  # noqa: E402
 
 
 @app.post("/api/review-loops/merge", tags=["Review Loop"])
-async def review_loop_merge(body: ReviewLoopMergeBody) -> dict:
+async def review_loop_merge(body: ReviewLoopMergeBody, request: Request) -> dict:
     """The Tier-B human merge touch-point.
 
     Tier B = the loop reviews to PASS autonomously, but a human clicks merge —
@@ -507,24 +831,54 @@ async def review_loop_merge(body: ReviewLoopMergeBody) -> dict:
     A blocked merge returns merged=false + escalate (honest), never a fake success.
     """
     from . import repo_autonomy as _ra
-    tier = _ra.REPO_AUTONOMY.tier_for(body.repo)
-    if tier == "C":
-        raise HTTPException(
-            status_code=409,
-            detail=f"repo '{body.repo}' is Tier C (advisory) or unlisted — the "
-                   f"review loop does not merge here; graduate it to Tier B/A first.",
-        )
+    record = _review_loop_registry._items.get(body.loop_id)
+    if _ledger:
+        durable = await _ledger.get_review_loop(body.loop_id)
+        if durable:
+            record = {k: v for k, v in durable.items() if not k.startswith("_")}
+            record["_etag"] = durable.get("_etag")
+            _review_loop_registry._items[body.loop_id] = record
+    if not record:
+        raise HTTPException(404, "review loop not found")
+    if record.get("disposition") != "PASSED_AWAITING_MERGE":
+        raise HTTPException(409, "loop is not in PASSED_AWAITING_MERGE state")
+    if record.get("head_sha") != body.expected_head_sha.lower():
+        raise HTTPException(409, "stale_head_sha")
+    tier = _ra.REPO_AUTONOMY.tier_for(record["repo"])
+    if tier != "B":
+        raise HTTPException(409, "human merge endpoint is restricted to Tier B")
     token = os.getenv("DELIVER_GH_TOKEN") or os.getenv("GH_TOKEN") or ""
+    # Re-read exact head before irreversible merge.
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            await fetch_pr_snapshot(
+                repo=record["repo"], pr_number=record["pr_number"],
+                expected_head_sha=body.expected_head_sha, token=token, client=client,
+            )
+    except SnapshotError as exc:
+        raise HTTPException(409, str(exc)) from exc
     result = await merge_pull_request(
-        repo=body.repo, pr_number=body.pr_number, token=token,
-        merge_method=body.merge_method,
+        repo=record["repo"], pr_number=record["pr_number"], token=token,
+        merge_method=body.merge_method, expected_head_sha=body.expected_head_sha,
     )
+    if result.merged:
+        record["disposition"] = "MERGED"
+        record["merge_sha"] = result.sha
+        if _ledger:
+            etag = record.pop("_etag", None)
+            if not etag:
+                raise HTTPException(503, "review-loop durable version unavailable")
+            persisted = await _ledger.save_review_loop_strict(record, expected_etag=etag)
+            record["_etag"] = persisted.get("_etag")
     return {
+        "loop_id": body.loop_id,
         "merged": result.merged,
         "sha": result.sha,
         "escalate": result.escalate,
         "reason": result.reason,
         "tier": tier,
+        "disposition": record["disposition"],
     }
 
 
@@ -713,6 +1067,7 @@ async def reload_config() -> dict:
 
 @app.post("/api/run", tags=["Runs"])
 async def create_run(
+    request: Request,
     prd: UploadFile = File(...),
     team_id: str = Form(default_factory=lambda: os.environ.get("LEDGER_TEAM_ID", "team-demo")),
     mode: str = Form("manual"),
@@ -755,6 +1110,9 @@ async def create_run(
                 raise HTTPException(400, f"stage_providers[{stage_key!r}] must be an object")
             overrides[stage_key] = {k: v for k, v in val.items() if k in ("provider", "model", "via_apim")}
 
+    principal = _principal(request)
+    require_team(principal, team_id)
+
     # Configuration plane (Phase 1): resolve team_id against the org model. Once a
     # customer has authored org.yaml, an unknown team is refused rather than
     # written as an anonymous ledger entry (openspec: add-configuration-plane).
@@ -769,17 +1127,28 @@ async def create_run(
         team_id=team_id, prd_blob_url=f"inline://{prd.filename}", mode=run_mode,
         stage_provider_overrides=overrides,
     )
+    # Production acknowledges only after input + initial run are durable. Tests
+    # that intentionally omit infrastructure retain the explicit local path.
+    if _input_store is not None:
+        try:
+            run.input_ref, run.input_sha256 = await _input_store.put(run.run_id, raw.encode("utf-8"))
+            run.prd_blob_url = run.input_ref
+        except Exception as exc:
+            raise HTTPException(503, f"failed to persist run input: {exc}") from exc
+    if _ledger:
+        try:
+            await _ledger.create_run_strict(run)
+        except Exception as exc:
+            raise HTTPException(503, f"failed to persist initial run: {exc}") from exc
     _runs[run.run_id] = run
     _queues[run.run_id] = asyncio.Queue()
-    _prd_cache[run.run_id] = raw  # cache so /rerun can reuse without re-upload
-    if _ledger:
-        await _ledger.save_run(run)
+    _prd_cache[run.run_id] = raw  # local optimization; durable ref is authoritative
     asyncio.create_task(_drive(run.run_id, raw))
     return {"run_id": run.run_id, "stream_url": f"/api/runs/{run.run_id}/stream"}
 
 
 @app.post("/api/runs/{run_id}/rerun", tags=["Runs"])
-async def rerun(run_id: str, body: dict | None = None) -> dict:
+async def rerun(run_id: str, request: Request, body: dict | None = None) -> dict:
     """Start a fresh run with the same PRD + team_id as `run_id`, optionally
     in a different mode. The original run is left untouched for A/B comparison.
 
@@ -791,9 +1160,15 @@ async def rerun(run_id: str, body: dict | None = None) -> dict:
     src = _runs.get(run_id)
     if src is None:
         raise HTTPException(404, "source run not found")
+    _authorize_run(request, src)
     raw = _prd_cache.get(run_id)
+    if raw is None and _input_store is not None and src.input_ref and src.input_sha256:
+        try:
+            raw = (await _input_store.get(src.input_ref, src.input_sha256)).decode("utf-8")
+        except Exception as exc:
+            raise HTTPException(409, f"source PRD could not be restored: {exc}") from exc
     if raw is None:
-        raise HTTPException(409, "source PRD not in cache (server restarted); please resubmit")
+        raise HTTPException(409, "source PRD is unavailable; please resubmit")
 
     # Determine target mode
     requested = (body or {}).get("mode")
@@ -810,12 +1185,17 @@ async def rerun(run_id: str, body: dict | None = None) -> dict:
         team_id=src.team_id,
         prd_blob_url=src.prd_blob_url,
         mode=target_mode,
+        input_ref=src.input_ref,
+        input_sha256=src.input_sha256,
     )
+    if _ledger:
+        try:
+            await _ledger.create_run_strict(new_run)
+        except Exception as exc:
+            raise HTTPException(503, f"failed to persist rerun: {exc}") from exc
     _runs[new_run.run_id] = new_run
     _queues[new_run.run_id] = asyncio.Queue()
     _prd_cache[new_run.run_id] = raw
-    if _ledger:
-        await _ledger.save_run(new_run)
     asyncio.create_task(_drive(new_run.run_id, raw))
     return {
         "run_id": new_run.run_id,
@@ -827,7 +1207,7 @@ async def rerun(run_id: str, body: dict | None = None) -> dict:
 
 
 @app.get("/api/runs/{run_id}", tags=["Runs"])
-async def get_run(run_id: str) -> RunState:
+async def get_run(run_id: str, request: Request) -> RunState:
     """Return the run state. See design.md §2.
 
     Resolves in this order:
@@ -840,6 +1220,7 @@ async def get_run(run_id: str) -> RunState:
     """
     run = _runs.get(run_id)
     if run is not None:
+        _authorize_run(request, run)
         return run
     # Cosmos fallback. Ledger client may be None in stub-only test runs.
     if _ledger is not None:
@@ -850,19 +1231,17 @@ async def get_run(run_id: str) -> RunState:
             doc = None
         if doc is not None:
             try:
-                # The persisted doc is a RunState.model_dump() shape — re-hydrate.
-                return RunState.model_validate(doc)
+                hydrated = RunState.model_validate(doc)
             except Exception as exc:
                 _logger.warning("Failed to re-hydrate Cosmos run doc %s: %s", run_id, exc)
-                # Last-resort: return the raw dict so the UI doesn't crash with 500.
-                # FastAPI will serialize this; consumers using RunState fields will
-                # still see the right keys because Cosmos stores model_dump output.
-                return doc  # type: ignore[return-value]
+                raise HTTPException(500, "persisted run state is invalid") from exc
+            _authorize_run(request, hydrated)
+            return hydrated
     raise HTTPException(404, "run not found")
 
 
 @app.get("/api/runs/{run_id}/ledger", tags=["Decision Ledger"])
-async def get_run_ledger(run_id: str) -> dict:
+async def get_run_ledger(run_id: str, request: Request) -> dict:
     """Return ledger entries written for this run.
 
     Cross-partition Cosmos query so the caller doesn't have to know which
@@ -893,6 +1272,7 @@ async def get_run_ledger(run_id: str) -> dict:
 
     if not team_id:
         raise HTTPException(404, "run not found and could not infer team_id")
+    require_team(_principal(request), team_id)
 
     # Query the decision-ledger container for this team partition; filter to
     # entries for this run. Re-use the orchestrator's already-authenticated
@@ -1067,7 +1447,7 @@ async def get_prompt_detail(prompt_id: str, version: str | None = None) -> dict:
 
 
 @app.post("/api/runs/{run_id}/pause", tags=["Runs"])
-async def pause_run(run_id: str) -> dict:
+async def pause_run(run_id: str, request: Request) -> dict:
     """Flip run to MANUAL mode mid-flight. Pipeline does not interrupt the
     currently-executing stage, but the NEXT gate boundary respects the new
     mode (i.e. opens a human gate instead of auto-advancing).
@@ -1077,14 +1457,34 @@ async def pause_run(run_id: str) -> dict:
     run = _runs.get(run_id)
     if run is None:
         raise HTTPException(404, "run not found")
-    previous_mode = run.mode
-    run.previous_mode = previous_mode  # remember for /resume
-    run.mode = RunMode.MANUAL
-    return {"ok": True, "previous_mode": previous_mode.value, "current_mode": "manual"}
+    principal = _authorize_run(request, run)
+    payload = {"action": "pause"}
+    record_key, replay = begin_command(
+        run, request, principal, payload, expected_gate_version=None,
+    )
+    if replay is not None:
+        return replay
+
+    def mutate(authoritative: RunState) -> dict:
+        previous = authoritative.mode
+        authoritative.previous_mode = previous
+        authoritative.mode = RunMode.MANUAL
+        return {"ok": True, "previous_mode": previous.value, "current_mode": "manual"}
+
+    if _ledger:
+        result = await cas_command(
+            _ledger, run_id, record_key=record_key, payload=payload, mutate=mutate,
+        )
+        run.previous_mode = run.mode
+        run.mode = RunMode.MANUAL
+        return result
+    result = mutate(run)
+    finish_command(run, record_key, payload, result)
+    return result
 
 
 @app.post("/api/runs/{run_id}/resume", tags=["Runs"])
-async def resume_run(run_id: str, body: dict | None = None) -> dict:
+async def resume_run(run_id: str, request: Request, body: dict | None = None) -> dict:
     """Flip a paused run back to its pre-pause mode (autopilot/hybrid).
 
     Body (optional): {"mode": "autopilot" | "hybrid" | "manual"} — explicit override.
@@ -1093,6 +1493,7 @@ async def resume_run(run_id: str, body: dict | None = None) -> dict:
     run = _runs.get(run_id)
     if run is None:
         raise HTTPException(404, "run not found")
+    principal = _authorize_run(request, run)
 
     requested = (body or {}).get("mode")
     if requested:
@@ -1103,15 +1504,38 @@ async def resume_run(run_id: str, body: dict | None = None) -> dict:
     else:
         target_mode = run.previous_mode or RunMode.AUTOPILOT
 
-    previous_mode = run.mode
-    run.mode = target_mode
-    run.previous_mode = None  # consumed
-    return {"ok": True, "previous_mode": previous_mode.value, "current_mode": target_mode.value}
+    payload = {"action": "resume", "mode": target_mode.value}
+    record_key, replay = begin_command(
+        run, request, principal, payload, expected_gate_version=None,
+    )
+    if replay is not None:
+        return replay
+
+    def mutate(authoritative: RunState) -> dict:
+        previous = authoritative.mode
+        authoritative.mode = target_mode
+        authoritative.previous_mode = None
+        return {"ok": True, "previous_mode": previous.value, "current_mode": target_mode.value}
+
+    if _ledger:
+        result = await cas_command(
+            _ledger, run_id, record_key=record_key, payload=payload, mutate=mutate,
+        )
+        run.mode = target_mode
+        run.previous_mode = None
+        return result
+    result = mutate(run)
+    finish_command(run, record_key, payload, result)
+    return result
 
 
 @app.get("/api/runs/{run_id}/stream", tags=["Runs"])
-async def stream_run(run_id: str) -> EventSourceResponse:
+async def stream_run(run_id: str, request: Request) -> EventSourceResponse:
     """SSE stream of StageEvents — UI listens here for live pipeline progress."""
+    run = _runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
+    _authorize_run(request, run)
     if run_id not in _queues:
         raise HTTPException(404, "run not found")
 
@@ -1128,7 +1552,7 @@ async def stream_run(run_id: str) -> EventSourceResponse:
 
 
 @app.post("/api/runs/{run_id}/approve", tags=["Gates & Decisions"])
-async def approve(run_id: str, decision: GateDecision) -> dict:
+async def approve(run_id: str, decision: GateDecision, request: Request) -> dict:
     """Record an Accept/Swap decision on the open gate (design.md §3).
 
     Resolution-text resolution rules:
@@ -1140,6 +1564,15 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
     run = _runs.get(run_id)
     if run is None:
         raise HTTPException(404, "run not found")
+    principal = _authorize_run(request, run)
+    decision.actor = principal.subject
+    command_payload = decision.model_dump(mode="json")
+    record_key, replay = begin_command(
+        run, request, principal, command_payload,
+        expected_gate_version=decision.expected_gate_version,
+    )
+    if replay is not None:
+        return replay
 
     # Guard: reject per-card decisions after the resolver gate has closed.
     # Without this, a card accepted seconds after /finalize lands in
@@ -1237,21 +1670,34 @@ async def approve(run_id: str, decision: GateDecision) -> dict:
                 # produced the ambiguity card the operator just decided on.
                 prompt_resolution_path=run.prompt_chain_by_stage.get("assessor"),
             )
+            enqueue_decision(run, entry)
             try:
-                await _ledger.write_decision(entry)
+                await flush_decision_outbox(run, _ledger)
             except InvariantWriteBlocked as exc:
                 raise HTTPException(409, f"invariant write-block: {exc}")
+            except Exception as exc:
+                _logger.warning("Decision outbox remains pending for retry: %s", exc)
     # one approval call closes the gate for the demo (UIs can batch cards client-side)
     # NOTE: For Resolver (Gate 1), the UI MUST call /finalize after the last card
     # to release the gate. Non-Resolver gates (e.g. design_review) still auto-release
     # because they are whole-stage approvals with no per-card cycle.
-    if decision.gate and decision.gate != "resolver":
+    if decision.gate and decision.gate != "resolver" and decision.decision_kind != "reject":
         _release_gate(run_id)
-    return {"ok": True, "decisions_count": len(run.decisions), "resolution_text": final_text}
+    result = {
+        "ok": True,
+        "decisions_count": len(run.decisions),
+        "resolution_text": final_text,
+        "run_version": run.run_version + 1,
+        "gate_version": int((run.pending_gate or {}).get("version", run.checkpoint_version)),
+    }
+    finish_command(run, record_key, command_payload, result)
+    if _ledger:
+        await _ledger.save_run_cas(run)
+    return result
 
 
 @app.post("/api/admin/runs/{run_id}/mark_failed", tags=["System"])
-async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
+async def admin_mark_failed(run_id: str, request: Request, body: dict | None = None) -> dict:
     """Admin: force a run to status=failed durably in Cosmos.
 
     Phase 6.2 (2026-06-16): one-off cleanup for runs zombified by
@@ -1289,12 +1735,12 @@ async def admin_mark_failed(run_id: str, body: dict | None = None) -> dict:
         status="failed",
         message=f"Admin cleanup: {reason}",
     ))
-    await _ledger.save_run(run)
+    await _ledger.save_run_cas(run)
     return {"ok": True, "run_id": run_id, "status": "failed", "reason": reason}
 
 
 @app.post("/api/runs/{run_id}/finalize", tags=["Gates & Decisions"])
-async def finalize_gate(run_id: str, body: dict | None = None) -> dict:
+async def finalize_gate(run_id: str, request: Request, body: dict | None = None) -> dict:
     """Close the open Resolver gate explicitly after the human reviews all decisions.
 
     Validates that every gating card has a recorded decision before releasing.
@@ -1304,23 +1750,49 @@ async def finalize_gate(run_id: str, body: dict | None = None) -> dict:
     run = _runs.get(run_id)
     if run is None:
         raise HTTPException(404, "run not found")
+    _authorize_run(request, run)
+    principal = _principal(request)
+    body = body or {}
+    expected_gate_version = body.get("expected_gate_version")
+    command_payload = {"expected_gate_version": expected_gate_version}
+    record_key, replay = begin_command(
+        run, request, principal, command_payload,
+        expected_gate_version=expected_gate_version,
+    )
+    if replay is not None:
+        return replay
 
-    gating_card_ids = {c.card_id for c in run.cards if c.is_gating}
-    resolved_card_ids = {d.card_id for d in run.decisions if d.card_id}
-    unresolved = gating_card_ids - resolved_card_ids
-    if unresolved:
-        raise HTTPException(
-            400,
-            f"{len(unresolved)} gating card(s) still unresolved; "
-            f"resolve all before finalize",
+    def mutate(authoritative: RunState) -> dict:
+        gating = {c.card_id for c in authoritative.cards if c.is_gating}
+        resolved = {d.card_id for d in authoritative.decisions if d.card_id}
+        remaining = gating - resolved
+        if remaining:
+            raise HTTPException(400, f"{len(remaining)} gating card(s) still unresolved; resolve all before finalize")
+        if authoritative.pending_gate:
+            authoritative.pending_gate["status"] = "resolved"
+        return {
+            "ok": True,
+            "gate_closed": True,
+            "decisions_count": len(authoritative.decisions),
+            "next_stage": "architect",
+            "run_version": authoritative.run_version + 1,
+            "gate_version": int((authoritative.pending_gate or {}).get("version", authoritative.checkpoint_version)),
+        }
+
+    if _ledger:
+        result = await cas_command(
+            _ledger, run_id, record_key=record_key,
+            payload=command_payload, mutate=mutate,
         )
+        if run.pending_gate:
+            run.pending_gate["status"] = "resolved"
+        _release_gate(run_id)
+        return result
+
+    result = mutate(run)
     _release_gate(run_id)
-    return {
-        "ok": True,
-        "gate_closed": True,
-        "decisions_count": len(run.decisions),
-        "next_stage": "architect",
-    }
+    finish_command(run, record_key, command_payload, result)
+    return result
 
 
 # ========================================================================
@@ -1365,7 +1837,7 @@ async def _write_heal_ledger(
 
 
 @app.post("/api/runs/{run_id}/heal", tags=["Self-Heal"])
-async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
+async def open_heal_session(run_id: str, request: Request, body: dict | None = None) -> dict:
     """Open a heal session for a run. HUMAN-INVOKED ONLY — at a gate
     (awaiting_gate) or at run end (completed/failed). Never a daemon.
 
@@ -1375,6 +1847,7 @@ async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
     if not _heal_rt.heal_settings.actions_enabled:
         raise HTTPException(403, "heal actions are disabled (HEAL_ACTIONS_ENABLED=false)")
     body = body or {}
+    principal = _principal(request)
     run = _runs.get(run_id)
     # Allow healing Cosmos-resident terminal runs too (not just in-memory).
     run_summary: dict
@@ -1383,6 +1856,7 @@ async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
                        "current_stage": getattr(run.current_stage, "value", run.current_stage),
                        "team_id": run.team_id}
         team_id = run.team_id
+        require_team(principal, team_id)
     elif _ledger:
         doc = await _ledger.get_run(run_id)
         if not doc:
@@ -1391,6 +1865,7 @@ async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
                        "current_stage": doc.get("current_stage"),
                        "team_id": doc.get("team_id")}
         team_id = doc.get("team_id", "unknown")
+        require_team(principal, team_id)
     else:
         raise HTTPException(404, "run not found")
 
@@ -1441,12 +1916,13 @@ async def open_heal_session(run_id: str, body: dict | None = None) -> dict:
 
 
 @app.get("/api/heal/{heal_id}", tags=["Self-Heal"])
-async def get_heal_session(heal_id: str) -> dict:
+async def get_heal_session(heal_id: str, request: Request) -> dict:
     """Fetch the current state of a heal session."""
     sess = _heal_sessions.get(heal_id)
     if not sess:
         raise HTTPException(404, "heal session not found")
     proposal: HealProposal = sess["proposal"]
+    require_team(_principal(request), proposal.team_id)
     return {
         "heal_id": heal_id,
         "brain": sess.get("brain"),
@@ -1459,7 +1935,7 @@ async def get_heal_session(heal_id: str) -> dict:
 
 
 @app.post("/api/heal/{heal_id}/approve", tags=["Self-Heal"])
-async def approve_heal(heal_id: str, body: dict | None = None) -> dict:
+async def approve_heal(heal_id: str, request: Request, body: dict | None = None) -> dict:
     """Human approves (or declines) the proposed heal. On approval, the
     config-selected executor lands the heal and the chain is pinned.
 
@@ -1469,11 +1945,13 @@ async def approve_heal(heal_id: str, body: dict | None = None) -> dict:
     if not sess:
         raise HTTPException(404, "heal session not found")
     body = body or {}
-    approver_id = body.get("approver_id", "unknown@local")
+    principal = _principal(request)
+    approver_id = principal.subject
     approved = bool(body.get("approved", True))
     note = body.get("note", "")
 
     proposal: HealProposal = sess["proposal"]
+    require_team(principal, proposal.team_id)
     validation = sess["validation"]
 
     # Hard safety: a BLOCK/ESCALATE outcome can never be executed, even if the
@@ -1528,7 +2006,7 @@ async def approve_heal(heal_id: str, body: dict | None = None) -> dict:
 
 
 @app.post("/api/runs/{run_id}/undo", tags=["Runs"])
-async def undo_decision(run_id: str, body: dict) -> dict:
+async def undo_decision(run_id: str, body: dict, request: Request) -> dict:
     """Undo a resolved decision on a Resolver card, re-opening it for re-decision.
 
     Only allowed while the run is paused on the Resolver gate — undoing after
@@ -1549,6 +2027,7 @@ async def undo_decision(run_id: str, body: dict) -> dict:
     run = _runs.get(run_id)
     if run is None:
         raise HTTPException(404, "run not found")
+    _authorize_run(request, run)
 
     card_id = (body or {}).get("card_id")
     if not card_id:
@@ -1592,11 +2071,13 @@ async def undo_decision(run_id: str, body: dict) -> dict:
 
 
 @app.post("/api/runs/{run_id}/reject", tags=["Gates & Decisions"])
-async def reject(run_id: str, decision: GateDecision) -> dict:
+async def reject(run_id: str, decision: GateDecision, request: Request) -> dict:
     """Reject-with-note — one-keystroke default per design.md §3."""
     run = _runs.get(run_id)
     if run is None:
         raise HTTPException(404, "run not found")
+    principal = _authorize_run(request, run)
+    decision.actor = principal.subject
     decision.decision_kind = "reject"
     run.decisions.append(decision)
     if decision.card_id and _ledger:
@@ -1619,7 +2100,7 @@ async def reject(run_id: str, decision: GateDecision) -> dict:
 
 
 @app.post("/api/runs/{run_id}/demote", tags=["Gates & Decisions"])
-async def demote(run_id: str, precedent_id: str, actor: str = "demo-user@hca") -> dict:
+async def demote(run_id: str, precedent_id: str, request: Request) -> dict:
     """Synchronous demote — invalidates caches; back-trace report is async (§4).
 
     Read-modify-write (preserves ambiguity_class / slot_value_hash / resolution_text)
@@ -1630,6 +2111,8 @@ async def demote(run_id: str, precedent_id: str, actor: str = "demo-user@hca") -
     run = _runs.get(run_id)
     if run is None:
         raise HTTPException(404, "unknown run")
+    principal = _authorize_run(request, run)
+    actor = principal.subject
     team_id = run.team_id  # use run's actual team, not a hardcoded literal
     try:
         # Read the existing item from the correct partition
@@ -1657,12 +2140,20 @@ async def demote(run_id: str, precedent_id: str, actor: str = "demo-user@hca") -
 # rather than 503 — the UI shows "no data yet" instead of an error toast.
 @app.get("/api/telemetry/decisions", tags=["Telemetry"])
 async def telemetry_decisions(
+    request: Request,
     team_id: str | None = None,
     kind: str | None = None,
     since: str | None = None,
     limit: int = 50,
 ) -> dict:
     """Recent Decision Ledger entries, newest-first. See models.LedgerEntry."""
+    principal = _principal(request)
+    scoped_team = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    if scoped_team:
+        require_team(principal, scoped_team)
+    elif not principal.has_any_role("admin"):
+        raise HTTPException(400, "team_id is required for multi-team telemetry")
+    team_id = scoped_team
     if _ledger is None:
         return {"items": [], "count": 0}
     items = await query_decisions(
@@ -1672,8 +2163,12 @@ async def telemetry_decisions(
 
 
 @app.get("/api/telemetry/cost", tags=["Telemetry"])
-async def telemetry_cost(window: str = "24h", team_id: str | None = None) -> dict:
+async def telemetry_cost(request: Request, window: str = "24h", team_id: str | None = None) -> dict:
     """Cost + latency rollup across pipeline-runs in the window."""
+    principal = _principal(request)
+    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    if team_id: require_team(principal, team_id)
+    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
     if _ledger is None:
         return {
             "window": window, "total_runs": 0, "total_decisions": 0,
@@ -1685,8 +2180,12 @@ async def telemetry_cost(window: str = "24h", team_id: str | None = None) -> dic
 
 
 @app.get("/api/telemetry/classes", tags=["Telemetry"])
-async def telemetry_classes(window: str = "7d", team_id: str | None = None) -> dict:
+async def telemetry_classes(request: Request, window: str = "7d", team_id: str | None = None) -> dict:
     """Ambiguity-class drift signal: counts, acceptance, blast, trend arrows."""
+    principal = _principal(request)
+    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    if team_id: require_team(principal, team_id)
+    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
     if _ledger is None:
         return {"window": window, "total_decisions": 0, "classes": []}
     return await query_classes(_ledger, window=window, team_id=team_id)
@@ -1695,6 +2194,7 @@ async def telemetry_classes(window: str = "7d", team_id: str | None = None) -> d
 # ---------- compliance query (THE acceptance query, config-plane Phase 5) ------
 @app.get("/api/compliance/decisions")
 async def compliance_decisions(
+    request: Request,
     phi_class: str | None = None,
     actor_kind: str | None = None,
     team_id: str | None = None,
@@ -1719,6 +2219,10 @@ async def compliance_decisions(
     """
     from .compliance_query import completeness_summary, query_compliance
     from .telemetry_queries import parse_window
+    principal = _principal(request)
+    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    if team_id: require_team(principal, team_id)
+    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
 
     since_iso = since
     if since_iso is None and window:
@@ -1743,6 +2247,7 @@ async def compliance_decisions(
 # ---------- runs index endpoint ----------------------------------------------
 @app.get("/api/runs", tags=["Runs"])
 async def list_runs(
+    request: Request,
     team_id: str | None = None,
     status: str | None = None,
     limit: int = 50,
@@ -1753,6 +2258,10 @@ async def list_runs(
     rather than 500'ing the dashboard. Supports team_id and status filters
     (status accepts comma-separated values, e.g. status=running,awaiting_gate).
     """
+    principal = _principal(request)
+    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    if team_id: require_team(principal, team_id)
+    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
     if _ledger is None:
         return {"items": [], "count": 0}
     items = await query_recent_runs(

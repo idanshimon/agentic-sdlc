@@ -29,6 +29,7 @@ def _run(coro):
 class _FakeRunsContainer:
     def __init__(self, *, raise_on_upsert: Exception | None = None):
         self.upserts: list[dict] = []
+        self.replacements: list[dict] = []
         self._raise = raise_on_upsert
         self._store: dict[tuple[str, str], dict] = {}
 
@@ -45,6 +46,31 @@ class _FakeRunsContainer:
     async def read_item(self, *, item: str, partition_key: str):
         return self._store[(item, partition_key)]
 
+    async def query_items(self, *, query: str, parameters: list, **kwargs):
+        loop_id = next((p["value"] for p in parameters if p["name"] == "@loop"), None)
+        for (_, _), doc in list(self._store.items()):
+            if loop_id is None or doc.get("loop_id") == loop_id:
+                yield dict(doc)
+
+    async def create_item(self, doc: dict):
+        key = (doc["id"], doc.get("run_id", doc["id"]))
+        if key in self._store:
+            raise RuntimeError("conflict")
+        doc = {**doc, "_etag": "v1"}
+        self._store[key] = doc
+        return doc
+
+    async def replace_item(self, *, item: str, body: dict, **kwargs):
+        key = (item, body["run_id"])
+        current = self._store[key]
+        if kwargs.get("etag") != current.get("_etag"):
+            raise RuntimeError("precondition failed")
+        next_version = int(current["_etag"].lstrip("v")) + 1
+        body = {**body, "_etag": f"v{next_version}"}
+        self._store[key] = body
+        self.replacements.append(body)
+        return body
+
 
 class _FakeLedger:
     """Mirror just enough of Ledger for save_run / get_run under test."""
@@ -54,6 +80,12 @@ class _FakeLedger:
 
     # Bind the real methods — we only stub the container, not the methods.
     save_run = ledger_module.Ledger.save_run
+    save_run_cas = ledger_module.Ledger.save_run_cas
+    create_run_strict = ledger_module.Ledger.create_run_strict
+    replace_run_strict = ledger_module.Ledger.replace_run_strict
+    create_review_loop_strict = ledger_module.Ledger.create_review_loop_strict
+    save_review_loop_strict = ledger_module.Ledger.save_review_loop_strict
+    get_review_loop = ledger_module.Ledger.get_review_loop
     get_run = ledger_module.Ledger.get_run
 
 
@@ -138,3 +170,49 @@ def test_save_run_then_get_run_round_trips():
     assert rehydrated.status == RunStatus.AWAITING_GATE
     assert rehydrated.current_stage == Stage.RESOLVER
     assert rehydrated.mode == RunMode.HYBRID
+
+
+def test_strict_create_and_conditional_replace_surface_conflicts():
+    fake = _FakeLedger()
+    run = _sample_run()
+    created = _run(fake.create_run_strict(run))
+    assert created["_etag"] == "v1"
+
+    run.run_version = 2
+    replaced = _run(fake.replace_run_strict(run, expected_etag="v1"))
+    assert replaced["_etag"] == "v2"
+    assert replaced["run_version"] == 2
+
+    import pytest
+    with pytest.raises(RuntimeError, match="precondition failed"):
+        _run(fake.replace_run_strict(run, expected_etag="v1"))
+
+
+def test_cas_snapshot_preserves_authoritative_command_records():
+    fake = _FakeLedger()
+    authoritative = _sample_run()
+    authoritative.command_records = {"winner": {"request_hash": "h", "result": {"ok": True}}}
+    _run(fake.create_run_strict(authoritative))
+    stale = _sample_run()
+    stale.events = []
+    _run(fake.save_run_cas(stale))
+    restored = _run(fake.get_run(stale.run_id))
+    assert restored["command_records"]["winner"]["result"] == {"ok": True}
+
+
+def test_review_loop_record_round_trips_durably():
+    fake = _FakeLedger()
+    record = {
+        "loop_id": "loop-abc", "repo": "owner/repo", "pr_number": 7,
+        "head_sha": "a" * 40, "disposition": "SNAPSHOT_READY",
+        "ledger_hops": [],
+    }
+    created = _run(fake.create_review_loop_strict(record))
+    assert created["_etag"] == "v1"
+    loaded = _run(fake.get_review_loop("loop-abc"))
+    assert loaded["repo"] == "owner/repo"
+
+    record["disposition"] = "PASSED_AWAITING_MERGE"
+    saved = _run(fake.save_review_loop_strict(record, expected_etag="v1"))
+    assert saved["_etag"] == "v2"
+    assert _run(fake.get_review_loop("loop-abc"))["disposition"] == "PASSED_AWAITING_MERGE"

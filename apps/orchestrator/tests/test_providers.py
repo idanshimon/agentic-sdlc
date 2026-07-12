@@ -240,26 +240,45 @@ def test_via_apim_flag_routes_through_apim_url(monkeypatch):
         importlib.reload(dmod)
 
 
-# --- 8. Stub fallback when provider raises -----------------------------------
+# --- 8. Provider failure execution profiles ----------------------------------
 
-def test_stub_fallback_on_provider_error():
+def test_production_provider_error_fails_closed(monkeypatch):
     from apps.orchestrator import _pipeline_stages as ps
     from apps.orchestrator.models import RunState
 
     class BoomProvider:
         resolved_model = "gpt-4-1"
-
         async def chat(self, **kwargs):
             raise RuntimeError("backend down")
 
+    monkeypatch.setenv("EXECUTION_PROFILE", "production")
     run = RunState(team_id="t")
-    # Post-refactor: _call and get_provider_for_stage both live in
-    # _pipeline_stages (the latter imported there from config.py). Patch the
-    # provider getter at that lookup site and invoke _call from the same module.
+    with patch("apps.orchestrator._pipeline_stages.get_provider_for_stage", return_value=BoomProvider()):
+        with pytest.raises(ps.ProviderUnavailable, match="backend down"):
+            _run(ps._call(
+                run=run, stage_key="assessor", agent_name="assessor",
+                system_prompt="s", user_prompt="hello world",
+            ))
+    assert run.contains_synthetic_output is False
+
+
+def test_demo_provider_error_stamps_synthetic_output(monkeypatch):
+    from apps.orchestrator import _pipeline_stages as ps
+    from apps.orchestrator.models import RunState
+
+    class BoomProvider:
+        resolved_model = "gpt-4-1"
+        async def chat(self, **kwargs):
+            raise RuntimeError("backend down")
+
+    monkeypatch.setenv("EXECUTION_PROFILE", "demo")
+    run = RunState(team_id="t")
     with patch("apps.orchestrator._pipeline_stages.get_provider_for_stage", return_value=BoomProvider()):
         res = _run(ps._call(
             run=run, stage_key="assessor", agent_name="assessor",
             system_prompt="s", user_prompt="hello world",
         ))
     assert res.text.startswith("[stub:assessor]")
-    assert res.prompt_tokens > 0 and res.completion_tokens > 0
+    assert res.synthetic is True
+    assert res.error_category == "provider_unavailable"
+    assert run.contains_synthetic_output is True

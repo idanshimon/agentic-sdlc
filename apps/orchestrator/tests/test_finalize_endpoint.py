@@ -99,3 +99,31 @@ def test_finalize_accepts_empty_body(client, run_two_cards_one_nongating):
     body = resp.json()
     assert body["ok"] is True
     assert body["decisions_count"] >= 1
+
+
+def test_finalize_uses_atomic_cas_when_ledger_is_authoritative(monkeypatch, client, run_two_cards_one_nongating):
+    """Production finalize must commit command+gate state in one ETag CAS."""
+    from apps.orchestrator import main as om
+
+    run = run_two_cards_one_nongating
+    run.decisions.append(__import__("apps.orchestrator.models", fromlist=["GateDecision"]).GateDecision(
+        card_id="gating-1", decision_kind="accept", resolution_text="resolved",
+    ))
+
+    class Ledger:
+        async def get_run(self, run_id):
+            return run.model_dump(mode="json") | {"_etag": "v1"}
+        async def replace_run_strict(self, authoritative, *, expected_etag):
+            assert expected_etag == "v1"
+            assert authoritative.pending_gate is None or authoritative.pending_gate.get("status") == "resolved"
+            assert authoritative.command_records
+            return authoritative.model_dump(mode="json") | {"_etag": "v2"}
+
+    monkeypatch.setattr(om, "_ledger", Ledger())
+    resp = client.post(
+        f"/api/runs/{run.run_id}/finalize",
+        headers={"Idempotency-Key": "finalize-cas-1"},
+        json={},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["gate_closed"] is True

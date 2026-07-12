@@ -136,6 +136,10 @@ async def run_review_scan(
     yield _ev(run, "started", "Running bundle BLOCK-rule scan over generated code")
 
     code_files = _generated_code_from_run(run)
+    # Pin the complete delivery file set, not only the subset scanned by the
+    # deterministic rule matcher, so review→delivery byte equality is enforceable.
+    from ._pipeline_stages import _artifact_manifest, _delivery_files
+    run.reviewed_artifact_manifest = _artifact_manifest(_delivery_files(run))
     verdict = build_review_verdict(
         code_files, team=run.team_id or "defaults",
         attempt=attempt, prior_verdict_ref=prior_verdict_ref,
