@@ -42,6 +42,7 @@ export async function queryEntries(opts: {
   limit?: number;
   entry_type?: string;
   agent_session_id?: string;
+  run_id?: string;
   bundle_ref_prefix?: string;
 }): Promise<unknown[]> {
   const { ledger } = getCosmos();
@@ -58,6 +59,10 @@ export async function queryEntries(opts: {
   if (opts.agent_session_id) {
     query += " AND c.agent_session_id=@s";
     params.push({ name: "@s", value: opts.agent_session_id });
+  }
+  if (opts.run_id) {
+    query += " AND c.run_id=@run";
+    params.push({ name: "@run", value: opts.run_id });
   }
   if (opts.bundle_ref_prefix) {
     query += " AND EXISTS(SELECT VALUE r FROM r IN c.bundle_refs WHERE STARTSWITH(r, @br))";

@@ -27,6 +27,7 @@ export const tools: Record<string, ToolDef> = {
         limit: { type: "number", minimum: 1, maximum: 200 },
         entry_type: { type: "string", enum: ["runtime", "meta"] },
         agent_session_id: { type: "string" },
+        run_id: { type: "string" },
         bundle_ref_prefix: { type: "string" },
       },
       // team_id is no longer "required" — defaults to the authed team
@@ -45,6 +46,7 @@ export const tools: Record<string, ToolDef> = {
         limit: args.limit,
         entry_type: args.entry_type,
         agent_session_id: args.agent_session_id,
+        run_id: args.run_id,
         bundle_ref_prefix: args.bundle_ref_prefix,
       });
       // Echo the team the query actually ran against so the dashboard can show

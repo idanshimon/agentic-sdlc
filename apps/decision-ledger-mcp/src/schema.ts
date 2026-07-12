@@ -97,6 +97,7 @@ export const LedgerQueryInputSchema = z.object({
   limit: z.number().int().min(1).max(200).optional().default(25),
   entry_type: z.enum(["runtime", "meta"]).optional(),
   agent_session_id: z.string().optional(),
+  run_id: z.string().optional(),
   bundle_ref_prefix: z.string().optional(),
 });
 

@@ -57,11 +57,12 @@ describe("ledger.query handler", () => {
     expect(cosmos.queryEntries).not.toHaveBeenCalled();
   });
 
-  it("forwards optional filters (entry_type, agent_session_id, bundle_ref_prefix)", async () => {
+  it("forwards optional filters (entry_type, agent_session_id, run_id, bundle_ref_prefix)", async () => {
     await tools["ledger.query"].handler(
       {
         entry_type: "runtime",
         agent_session_id: "sess-xyz",
+        run_id: "run-123",
         bundle_ref_prefix: "security/",
       },
       "team-cardiology"
@@ -73,6 +74,7 @@ describe("ledger.query handler", () => {
       limit: 25, // schema default
       entry_type: "runtime",
       agent_session_id: "sess-xyz",
+      run_id: "run-123",
       bundle_ref_prefix: "security/",
     });
   });
