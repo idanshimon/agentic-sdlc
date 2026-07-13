@@ -15,6 +15,7 @@ import {
   Sparkles,
   DollarSign,
   FileSearch,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,9 @@ const nav = [
     plane: "ledger" as const,
     items: [
       { href: "/decisions", label: "Decisions", icon: Scale, plane: "ledger" },
+      { href: "/decisions/graph", label: "Decision Map", icon: Share2, plane: "ledger" },
+      { href: "/decisions/lineage", label: "Precedent Lineage", icon: GitBranch, plane: "ledger" },
+      { href: "/decisions/runflow", label: "Run Flow", icon: Workflow, plane: "ledger" },
       { href: "/compliance", label: "Compliance", icon: FileSearch, plane: "ledger" },
       { href: "/economics", label: "Economics", icon: DollarSign, plane: "ledger" },
     ],
