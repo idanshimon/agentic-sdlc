@@ -2,6 +2,36 @@
 
 All notable changes to the v0.7 reference design.
 
+## [0.9.0] — 2026-07-12 — decision graph views (Map / Lineage / Run Flow)
+
+The `/decisions` table and activity feed read the record beautifully but cannot
+answer three *structural* questions about the ledger as a whole: which standards
+rule is doing the most work, whether the system is actually learning (autopilot
+reusing human precedents), and how a single run flowed stage by stage. All three
+answers were latent in fields the ledger already stores (`precedent_refs`,
+`references_entry_id`, `bundle_refs`, `run_id`, `ambiguity_class`) but were never
+visualized. Added **three read-only graph lenses** over the same ledger read,
+additive to and non-destructive of the table/feed:
+
+- **Decision Map** (`/decisions/graph`) — cross-run governance network. Bundles
+  are hubs sized by citation count (the "which rule works hardest" answer at a
+  glance); decisions cluster by ambiguity class; the learning-loop and teaching
+  edges are visually distinct. Edge-family filter chips + a flag-focus control
+  keep it legible instead of a hairball.
+- **Precedent Lineage** (`/decisions/lineage`) — the learning loop as a
+  deterministic left→right dagre DAG. Human precedents are roots on the left;
+  each autopilot reuse hop moves right, so the human→agent teaching loop reads as
+  a timeline. This is the headline view.
+- **Run Flow** (`/decisions/runflow`) — one run's decisions laid out under their
+  pipeline stage (or ambiguity bucket), for engineers debugging a run.
+
+Every graph node click-throughs to `/decisions#decision-<id>` (the existing
+drill-down anchor), all three auto-refresh on the same `useDecisions` poll, and
+none of them write. Built on one shared, pure graph-builder engine
+(`src/lib/graph/`) covered by 22 unit tests; layouts are deterministic so audit
+screenshots reproduce. New deps: `@xyflow/react`, `@dagrejs/dagre`. Specified in
+the `add-decision-graph-views` change.
+
 ## [0.8.0] — 2026-07-12 — legible Decisions surface for dev leaders
 
 The `/decisions` page led with an internal lifecycle grid (raw entry GUIDs and

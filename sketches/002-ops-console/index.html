@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lineage — Ops Console</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0a0c10;--grid:#12151c;--panel:#12161f;--panel2:#0e1219;--ink:#d7dce5;--muted:#69728a;--line:#1e2430;
+    --human:#3fb950;--agent:#58a6ff;--rule:#bc8cff;--flag:#f85149;--wire:#2a3242;--wire-hot:#3fb950;
+  }
+  body{font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:0}
+  .topbar{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .topbar h1{font-size:15px;font-weight:600;letter-spacing:.02em}
+  .topbar .tag{font-size:11px;color:var(--muted);padding:2px 8px;border:1px solid var(--line);border-radius:4px}
+  .kpis{display:flex;gap:1px;margin-left:auto;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .kpi{background:var(--panel);padding:6px 14px;text-align:center}
+  .kpi .v{font-size:16px;font-weight:700} .kpi .k{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .kpi.loop .v{color:var(--human)} .kpi.flag .v{color:var(--flag)}
+  .canvas{position:relative;padding:34px 26px;min-height:640px;background:
+    linear-gradient(var(--grid) 1px,transparent 1px) 0 0/100% 30px,
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px) 0 0/34px 100%,var(--bg)}
+  .rank-labels{display:flex;gap:0;margin-bottom:18px}
+  .rank-labels div{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+  .rank-labels div:nth-child(1){width:320px} .rank-labels div:nth-child(2){flex:1}
+  svg.wires{position:absolute;inset:34px 26px auto;width:calc(100% - 52px);height:100%;pointer-events:none;overflow:visible}
+  .cols{display:grid;grid-template-columns:300px 1fr;gap:60px;position:relative}
+  .col-nodes{display:flex;flex-direction:column;gap:16px}
+  .node{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:8px;padding:11px 13px;cursor:pointer;transition:.12s;position:relative;width:290px}
+  .node:hover{border-color:var(--agent);box-shadow:0 0 0 1px var(--agent),0 8px 24px rgba(0,0,0,.5)}
+  .node::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:8px 0 0 8px;background:var(--agent)}
+  .node.human::before{background:var(--human)}
+  .node.flagged{border-color:var(--flag)}.node.flagged::before{background:var(--flag)}
+  .node .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  .node .id{font-size:10px;color:var(--muted)}
+  .node .actor{font-size:10px;padding:1px 6px;border-radius:3px}
+  .actor.human{background:rgba(63,185,80,.15);color:var(--human)} .actor.agent{background:rgba(88,166,255,.15);color:var(--agent)}
+  .node .txt{font-size:12px;line-height:1.4;color:var(--ink);font-family:"Inter",sans-serif;margin-bottom:8px}
+  .node .foot{display:flex;gap:8px;align-items:center;font-size:10px}
+  .rulechip{color:var(--rule);border:1px solid rgba(188,140,255,.3);padding:1px 6px;border-radius:3px}
+  .clschip{color:var(--muted)}
+  .teach{margin-top:7px;padding-top:7px;border-top:1px solid var(--line);font-size:10px;font-family:"Inter",sans-serif}
+  .teach.endorse{color:var(--human)} .teach.flag{color:var(--flag)}
+  .rankcol{position:relative}
+  .rankcol.reuse .col-nodes{padding-top:0}
+  .legend{display:flex;gap:20px;padding:14px 26px;border-top:1px solid var(--line);font-size:10px;color:var(--muted);background:var(--panel2)}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .legend i{width:20px;height:2px;display:inline-block}
+</style></head>
+<body>
+  <div class="topbar">
+    <h1>PRECEDENT_LINEAGE</h1><span class="tag">team-demo · meridian</span><span class="tag">DEMO_MODE=0 · seeded</span>
+    <div class="kpis">
+      <div class="kpi"><div class="v">3</div><div class="k">chains</div></div>
+      <div class="kpi"><div class="v">3</div><div class="k">roots</div></div>
+      <div class="kpi loop"><div class="v">5</div><div class="k">reuse</div></div>
+      <div class="kpi flag"><div class="v">1</div><div class="k">flagged</div></div>
+    </div>
+  </div>
+  <div class="canvas">
+    <div class="rank-labels"><div>◀ ORIGIN · human precedents</div><div>REUSE · agents inherited →</div></div>
+    <svg class="wires" id="wires"></svg>
+    <div class="cols">
+      <div class="rankcol"><div class="col-nodes" id="roots"></div></div>
+      <div class="rankcol reuse"><div class="col-nodes" id="reuse"></div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--wire-hot)"></i> reuse edge (learning loop)</span>
+    <span><i style="background:var(--human)"></i> human precedent</span>
+    <span><i style="background:var(--agent)"></i> agent decision</span>
+    <span><i style="background:var(--flag)"></i> flagged</span>
+  </div>
+  <script src="../themes/data.js"></script>
+  <script>
+    const L=window.LINEAGE, teachOf=id=>L.teaching.filter(t=>t.on===id), nameOf=id=>L.nodes.find(n=>n.id===id);
+    const node=n=>{
+      const t=teachOf(n.id).map(t=>`<div class="teach ${t.kind==='flagged'?'flag':'endorse'}">${t.label} — ${t.who}</div>`).join('');
+      return `<div class="node ${n.root?'human':''} ${n.flagged?'flagged':''}" id="n-${n.id}">
+        <div class="hdr"><span class="id">${n.id}</span><span class="actor ${n.actor}">${n.actor==='human'?'HUMAN':'AGENT'}</span></div>
+        <div class="txt">${n.text}</div>
+        <div class="foot"><span class="rulechip">${n.rule}</span><span class="clschip">${n.cls}</span></div>${t}</div>`;
+    };
+    document.getElementById('roots').innerHTML=L.nodes.filter(n=>n.root).map(node).join('');
+    document.getElementById('reuse').innerHTML=L.nodes.filter(n=>!n.root).map(node).join('');
+    // draw wires root->reuse after layout
+    requestAnimationFrame(()=>{
+      const svg=document.getElementById('wires'), cr=svg.getBoundingClientRect();
+      L.nodes.filter(n=>n.reused).forEach(n=>{
+        const a=document.getElementById('n-'+n.reused).getBoundingClientRect();
+        const b=document.getElementById('n-'+n.id).getBoundingClientRect();
+        const x1=a.right-cr.left, y1=a.top+a.height/2-cr.top, x2=b.left-cr.left, y2=b.top+b.height/2-cr.top;
+        const mx=(x1+x2)/2;
+        svg.insertAdjacentHTML('beforeend',`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="var(--wire-hot)" stroke-width="1.8" opacity=".7"/><circle cx="${x2}" cy="${y2}" r="3" fill="var(--wire-hot)"/>`);
+      });
+    });
+  </script>
+</body></html>

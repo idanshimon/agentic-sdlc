@@ -9,8 +9,29 @@ UI 200, orchestrator /api/runs 200 with real completed runs, ledger real
 - Tab A — UI runs:      https://ca-ledger-ui-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io/runs
 - Tab B — Decisions:    https://ca-ledger-ui-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io/decisions
 - Tab C — Telemetry:    https://ca-ledger-ui-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io/telemetry
+- Tab C2 — Decision Map:      .../decisions/graph     (governance network — which rule works hardest)
+- Tab C3 — Precedent Lineage: .../decisions/lineage   (the learning loop as a timeline — LEAD WITH THIS)
+- Tab C4 — Run Flow:          .../decisions/runflow   (one run, stage by stage)
 - Tab D — Delivery PR:  https://github.com/idanshimon/agentic-sdlc-delivery/pull/3
 - Tab E (backup) — explainer: open docs/explainer.html locally (file://), dark 4-plane diagram
+
+## Graph views — narration (the "does it actually learn?" moment)
+
+After the Decisions table/feed, open **Precedent Lineage** (`/decisions/lineage`)
+FIRST of the three graph tabs — it's the headline. Green nodes on the left are
+human precedents; each rightward arrow is an autopilot decision that REUSED that
+human call. This is the human→agent learning loop made visible as a timeline —
+the thing a flat table can never show. Point at a red (flagged) node: "a human
+ruled this one shouldn't be reused, and the system honors that."
+
+Then **Decision Map** (`/decisions/graph`) for the "how does it all connect"
+view — bundle-rule hubs sized by how many decisions cite them (which rule is
+doing the most governance work), with edge-family filter chips to cut the noise.
+**Run Flow** (`/decisions/runflow`) is the engineer's per-run stage timeline.
+
+All three are read-only lenses over the same ledger, auto-refresh, and every
+node clicks through to its full record on `/decisions`. Narrate the graph data
+as SEEDED sample data (the "Meridian" portal scenario), not live telemetry.
 
 ## The story in one line
 

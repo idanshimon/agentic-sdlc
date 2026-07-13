@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lineage — Narrative Timeline</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#faf9f7;--ink:#1a1d24;--muted:#6b7280;--line:#e6e3dd;--card:#fff;
+    --human:#059669;--agent:#2563eb;--rule:#7c3aed;--flag:#dc2626;--endorse:#059669;
+    --loop:#059669;
+  }
+  @media(prefers-color-scheme:dark){:root{--bg:#0f1115;--ink:#e8eaf0;--muted:#8891a6;--line:#232838;--card:#171a22}}
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:36px 44px;max-width:1200px;margin:0 auto}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.025em;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:14px;max-width:640px;line-height:1.55;margin-bottom:24px}
+  .story{background:linear-gradient(90deg,rgba(5,150,105,.08),transparent);border-left:3px solid var(--loop);border-radius:0 10px 10px 0;padding:12px 18px;font-size:13px;line-height:1.6;color:var(--ink);margin-bottom:28px;max-width:760px}
+  .story b{color:var(--loop)}
+  .rail{position:relative;padding-left:0}
+  .step{display:grid;grid-template-columns:200px 1fr;gap:0;position:relative}
+  .when{padding:22px 20px 22px 0;text-align:right;position:relative}
+  .when .t{font-size:12px;font-weight:600;color:var(--ink)} .when .d{font-size:11px;color:var(--muted);margin-top:2px}
+  .track{border-left:2px solid var(--line);padding:22px 0 22px 32px;position:relative}
+  .track::before{content:"";position:absolute;left:-7px;top:28px;width:12px;height:12px;border-radius:50%;background:var(--card);border:2px solid var(--human)}
+  .step.agent .track::before{border-color:var(--agent)}
+  .step.flagged .track::before{border-color:var(--flag);box-shadow:0 0 0 4px rgba(220,38,38,.15)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:.15s;cursor:pointer;max-width:620px}
+  .card:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.1)}
+  .card .top{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .who{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+  .who.human{color:var(--human)} .who.agent{color:var(--agent)}
+  .av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;color:#fff}
+  .av.human{background:var(--human)} .av.agent{background:var(--agent)}
+  .verb{font-size:12px;color:var(--muted)}
+  .card .txt{font-size:15px;line-height:1.45;font-weight:500;margin-bottom:12px}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:500}
+  .chip.rule{background:rgba(124,58,237,.1);color:var(--rule)}
+  .chip.cls{background:rgba(107,114,128,.12);color:var(--muted)}
+  .chip.reuse{background:rgba(5,150,105,.12);color:var(--loop)}
+  .reuseline{margin-top:11px;padding-top:11px;border-top:1px dashed var(--line);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .reuseline b{color:var(--human);font-weight:600}
+  .teach{margin-top:9px;font-size:12px;font-weight:500}
+  .teach.endorse{color:var(--endorse)} .teach.flag{color:var(--flag)}
+  .stats{display:flex;gap:12px;margin-bottom:28px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-size:12px;color:var(--muted)}
+  .stat b{display:block;font-size:20px;color:var(--ink);font-weight:700}
+  .stat.loop b{color:var(--loop)} .stat.flag b{color:var(--flag)}
+</style></head>
+<body>
+  <h1>Precedent Lineage</h1>
+  <div class="sub">The learning loop as a story you scroll. Each human precedent, then every agent decision that reused it — newest reasoning inherits the oldest human judgment.</div>
+  <div class="stats">
+    <div class="stat"><b>3</b>precedent chains</div>
+    <div class="stat"><b>3</b>human roots</div>
+    <div class="stat loop"><b>5</b>reuse hops</div>
+    <div class="stat flag"><b>1</b>flagged</div>
+  </div>
+  <div class="story">Idan (the human lead) made <b>3 founding calls</b> on the Meridian portal — how to classify PHI, how to authenticate patients, how to name resources. Across the next two runs, the agents <b>reused those calls 5 times</b> instead of re-deciding. One agent guess — a 3-year billing retention — <b>a human flagged</b>, so it won't become precedent.</div>
+  <div class="rail" id="rail"></div>
+  <script src="../themes/data.js"></script>
+  <script>
+    const L=window.LINEAGE, teachOf=id=>L.teaching.filter(t=>t.on===id), nameOf=id=>L.nodes.find(n=>n.id===id)?.text??id;
+    const order=[...L.nodes].sort((a,b)=>a.rank-b.rank);
+    const rail=document.getElementById('rail');
+    order.forEach(n=>{
+      const verb = n.root ? (n.actor==='human'?'set the precedent':'set the convention') : 'reused a precedent';
+      const t=teachOf(n.id).map(t=>`<div class="teach ${t.kind==='flagged'?'flag':'endorse'}">${t.label} · by ${t.who}</div>`).join('');
+      const reuse = n.reused?`<div class="reuseline">↳ inherited from <b>${nameOf(n.reused)}</b></div>`:'';
+      rail.insertAdjacentHTML('beforeend',`<div class="step ${n.actor} ${n.flagged?'flagged':''}">
+        <div class="when"><div class="t">${n.root?'Founding run':'Reuse run'}</div><div class="d">${n.cls}</div></div>
+        <div class="track"><div class="card">
+          <div class="top"><span class="who ${n.actor}"><span class="av ${n.actor}">${n.actor==='human'?'👤':'🤖'}</span>${n.role}</span><span class="verb">${verb}</span></div>
+          <div class="txt">${n.text}</div>
+          <div class="chips"><span class="chip rule">${n.rule}</span><span class="chip cls">${n.cls}</span>${n.reused?'<span class="chip reuse">♻ reused</span>':''}</div>
+          ${reuse}${t}
+        </div></div>
+      </div>`);
+    });
+  </script>
+</body></html>

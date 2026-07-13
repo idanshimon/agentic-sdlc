@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lineage — Editorial Swimlanes</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f1117;--panel:#161922;--ink:#e8eaf0;--muted:#8891a6;--line:#242938;
+    --human:#4ade80;--agent:#7aa2f7;--rule:#c4a7f7;--flag:#f7768e;--endorse:#4ade80;
+    --lane:#1b1f2b;
+  }
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:32px 40px}
+  .head{display:flex;align-items:baseline;gap:14px;margin-bottom:4px}
+  h1{font-size:22px;font-weight:650;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13px;max-width:680px;line-height:1.5;margin-bottom:22px}
+  .stats{display:flex;gap:10px;margin-bottom:26px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--muted)}
+  .stat b{color:var(--ink);font-size:16px;font-weight:650;margin-right:6px}
+  .stat.loop b{color:var(--human)} .stat.flag b{color:var(--flag)}
+  .axis{display:flex;gap:0;margin:0 0 8px 190px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .axis span{flex:1}
+  .lane{display:grid;grid-template-columns:180px 1fr 1fr;gap:0;background:var(--lane);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+  .lane-label{padding:20px 16px;background:linear-gradient(180deg,rgba(196,167,247,.08),transparent);border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px}
+  .lane-label .cls{font-weight:600;font-size:13px}
+  .lane-label .rule{font-size:11px;color:var(--rule);font-family:ui-monospace,monospace}
+  .col{padding:16px;border-right:1px solid var(--line);position:relative}
+  .col:last-child{border-right:none}
+  .col-head{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px}
+  .node{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--agent);border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:.15s;position:relative}
+  .node:hover{transform:translateY(-1px);border-color:var(--agent);box-shadow:0 6px 20px rgba(0,0,0,.35)}
+  .node.human{border-left-color:var(--human)}
+  .node.flagged{border-left-color:var(--flag);box-shadow:0 0 0 1px rgba(247,118,142,.4)}
+  .node .txt{font-size:13px;line-height:1.4;margin-bottom:8px}
+  .node .meta{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500}
+  .badge.human{background:rgba(74,222,128,.12);color:var(--human)}
+  .badge.agent{background:rgba(122,162,247,.12);color:var(--agent)}
+  .reused-from{font-size:10px;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)}
+  .reused-from b{color:var(--human)}
+  .teach{margin-top:6px;font-size:11px}
+  .teach.endorse{color:var(--endorse)} .teach.flag{color:var(--flag)}
+  .legend{display:flex;gap:18px;margin-top:20px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px}
+</style></head>
+<body>
+  <div class="head"><h1>Precedent Lineage</h1><span style="color:var(--muted);font-size:12px">Meridian · seeded sample</span></div>
+  <div class="sub">Grouped by ambiguity class. The left column is the <b style="color:var(--human)">human precedent</b> — the call a person made once. The right column shows every <b style="color:var(--agent)">agent decision</b> that reused it. This is the learning loop, organized by governance topic.</div>
+  <div class="stats">
+    <div class="stat"><b>3</b>precedent chains</div>
+    <div class="stat"><b>3</b>human roots</div>
+    <div class="stat loop"><b>5</b>reuse hops</div>
+    <div class="stat flag"><b>1</b>flagged</div>
+  </div>
+  <div class="axis"><span>Origin — a human (or lead agent) set it</span><span>Reuse — agents inherited it</span></div>
+  <div id="lanes"></div>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--human)"></i> Human precedent</span>
+    <span><i class="dot" style="background:var(--agent)"></i> Agent reuse</span>
+    <span><i class="dot" style="background:var(--flag)"></i> Flagged — won't reuse</span>
+    <span><i class="dot" style="background:var(--rule)"></i> Standards rule cited</span>
+  </div>
+  <script src="../themes/data.js"></script>
+  <script>
+    const L = window.LINEAGE;
+    const teachOf = id => L.teaching.filter(t=>t.on===id);
+    // group by class
+    const classes = {};
+    L.nodes.forEach(n=>{(classes[n.cls] ??= {rule:n.rule, roots:[], reuse:[]}); (n.root?classes[n.cls].roots:classes[n.cls].reuse).push(n);});
+    const nameOf = id => L.nodes.find(n=>n.id===id)?.text ?? id;
+    const lanes = document.getElementById('lanes');
+    Object.entries(classes).forEach(([cls,g])=>{
+      const nodeHTML = n=>{
+        const t = teachOf(n.id).map(t=>`<div class="teach ${t.kind==='flagged'?'flag':'endorse'}">${t.label} · ${t.who}</div>`).join('');
+        const from = n.reused?`<div class="reused-from">↳ reused from <b>${nameOf(n.reused).slice(0,38)}…</b></div>`:'';
+        return `<div class="node ${n.root?'human':''} ${n.flagged?'flagged':''}">
+          <div class="txt">${n.text}</div>
+          <div class="meta"><span class="badge ${n.actor}">${n.actor==='human'?'👤':'🤖'} ${n.role}</span></div>
+          ${from}${t}</div>`;
+      };
+      lanes.insertAdjacentHTML('beforeend',`<div class="lane">
+        <div class="lane-label"><div class="cls">${cls}</div><div class="rule">${g.rule}</div></div>
+        <div class="col"><div class="col-head">Precedent</div>${g.roots.map(nodeHTML).join('')||'<div style="color:var(--muted);font-size:12px">— agent-set —</div>'}</div>
+        <div class="col"><div class="col-head">Reused by</div>${g.reuse.map(nodeHTML).join('')||'<div style="color:var(--muted);font-size:12px">— none yet —</div>'}</div>
+      </div>`);
+    });
+  </script>
+</body></html>
