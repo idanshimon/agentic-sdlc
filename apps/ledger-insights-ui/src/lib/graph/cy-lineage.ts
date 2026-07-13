@@ -18,51 +18,43 @@ export interface CyElement {
   group: "nodes" | "edges";
   data: Record<string, unknown>;
   classes?: string;
+  position?: { x: number; y: number };
 }
 
-/** Map a lineage graph to Cytoscape elements with compound precedent lanes. */
+/** Trim a decision sentence to a node-sized title (full text lives in the panel). */
+function shortLabel(s: string, max = 34): string {
+  const clean = s.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  // cut on a word boundary before max
+  const cut = clean.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 16 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
+}
+
+/** Map a lineage graph to Cytoscape elements — a clean left→right DAG.
+ *  No compound lane containers (they forced quadrant spread + overlap when a
+ *  decision reused two precedents). Dagre lays precedents on the left, reuse
+ *  decisions flowing right; multi-precedent reuse is handled by the DAG engine.
+ *  Precedent-vs-agent is conveyed by node shape/color, not containers. */
 export function lineageToCyElements(g: LineageGraph): CyElement[] {
   const els: CyElement[] = [];
 
-  // node id → its lane (root) id, so reuse children nest in the right parent
-  const laneOf = new Map<string, string>();
-  for (const lane of g.lanes) for (const id of lane.nodeIds) laneOf.set(id, lane.rootId);
-
-  // 1) compound parent per precedent lane
-  for (const lane of g.lanes) {
-    els.push({
-      group: "nodes",
-      classes: "lane",
-      data: {
-        id: `lane:${lane.rootId}`,
-        label: lane.title,
-        actorKind: lane.actorKind ?? "human",
-        applied: lane.applied,
-        endorsed: lane.endorsed,
-        blocked: lane.blocked,
-        ambiguityClass: lane.ambiguityClass ?? "",
-      },
-    });
-  }
-
   const rootSet = new Set(g.roots);
+  const laneMeta = new Map(g.lanes.map((l) => [l.rootId, l]));
 
-  // 2) decision nodes only, nested into their lane parent.
-  //    Teaching signals are EXCLUDED from the graph (they floated loose outside
-  //    lanes with awkward long edges); their endorsed/flagged state is folded
-  //    onto the decision cards + surfaced in the side-panel instead.
+  // decision nodes only (teaching excluded — folded into the modal)
   for (const n of g.nodes) {
     if (n.kind === "teaching") continue;
-    const parent = laneOf.get(n.id);
     const isRoot = rootSet.has(n.id);
     const kindClass = isRoot ? "precedent" : "agent";
+    const lane = laneMeta.get(n.id);
     els.push({
       group: "nodes",
       classes: [kindClass, n.flagged ? "flagged" : "", n.phiHigh ? "phi" : ""].filter(Boolean).join(" "),
       data: {
         id: n.id,
-        label: n.label,
-        parent: parent ? `lane:${parent}` : undefined,
+        label: shortLabel(n.label),
+        full: n.label,
         actorKind: n.actorKind ?? "agent",
         ambiguityClass: n.ambiguityClass ?? "",
         rule: (n.meta as { rule?: string } | undefined)?.rule ?? "",
@@ -70,13 +62,15 @@ export function lineageToCyElements(g: LineageGraph): CyElement[] {
         flagged: n.flagged ? 1 : 0,
         phiHigh: n.phiHigh ? 1 : 0,
         isRoot: isRoot ? 1 : 0,
+        applied: lane?.applied ?? 0,
+        endorsed: lane?.endorsed ?? 0,
         entryId: n.entryId ?? n.id,
         kind: n.kind,
       },
     });
   }
 
-  // 3) edges — reuse edges only (teaching edges excluded with their nodes)
+  // reuse edges only (teaching edges excluded with their nodes)
   for (const e of g.edges) {
     if (e.kind === "teaches") continue;
     els.push({

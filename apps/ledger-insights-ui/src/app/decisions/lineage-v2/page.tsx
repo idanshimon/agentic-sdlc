@@ -70,8 +70,10 @@ const CY_STYLE = ([
       "background-color": "#161D26",
       "border-color": "#22C55E",
       "border-width": 2,
-      width: 150,
-      height: 60,
+      width: 190,
+      height: 74,
+      "font-size": 10,
+      "text-max-width": "150px",
       label: "data(label)",
     },
   },
@@ -82,8 +84,10 @@ const CY_STYLE = ([
       shape: "round-rectangle",
       "background-color": "#161D26",
       "border-color": "#0EA5E9",
-      width: 168,
-      height: 56,
+      width: 190,
+      height: 58,
+      "font-size": 10,
+      "text-max-width": "168px",
       label: "data(label)",
     },
   },
@@ -161,6 +165,7 @@ const CY_STYLE = ([
 interface PanelData {
   id: string;
   label: string;
+  full: string;
   role: string;
   actorKind: string;
   ambiguityClass: string;
@@ -193,27 +198,32 @@ export default function LineageV2Page() {
       minZoom: 0.2,
       maxZoom: 2.5,
       wheelSensitivity: 0.2,
+      autoungrabify: true, // audit view — nodes are not draggable (stable layout)
+      boxSelectionEnabled: false,
     });
     cyRef.current = cy;
 
+    // dagre left→right DAG — clean lineage flow, no compound overlap
     cy.layout({
       name: "dagre",
       rankDir: "LR",
-      nodeSep: 28,
-      rankSep: 140,
-      align: "UL",
+      nodeSep: 34,
+      rankSep: 120,
+      edgeSep: 12,
+      ranker: "network-simplex",
       animate: false,
       fit: true,
-      padding: 40,
+      padding: 48,
     } as cytoscape.LayoutOptions).run();
 
-    const clearFocus = () => {
+    const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
+      cy.animate({ fit: { eles: cy.elements(), padding: 48 }, duration: 300 });
       setPanel(null);
     };
 
     cy.on("tap", (evt) => {
-      if (evt.target === cy) clearFocus();
+      if (evt.target === cy) resetView();
     });
 
     cy.on("tap", "node.agent, node.precedent", (evt) => {
@@ -242,6 +252,7 @@ export default function LineageV2Page() {
       setPanel({
         id: String(n.id()),
         label: String(n.data("label")),
+        full: String(n.data("full") || n.data("label")),
         role: String(n.data("role") || ""),
         actorKind: String(n.data("actorKind") || "agent"),
         ambiguityClass: String(n.data("ambiguityClass") || ""),
@@ -290,46 +301,54 @@ export default function LineageV2Page() {
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#0EA5E9]" /> Agent decision</span>
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#EF4444]" /> Flagged</span>
             </div>
-            {/* detail side-panel */}
+            {/* quick-view modal — centered, dims graph behind it */}
             {panel && (
-              <div className="absolute right-0 top-0 h-full w-[360px] overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface)] p-4 shadow-2xl">
-                <div className="mb-3 flex items-start justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)]">
-                    {panel.actorKind === "agent" ? <Bot className="h-4 w-4 text-[var(--plane-pipeline)]" /> : <User className="h-4 w-4 text-[var(--plane-ledger)]" />}
-                    {panel.role}
-                  </span>
-                  <button onClick={() => { setPanel(null); cyRef.current?.elements().removeClass("focused dimmed sel"); }} className="text-[var(--text-tertiary)] hover:text-[var(--text)]">
-                    <X className="h-4 w-4" />
+              <div
+                className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-6"
+                onClick={() => { setPanel(null); cyRef.current?.elements().removeClass("focused dimmed sel"); cyRef.current?.animate({ fit: { eles: cyRef.current.elements(), padding: 48 }, duration: 250 }); }}
+              >
+                <div
+                  className="w-[440px] max-w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface)] p-5 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
+                      {panel.actorKind === "agent" ? <Bot className="h-4 w-4 text-[var(--plane-pipeline)]" /> : <User className="h-4 w-4 text-[var(--plane-ledger)]" />}
+                      {panel.role}
+                    </span>
+                    <button onClick={() => { setPanel(null); cyRef.current?.elements().removeClass("focused dimmed sel"); cyRef.current?.animate({ fit: { eles: cyRef.current.elements(), padding: 48 }, duration: 250 }); }} className="text-[var(--text-tertiary)] hover:text-[var(--text)]">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mb-2.5 flex flex-wrap gap-1.5">
+                    {panel.isRoot && <span className="rounded-full bg-[var(--success)]/15 px-2 py-0.5 text-[10px] text-[var(--success)]">human precedent</span>}
+                    {panel.flagged && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-2 py-0.5 text-[10px] text-[var(--danger)]"><Flag className="h-2.5 w-2.5" /> flagged</span>}
+                    {panel.phiHigh && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-2 py-0.5 text-[10px] text-[var(--danger)]"><ShieldAlert className="h-2.5 w-2.5" /> PHI high</span>}
+                  </div>
+                  <p className="mb-3 text-[15px] font-medium leading-snug text-[var(--text)]">{panel.full || panel.label}</p>
+                  <div className="mb-4 flex flex-wrap gap-1.5">
+                    {panel.ambiguityClass && <span className="rounded-full bg-[var(--overlay)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">{panel.ambiguityClass}</span>}
+                    {panel.rule && <span className="mono rounded bg-[var(--overlay)] px-1.5 py-0.5 text-[10px] text-[var(--secondary)]">{panel.rule}</span>}
+                  </div>
+                  {(panel.upstream.length > 0 || panel.downstream.length > 0) && (
+                    <div className="mb-4 grid grid-cols-2 gap-3 border-t border-[var(--border-default)] pt-3">
+                      <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Reused from</div>
+                        {panel.upstream.length ? panel.upstream.map((u, i) => <div key={i} className="text-[12px] text-[var(--text-secondary)]">← {u}</div>) : <div className="text-[12px] text-[var(--text-tertiary)]">—</div>}
+                      </div>
+                      <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Reused by</div>
+                        {panel.downstream.length ? panel.downstream.map((u, i) => <div key={i} className="text-[12px] text-[var(--text-secondary)]">→ {u}</div>) : <div className="text-[12px] text-[var(--text-tertiary)]">—</div>}
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => router.push(`/decisions#decision-${panel.entryId}`)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-default)] bg-[var(--elevated)] px-3 py-1.5 text-[12px] text-[var(--text)] hover:border-[var(--plane-pipeline)]"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Open full record
                   </button>
                 </div>
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {panel.isRoot && <span className="rounded-full bg-[var(--success)]/15 px-2 py-0.5 text-[10px] text-[var(--success)]">human precedent</span>}
-                  {panel.flagged && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-2 py-0.5 text-[10px] text-[var(--danger)]"><Flag className="h-2.5 w-2.5" /> flagged</span>}
-                  {panel.phiHigh && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-2 py-0.5 text-[10px] text-[var(--danger)]"><ShieldAlert className="h-2.5 w-2.5" /> PHI high</span>}
-                </div>
-                <p className="mb-3 text-[14px] font-medium leading-snug text-[var(--text)]">{panel.label}</p>
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {panel.ambiguityClass && <span className="rounded-full bg-[var(--overlay)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">{panel.ambiguityClass}</span>}
-                  {panel.rule && <span className="mono rounded bg-[var(--overlay)] px-1.5 py-0.5 text-[10px] text-[var(--secondary)]">{panel.rule}</span>}
-                </div>
-                {panel.upstream.length > 0 && (
-                  <div className="mb-3">
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Reused from</div>
-                    {panel.upstream.map((u, i) => <div key={i} className="text-[12px] text-[var(--text-secondary)]">← {u}</div>)}
-                  </div>
-                )}
-                {panel.downstream.length > 0 && (
-                  <div className="mb-3">
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Reused by</div>
-                    {panel.downstream.map((u, i) => <div key={i} className="text-[12px] text-[var(--text-secondary)]">→ {u}</div>)}
-                  </div>
-                )}
-                <button
-                  onClick={() => router.push(`/decisions#decision-${panel.entryId}`)}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--border-default)] bg-[var(--elevated)] px-3 py-1.5 text-[12px] text-[var(--text)] hover:border-[var(--plane-pipeline)]"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" /> Open full record
-                </button>
               </div>
             )}
           </>
