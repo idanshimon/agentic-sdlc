@@ -99,6 +99,22 @@
   border-color: var(--border-default);
 }
 
+/* React Flow ships light defaults (#fff nodes, white edge labels, #fefefe
+   controls) scoped under .react-flow. Pin its internal vars to our dark tokens
+   so the graph panes can never leak the light theme regardless of colorMode. */
+.react-flow {
+  --xy-node-background-color-default: var(--surface);
+  --xy-node-color-default: var(--text);
+  --xy-node-border-default: 1px solid var(--border-default);
+  --xy-edge-label-background-color-default: var(--bg);
+  --xy-edge-label-color-default: var(--text);
+  --xy-controls-button-background-color-default: var(--elevated);
+  --xy-controls-button-background-color-hover-default: var(--overlay);
+  --xy-controls-button-color-default: var(--text);
+  --xy-controls-button-color-hover-default: var(--text);
+  --xy-controls-button-border-color-default: var(--border-default);
+}
+
 html,
 body {
   background: var(--bg);

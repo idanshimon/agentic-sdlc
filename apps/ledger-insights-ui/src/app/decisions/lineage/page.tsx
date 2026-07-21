@@ -298,6 +298,7 @@ export default function LineagePage() {
           </div>
         ) : (
           <ReactFlow
+            colorMode="dark"
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
