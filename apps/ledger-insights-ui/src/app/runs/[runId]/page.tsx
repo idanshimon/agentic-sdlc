@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { relativeTime, shortId, fmtUsd, eventTimeLabel } from "@/lib/utils";
 import type { Stage, StageEvent } from "@/lib/types";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const allStages: Stage[] = [
   "ingest", "assessor", "architect", "test_plan", "codegen", "review_scan", "deliver",
@@ -80,6 +81,11 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
     try {
       const rerun = await orchestrator.rerun(runId);
       router.push(`/runs/${rerun.run_id}`);
+    } catch (e) {
+      // Surface the failure instead of silently resetting — otherwise the
+      // button just returns to its idle state and looks like a dead click.
+      const msg = e instanceof Error ? e.message : "Retry failed";
+      toast.error("Couldn't start retry", { description: msg });
     } finally {
       setRetrying(false);
     }
