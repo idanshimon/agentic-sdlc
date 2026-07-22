@@ -31,12 +31,36 @@ export async function callLedgerMcp(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = bearer();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${ledgerUrl()}${toolPath}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body ?? {}),
-    cache: "no-store",
-  });
+  // Bound the upstream call so a stalled/unreachable ledger-mcp surfaces as a
+  // 504 the UI can render ("couldn't reach ledger") instead of hanging the
+  // request for the full platform timeout — which showed up as a Decisions
+  // view that spun forever / rendered empty with no error.
+  const controller = new AbortController();
+  const timeoutMs = Number(env["LEDGER_MCP_TIMEOUT_MS"] ?? "10000");
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${ledgerUrl()}${toolPath}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body ?? {}),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (e) {
+    const aborted = e instanceof Error && e.name === "AbortError";
+    return {
+      status: 504,
+      data: {
+        error: aborted
+          ? `ledger-mcp did not respond within ${timeoutMs}ms`
+          : `ledger-mcp request failed: ${(e as Error).message}`,
+        entries: [],
+      },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let data: unknown = {};
   try {
