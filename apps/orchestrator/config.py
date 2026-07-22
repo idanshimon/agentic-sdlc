@@ -51,8 +51,17 @@ class Settings:
     cosmos_ledger_container: str = os.getenv("COSMOS_LEDGER_CONTAINER", "decision-ledger")
     cosmos_runs_container: str = os.getenv("COSMOS_RUNS_CONTAINER", "pipeline-runs")
     # Blob — immutable per-run decisions.md (design.md §7 storage decoupling).
-    storage_account_url: str = os.getenv(
-        "STORAGE_ACCOUNT_URL", "https://stagenticab9963.blob.core.windows.net"
+    # Accept EITHER the full URL (STORAGE_ACCOUNT_URL) or the bare account name
+    # (STORAGE_ACCOUNT_NAME, what the Container App deploy tooling sets) and
+    # derive the URL from the name. No hardcoded account default: a missing
+    # value fails fast at startup (see _validate below) instead of silently
+    # falling back to a decommissioned account whose firewalled private
+    # endpoint hangs every blob write — which surfaces as a frozen /runs/new
+    # submit, not an error. Reference repo stays tenant-neutral.
+    storage_account_url: str = os.getenv("STORAGE_ACCOUNT_URL", "") or (
+        f"https://{os.getenv('STORAGE_ACCOUNT_NAME', '').strip()}.blob.core.windows.net"
+        if os.getenv("STORAGE_ACCOUNT_NAME", "").strip()
+        else ""
     )
     storage_decisions_container: str = os.getenv("STORAGE_DECISIONS_CONTAINER", "decisions")
     storage_artifacts_container: str = os.getenv("STORAGE_ARTIFACTS_CONTAINER", "artifacts")
@@ -66,6 +75,28 @@ class Settings:
 
 
 settings = Settings()
+
+
+def validate_runtime_settings(s: Settings = settings) -> None:
+    """Fail fast on missing execution-plane targets.
+
+    A blank storage_account_url used to fall back to a hardcoded demo account
+    whose firewalled private endpoint hangs every blob PUT — the POST /api/run
+    never returns and the UI's sample cards spin forever. Better to refuse to
+    start with a clear message than to accept runs that can never persist.
+    Call from the app's startup path (main.py lifespan/startup).
+    """
+    missing: list[str] = []
+    if not s.storage_account_url:
+        missing.append("STORAGE_ACCOUNT_URL (or STORAGE_ACCOUNT_NAME)")
+    if not s.cosmos_endpoint:
+        missing.append("COSMOS_ENDPOINT")
+    if missing:
+        raise RuntimeError(
+            "orchestrator misconfigured — required execution-plane settings are unset: "
+            + ", ".join(missing)
+            + ". Set them on the Container App; do not rely on defaults."
+        )
 
 
 # --- Tier-2 governance: hard-gate classes -------------------------------------

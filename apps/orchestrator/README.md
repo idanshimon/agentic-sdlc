@@ -58,25 +58,30 @@ curl -X POST http://localhost:8000/api/runs/<run_id>/approve \
 ## Deploy (Azure Container Apps)
 
 ```bash
-RG=rg-agentic-sdlc-demo-eastus
+RG=<your resource group>
 ACR=<your acr>      # or use az acr build with a workspace ACR
 az acr build -r $ACR -t orchestrator:demo -f Dockerfile .
 
+# Execution-plane targets are REQUIRED — the orchestrator refuses to start
+# (validate_runtime_settings) if COSMOS_ENDPOINT or a storage account is unset,
+# rather than falling back to a default and hanging on the first blob write.
+# Storage accepts either STORAGE_ACCOUNT_URL (full URL) or STORAGE_ACCOUNT_NAME
+# (bare name — the URL is derived as https://<name>.blob.core.windows.net).
 az containerapp create \
   -g $RG -n orchestrator \
   --image $ACR.azurecr.io/orchestrator:demo \
   --ingress external --target-port 8000 \
   --env-vars \
-    APIM_BASE_URL=https://apim-agentic-ab9963.azure-api.net/openai/v1 \
-    COSMOS_ENDPOINT=https://cosmos-agentic-ab9963.documents.azure.com:443/ \
-    STORAGE_ACCOUNT_URL=https://stagenticab9963.blob.core.windows.net \
+    APIM_BASE_URL=https://<apim-name>.azure-api.net/openai/v1 \
+    COSMOS_ENDPOINT=https://<cosmos-name>.documents.azure.com:443/ \
+    STORAGE_ACCOUNT_NAME=<storage-account-name> \
     APPLICATIONINSIGHTS_CONNECTION_STRING="$(cat ../../logs/appi-conn.txt)" \
   --system-assigned
 ```
 
 Grant the container app's managed identity:
-- `Cosmos DB Built-in Data Contributor` on `cosmos-agentic-ab9963`
-- `Storage Blob Data Contributor` on `stagenticab9963`
+- `Cosmos DB Built-in Data Contributor` on your Cosmos account
+- `Storage Blob Data Contributor` on your storage account
 - APIM subscription key in Key Vault `kv-agen-ab9963` (mount as `APIM_SUBSCRIPTION_KEY`)
 
 ## Design notes
