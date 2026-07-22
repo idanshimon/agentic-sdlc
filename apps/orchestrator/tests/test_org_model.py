@@ -15,6 +15,17 @@ import pytest
 from apps.orchestrator import org_model as om
 
 
+@pytest.fixture(autouse=True)
+def _restore_org_singleton():
+    """Several tests here call reload_org_model(), which mutates the global
+    ORG_MODEL singleton. Restore it after each test so later test modules
+    (e.g. test_stage_providers submitting through /api/run) don't inherit a
+    loaded org model that rejects their team."""
+    saved = om.ORG_MODEL
+    yield
+    om.ORG_MODEL = saved
+
+
 def _write(tmp_path, text: str) -> str:
     p = tmp_path / "org.yaml"
     p.write_text(text)

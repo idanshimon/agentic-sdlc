@@ -1133,13 +1133,19 @@ async def create_run(
             overrides[stage_key] = {k: v for k, v in val.items() if k in ("provider", "model", "via_apim")}
 
     principal = _principal(request)
+    # Canonicalize the team id at the ingest boundary so a run's decisions are
+    # written under the SAME partition the dashboard's LEDGER_MCP_TOKEN reads
+    # (KI-1 Bug B). The UI team selector submits bare slugs ("cardiology") while
+    # token scoping + backend defaults use the "team-" prefix; normalize once
+    # here and every downstream write (run + ledger) inherits the canonical id.
+    from .org_model import ORG_MODEL, UnknownTeamError, canonical_team_id
+    team_id = canonical_team_id(team_id)
     require_team(principal, team_id)
 
     # Configuration plane (Phase 1): resolve team_id against the org model. Once a
     # customer has authored org.yaml, an unknown team is refused rather than
     # written as an anonymous ledger entry (openspec: add-configuration-plane).
     # With no org.yaml loaded (bootstrap/demo), resolution is permissive.
-    from .org_model import ORG_MODEL, UnknownTeamError
     try:
         ORG_MODEL.resolve_team(team_id)
     except UnknownTeamError as exc:

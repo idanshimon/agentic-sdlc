@@ -42,6 +42,33 @@ class UnknownTeamError(Exception):
         )
 
 
+def canonical_team_id(team_id: str) -> str:
+    """Normalize a team_id to the canonical ``team-<slug>`` form.
+
+    The whole stack MUST agree on one spelling of a team id, or a run's
+    decisions get written under one partition (e.g. ``cardiology``) while the
+    dashboard's ``LEDGER_MCP_TOKEN`` reads another (``team-cardiology``) and the
+    Decisions view is silently empty (KI-1 Bug B). The UI historically submitted
+    bare slugs (``cardiology``) from its team selector while every backend
+    default and the token scoping use the ``team-`` prefix, so a run created
+    from the UI and a token minted for the same team never matched.
+
+    Rules (idempotent):
+      - trim + lowercase
+      - collapse internal whitespace/underscores to a single hyphen
+      - ensure exactly one leading ``team-`` prefix (``team-demo`` stays
+        ``team-demo``; ``cardiology`` becomes ``team-cardiology``; the org
+        wildcard ``__org__`` and the list wildcard ``*`` pass through untouched)
+    """
+    t = (team_id or "").strip().lower()
+    if not t or t in ("*", "__org__"):
+        return t
+    t = "-".join(part for part in t.replace("_", "-").split() if part)
+    if not t.startswith("team-"):
+        t = f"team-{t}"
+    return t
+
+
 @dataclass(frozen=True)
 class Team:
     id: str
@@ -72,9 +99,19 @@ class OrgModel:
     def resolve_team(self, team_id: str) -> Team:
         """Resolve a team_id to its Team. In bootstrap mode (no org loaded), synth
         a placeholder Team so the pipeline still runs. Once loaded, an unknown
-        team_id is a hard error (openspec scenario: unknown team is rejected)."""
+        team_id is a hard error (openspec scenario: unknown team is rejected).
+
+        Lookup is canonical-form-tolerant: a run submits the canonical
+        ``team-<slug>`` id, but an org.yaml may define teams under the bare slug
+        (``cardiology``) or the prefixed form. Match on the canonical form of
+        both so ``cardiology`` in org.yaml resolves a ``team-cardiology`` run and
+        vice-versa (KI-1 Bug B: id spelling must never silently mis-partition)."""
         if team_id in self.teams:
             return self.teams[team_id]
+        target = canonical_team_id(team_id)
+        for tid, team in self.teams.items():
+            if canonical_team_id(tid) == target:
+                return team
         if not self.loaded:
             _logger.info("org_model: bootstrap mode, synthesizing team %r", team_id)
             return Team(id=team_id, name=team_id, department="(unassigned)")
