@@ -130,23 +130,26 @@ def test_runs_single_status_uses_equality(client, fake_ledger):
                for p in fake._runs.last_params)
 
 
-def test_runs_admin_no_team_enables_cross_partition(client, fake_ledger):
-    """Regression: without a team filter (admin viewing all teams) the query
-    MUST opt into cross-partition, else Cosmos silently returns empty and the
-    /runs page shows nothing despite live runs across team partitions."""
+def test_runs_admin_no_team_lists_all_without_team_filter(client, fake_ledger):
+    """Regression: an admin/all-teams principal (teams={'*'}) must NOT produce a
+    literal team_id='*' filter — no run is stored under '*', so that empties the
+    /runs page. With no concrete team the SQL carries no team clause and lists
+    across all teams (cosmos 4.x async auto-handles cross-partition)."""
     fake = fake_ledger(run_items=[])
     resp = client.get("/api/runs")
     assert resp.status_code == 200
-    # No team scoping in the SQL, and cross-partition explicitly enabled.
     assert "c.team_id=@t" not in fake._runs.last_query
-    assert fake._runs.last_kwargs.get("enable_cross_partition_query") is True
-    assert "partition_key" not in fake._runs.last_kwargs
+    # No invalid SDK kwargs (enable_cross_partition_query / partition_key) — they
+    # raise TypeError on azure-cosmos async 4.x.
+    assert "enable_cross_partition_query" not in (fake._runs.last_kwargs or {})
+    assert "partition_key" not in (fake._runs.last_kwargs or {})
 
 
-def test_runs_team_scoped_uses_partition_key(client, fake_ledger):
-    """When team_id is given, scope to that single partition (no cross-partition)."""
+def test_runs_team_scoped_applies_where_clause(client, fake_ledger):
+    """When team_id is given, scope via the WHERE clause (this container is
+    partitioned on /run_id, so partition_key= would be wrong)."""
     fake = fake_ledger(run_items=[])
     resp = client.get("/api/runs?team_id=cardiology")
     assert resp.status_code == 200
-    assert fake._runs.last_kwargs.get("partition_key") == "cardiology"
-    assert "enable_cross_partition_query" not in fake._runs.last_kwargs
+    assert "c.team_id=@t" in fake._runs.last_query
+    assert "partition_key" not in (fake._runs.last_kwargs or {})
