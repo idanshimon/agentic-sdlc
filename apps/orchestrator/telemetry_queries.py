@@ -378,9 +378,16 @@ async def query_recent_runs(
     )
     out: list[dict] = []
     try:
-        async for item in ledger._runs.query_items(  # noqa: SLF001
-            query=query, parameters=params,
-        ):
+        # Cosmos silently returns EMPTY for a cross-partition query unless it's
+        # explicitly enabled. When team_id is given we can scope to that single
+        # partition; without it (admin viewing all teams) we MUST opt into
+        # cross-partition or the runs list comes back empty despite live data.
+        qkwargs: dict[str, Any] = {"query": query, "parameters": params}
+        if team_id:
+            qkwargs["partition_key"] = team_id
+        else:
+            qkwargs["enable_cross_partition_query"] = True
+        async for item in ledger._runs.query_items(**qkwargs):  # noqa: SLF001
             # Project to summary fields client-side.
             summary = {
                 "run_id": item.get("run_id"),

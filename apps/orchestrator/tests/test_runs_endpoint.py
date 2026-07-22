@@ -128,3 +128,25 @@ def test_runs_single_status_uses_equality(client, fake_ledger):
     assert "c.status=@st" in fake._runs.last_query
     assert any(p["name"] == "@st" and p["value"] == "failed"
                for p in fake._runs.last_params)
+
+
+def test_runs_admin_no_team_enables_cross_partition(client, fake_ledger):
+    """Regression: without a team filter (admin viewing all teams) the query
+    MUST opt into cross-partition, else Cosmos silently returns empty and the
+    /runs page shows nothing despite live runs across team partitions."""
+    fake = fake_ledger(run_items=[])
+    resp = client.get("/api/runs")
+    assert resp.status_code == 200
+    # No team scoping in the SQL, and cross-partition explicitly enabled.
+    assert "c.team_id=@t" not in fake._runs.last_query
+    assert fake._runs.last_kwargs.get("enable_cross_partition_query") is True
+    assert "partition_key" not in fake._runs.last_kwargs
+
+
+def test_runs_team_scoped_uses_partition_key(client, fake_ledger):
+    """When team_id is given, scope to that single partition (no cross-partition)."""
+    fake = fake_ledger(run_items=[])
+    resp = client.get("/api/runs?team_id=cardiology")
+    assert resp.status_code == 200
+    assert fake._runs.last_kwargs.get("partition_key") == "cardiology"
+    assert "enable_cross_partition_query" not in fake._runs.last_kwargs

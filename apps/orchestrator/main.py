@@ -85,6 +85,7 @@ _review_loop_registry = ReviewLoopRegistry()
 async def lifespan(app: FastAPI):
     global _ledger, _input_store
     validate_auth_configuration()
+    _config.validate_runtime_settings()
     init_telemetry()
     _ledger = Ledger()
     _input_store = ExecutionInputStore()
@@ -240,6 +241,27 @@ def _principal(request: Request) -> Principal:
     if principal is None:
         principal = principal_from_request(request)
     return principal
+
+
+def _scoped_team(principal: Principal, team_id: str | None) -> str | None:
+    """Resolve the effective team filter for a list/telemetry query.
+
+    An explicit team_id always wins. Otherwise auto-derive ONLY from a concrete
+    single-team membership — the wildcard "*" (admin / all-teams principal) must
+    NEVER become a literal team_id="*" filter: no run or ledger entry is stored
+    under "*", so that silently empties every list view. A "*"-only (or admin)
+    principal lists across all partitions.
+    """
+    if team_id:
+        return team_id
+    concrete = {t for t in principal.teams if t != "*"}
+    return next(iter(concrete)) if len(concrete) == 1 else None
+
+
+def _requires_explicit_team(principal: Principal) -> bool:
+    """A principal with no concrete single team AND no all-teams authority must
+    supply team_id explicitly (400) rather than silently seeing nothing."""
+    return not (principal.has_any_role("admin") or "*" in principal.teams)
 
 
 def _authorize_run(request: Request, run: RunState) -> Principal:
@@ -2148,10 +2170,10 @@ async def telemetry_decisions(
 ) -> dict:
     """Recent Decision Ledger entries, newest-first. See models.LedgerEntry."""
     principal = _principal(request)
-    scoped_team = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    scoped_team = _scoped_team(principal, team_id)
     if scoped_team:
         require_team(principal, scoped_team)
-    elif not principal.has_any_role("admin"):
+    elif _requires_explicit_team(principal):
         raise HTTPException(400, "team_id is required for multi-team telemetry")
     team_id = scoped_team
     if _ledger is None:
@@ -2166,9 +2188,9 @@ async def telemetry_decisions(
 async def telemetry_cost(request: Request, window: str = "24h", team_id: str | None = None) -> dict:
     """Cost + latency rollup across pipeline-runs in the window."""
     principal = _principal(request)
-    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    team_id = _scoped_team(principal, team_id)
     if team_id: require_team(principal, team_id)
-    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
+    elif _requires_explicit_team(principal): raise HTTPException(400, "team_id is required")
     if _ledger is None:
         return {
             "window": window, "total_runs": 0, "total_decisions": 0,
@@ -2183,9 +2205,9 @@ async def telemetry_cost(request: Request, window: str = "24h", team_id: str | N
 async def telemetry_classes(request: Request, window: str = "7d", team_id: str | None = None) -> dict:
     """Ambiguity-class drift signal: counts, acceptance, blast, trend arrows."""
     principal = _principal(request)
-    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    team_id = _scoped_team(principal, team_id)
     if team_id: require_team(principal, team_id)
-    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
+    elif _requires_explicit_team(principal): raise HTTPException(400, "team_id is required")
     if _ledger is None:
         return {"window": window, "total_decisions": 0, "classes": []}
     return await query_classes(_ledger, window=window, team_id=team_id)
@@ -2220,9 +2242,9 @@ async def compliance_decisions(
     from .compliance_query import completeness_summary, query_compliance
     from .telemetry_queries import parse_window
     principal = _principal(request)
-    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    team_id = _scoped_team(principal, team_id)
     if team_id: require_team(principal, team_id)
-    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
+    elif _requires_explicit_team(principal): raise HTTPException(400, "team_id is required")
 
     since_iso = since
     if since_iso is None and window:
@@ -2259,9 +2281,9 @@ async def list_runs(
     (status accepts comma-separated values, e.g. status=running,awaiting_gate).
     """
     principal = _principal(request)
-    team_id = team_id or (next(iter(principal.teams)) if len(principal.teams) == 1 else None)
+    team_id = _scoped_team(principal, team_id)
     if team_id: require_team(principal, team_id)
-    elif not principal.has_any_role("admin"): raise HTTPException(400, "team_id is required")
+    elif _requires_explicit_team(principal): raise HTTPException(400, "team_id is required")
     if _ledger is None:
         return {"items": [], "count": 0}
     items = await query_recent_runs(
