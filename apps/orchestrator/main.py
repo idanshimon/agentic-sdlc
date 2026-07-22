@@ -1180,6 +1180,24 @@ async def rerun(run_id: str, request: Request, body: dict | None = None) -> dict
     Returns the new run_id. The old run remains in _runs (audit chain preserved).
     """
     src = _runs.get(run_id)
+    if src is None and _ledger is not None:
+        # Cosmos fallback — the source run is durable but this pod restarted
+        # (deploy/scale) so it's no longer in the in-memory _runs dict. Mirrors
+        # get_run's hydration path; without it, retrying any run created before
+        # the last pod restart 404s ("source run not found") and the UI's retry
+        # button silently no-ops.
+        try:
+            doc = await _ledger.get_run(run_id)
+        except Exception as exc:
+            _logger.warning("Cosmos get_run failed during rerun for %s: %s", run_id, exc)
+            doc = None
+        if doc is not None:
+            try:
+                src = RunState.model_validate(doc)
+            except Exception as exc:
+                _logger.warning("Failed to re-hydrate Cosmos run doc %s for rerun: %s", run_id, exc)
+                raise HTTPException(500, "persisted run state is invalid") from exc
+            _runs[src.run_id] = src  # cache so the subsequent _drive/find works
     if src is None:
         raise HTTPException(404, "source run not found")
     _authorize_run(request, src)
