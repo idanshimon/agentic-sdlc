@@ -80,6 +80,23 @@ _ledger: Ledger | None = None
 _input_store: ExecutionInputStore | None = None
 _review_loop_registry = ReviewLoopRegistry()
 
+# Strong references to in-flight pipeline driver tasks. asyncio only keeps WEAK
+# references to tasks created via create_task(); a task not referenced elsewhere
+# can be garbage-collected mid-execution — killing the pipeline silently with no
+# exception, no failed event, no traceback (observed as real runs dying at the
+# codegen->review_scan boundary once the run objects grew). Hold a ref until the
+# task completes, then drop it. See CPython asyncio.create_task docs.
+_background_tasks: set = set()
+
+
+def _spawn(coro) -> None:
+    """create_task + retain a strong reference so the loop can't GC it mid-run."""
+    task = asyncio.create_task(coro)
+    if task is None:  # test harnesses stub create_task to return None
+        return
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -118,9 +135,9 @@ async def lifespan(app: FastAPI):
                     run.status = RunStatus.FAILED
                     return
                 raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
-                asyncio.create_task(_drive_from_stage(run.run_id, raw, next_stage))
+                _spawn(_drive_from_stage(run.run_id, raw, next_stage))
 
-            asyncio.create_task(continue_after_recovered_gate())
+            _spawn(continue_after_recovered_gate())
             return
         if _input_store is None or not run.input_ref or not run.input_sha256:
             _logger.error("Cannot resume %s: durable input unavailable", run.run_id)
@@ -130,7 +147,7 @@ async def lifespan(app: FastAPI):
         if plan.stage not in {Stage.ARCHITECT, Stage.TEST_PLAN, Stage.CODEGEN, Stage.REVIEW_SCAN, Stage.DELIVER}:
             _logger.error("Cannot safely resume %s from unsupported boundary %s", run.run_id, plan.stage)
             return
-        asyncio.create_task(_drive_from_stage(run.run_id, raw, plan.stage))
+        _spawn(_drive_from_stage(run.run_id, raw, plan.stage))
 
     try:
         summary = await recover_nonterminal_runs(
@@ -1190,7 +1207,7 @@ async def create_run(
     _runs[run.run_id] = run
     _queues[run.run_id] = asyncio.Queue()
     _prd_cache[run.run_id] = raw  # local optimization; durable ref is authoritative
-    asyncio.create_task(_drive(run.run_id, raw))
+    _spawn(_drive(run.run_id, raw))
     return {"run_id": run.run_id, "stream_url": f"/api/runs/{run.run_id}/stream"}
 
 
@@ -1261,7 +1278,7 @@ async def rerun(run_id: str, request: Request, body: dict | None = None) -> dict
     _runs[new_run.run_id] = new_run
     _queues[new_run.run_id] = asyncio.Queue()
     _prd_cache[new_run.run_id] = raw
-    asyncio.create_task(_drive(new_run.run_id, raw))
+    _spawn(_drive(new_run.run_id, raw))
     return {
         "run_id": new_run.run_id,
         "source_run_id": run_id,
