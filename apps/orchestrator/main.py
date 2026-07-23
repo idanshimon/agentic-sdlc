@@ -1644,6 +1644,20 @@ async def approve(run_id: str, decision: GateDecision, request: Request) -> dict
     - For gate-level approvals (e.g. design_review), resolution_text just describes the gate
     """
     run = _runs.get(run_id)
+    if run is None and _ledger is not None:
+        # Cache-miss rehydration: the in-memory _runs entry can be absent after a
+        # replica swap / restart while the run is parked at a gate. Pull the
+        # authoritative snapshot from Cosmos so gate approvals still land instead
+        # of 404'ing. Mirrors the rerun/finalize rehydrate pattern.
+        doc = await _ledger.get_run(run_id)
+        if doc is not None:
+            try:
+                run = RunState.model_validate(doc)
+                _runs[run_id] = run
+                if run_id not in _queues:
+                    _queues[run_id] = asyncio.Queue()
+            except Exception as exc:
+                _logger.warning("approve: failed to rehydrate run %s: %s", run_id, exc)
     if run is None:
         raise HTTPException(404, "run not found")
     principal = _authorize_run(request, run)
@@ -1830,6 +1844,16 @@ async def finalize_gate(run_id: str, request: Request, body: dict | None = None)
     before downstream stages auto-run).
     """
     run = _runs.get(run_id)
+    if run is None and _ledger is not None:
+        doc = await _ledger.get_run(run_id)
+        if doc is not None:
+            try:
+                run = RunState.model_validate(doc)
+                _runs[run_id] = run
+                if run_id not in _queues:
+                    _queues[run_id] = asyncio.Queue()
+            except Exception as exc:
+                _logger.warning("finalize: failed to rehydrate run %s: %s", run_id, exc)
     if run is None:
         raise HTTPException(404, "run not found")
     _authorize_run(request, run)
