@@ -518,6 +518,16 @@ async def _drive_from_stage(run_id: str, prd_text: str, start: Stage) -> None:
                 if lease_lost.is_set():
                     raise LeaseConflict("recovery lease lost; stopping stage execution")
                 await _push(run_id, ev)
+                if ev.status == "gate_open":
+                    # Pause at the gate and STOP this driver — do not run past it.
+                    # The gate's approval handler spawns a fresh continuation from
+                    # the next stage. Without this, a continuation started before
+                    # a gate would drive straight through it AND overlap with the
+                    # post-gate continuation, two tasks fighting over one lease
+                    # (one's cleanup nulls lease_owner -> the other dies with a
+                    # swallowed LeaseConflict right after codegen).
+                    await _open_gate(run, ev.stage)
+                    return
                 if ev.status == "completed":
                     checkpoint(run, ev.stage, "completed")
                 if ev.status == "failed":
