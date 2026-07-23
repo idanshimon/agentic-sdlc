@@ -161,7 +161,7 @@ function LaneHeaderNode({ data }: NodeProps) {
 
 export default function LineagePage() {
   const router = useRouter();
-  const { data, isLoading } = useDecisions({ limit: 200 });
+  const { data, isLoading } = useDecisions({ limit: 1000 });
   const entries = useMemo(() => data?.entries ?? [], [data]);
 
   const { graph, positioned, bands } = useMemo(() => {

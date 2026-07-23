@@ -24,7 +24,7 @@ export const tools: Record<string, ToolDef> = {
       type: "object",
       properties: {
         team_id: { type: "string" },
-        limit: { type: "number", minimum: 1, maximum: 200 },
+        limit: { type: "number", minimum: 1, maximum: 2000 },
         entry_type: { type: "string", enum: ["runtime", "meta"] },
         agent_session_id: { type: "string" },
         run_id: { type: "string" },

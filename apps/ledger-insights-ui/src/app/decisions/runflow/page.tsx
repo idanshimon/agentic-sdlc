@@ -119,7 +119,7 @@ interface PanelData {
 
 export default function RunFlowPage() {
   const router = useRouter();
-  const { data, isLoading } = useDecisions({ limit: 200 });
+  const { data, isLoading } = useDecisions({ limit: 1000 });
   const entries = useMemo(() => data?.entries ?? [], [data]);
   const runIds = useMemo(() => runIdsFrom(entries), [entries]);
 

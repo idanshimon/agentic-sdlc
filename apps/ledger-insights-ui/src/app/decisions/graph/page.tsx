@@ -95,7 +95,7 @@ interface PanelData {
 
 export default function DecisionsMapPage() {
   const router = useRouter();
-  const { data, isLoading } = useDecisions({ limit: 200 });
+  const { data, isLoading } = useDecisions({ limit: 1000 });
   const entries = useMemo(() => data?.entries ?? [], [data]);
 
   const [edgeKinds, setEdgeKinds] = useState<Set<GraphEdgeKind>>(() => defaultMapFilters().edgeKinds);
@@ -113,6 +113,10 @@ export default function DecisionsMapPage() {
     return applyMapFilters(full, { ...defaultMapFilters(), edgeKinds, onlyFlagged });
   }, [entries, edgeKinds, onlyFlagged]);
   const elements = useMemo(() => mapToCyElements(graph), [graph]);
+  // Honest cap notice: this view aggregates ALL runs' decisions, but the ledger
+  // read is bounded at 1000 most-recent entries. When we hit the ceiling, say so
+  // rather than implying the map is the complete history.
+  const atCap = entries.length >= 1000;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
@@ -191,8 +195,14 @@ export default function DecisionsMapPage() {
             <Scale className="h-5 w-5" /> Decision Map
           </span>
         }
-        description="How decisions, rules, runs and teaching connect. Green edges are the learning loop — an autopilot decision reusing a human's precedent. Click any node to focus its neighborhood and open its record."
+        description="Every decision across ALL runs for this team, woven into one governance network — decisions, the rules they cite, their runs, and teaching signals. Green edges are the learning loop: an autopilot decision reusing a human's precedent from an earlier run. Click any node to focus its neighborhood and open its record."
       />
+
+      {atCap && (
+        <div className="rounded-md border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-3 py-2 text-xs text-[var(--warning)]">
+          Showing the 1,000 most-recent decisions — the ledger holds more. This map is a recent-history view, not the complete archive.
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
         <Stat label="Decisions" value={graph.stats.decisions} />

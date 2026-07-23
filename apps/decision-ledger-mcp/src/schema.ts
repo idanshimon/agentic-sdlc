@@ -94,7 +94,7 @@ export const RuntimeEntrySchema = z.object({
 // fix-decisions-page-empty-on-cold-load for the full rationale.
 export const LedgerQueryInputSchema = z.object({
   team_id: z.string().optional(),
-  limit: z.number().int().min(1).max(200).optional().default(25),
+  limit: z.number().int().min(1).max(2000).optional().default(25),
   entry_type: z.enum(["runtime", "meta"]).optional(),
   agent_session_id: z.string().optional(),
   run_id: z.string().optional(),

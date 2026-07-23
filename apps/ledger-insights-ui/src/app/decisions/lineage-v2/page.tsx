@@ -180,7 +180,7 @@ interface PanelData {
 
 export default function LineageV2Page() {
   const router = useRouter();
-  const { data, isLoading } = useDecisions({ limit: 200 });
+  const { data, isLoading } = useDecisions({ limit: 1000 });
   const entries = useMemo(() => data?.entries ?? [], [data]);
   const graph = useMemo(() => buildPrecedentLineage(entries), [entries]);
   const elements = useMemo(() => lineageToCyElements(graph), [graph]);
