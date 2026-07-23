@@ -521,9 +521,14 @@ async def _drive_from_stage(run_id: str, prd_text: str, start: Stage) -> None:
         )) if lease_enabled and _ledger and run.lease_owner == owner else None
     )
     try:
-        for _, generator in _generators_from_stage(run, prd_text, start):
+        for _stage_name, generator in _generators_from_stage(run, prd_text, start):
             if lease_lost.is_set():
                 raise LeaseConflict("recovery lease lost; stopping stage execution")
+            _logger.info("_drive_from_stage[%s]: entering stage %s", run_id, _stage_name)
+            await _push(run_id, StageEvent(
+                run_id=run_id, stage=run.current_stage, status="progress",
+                message=f"[driver] entering {_stage_name}",
+            ))
             async for ev in generator:
                 if lease_lost.is_set():
                     raise LeaseConflict("recovery lease lost; stopping stage execution")
@@ -547,17 +552,22 @@ async def _drive_from_stage(run_id: str, prd_text: str, start: Stage) -> None:
             run_id=run_id, stage=Stage.DELIVER, status="completed",
             message=f"decisions.md written: {url}", payload={"decisions_md_url": url},
         ))
-    except Exception as exc:
+    except BaseException as exc:
         import traceback as _tb
         tb = _tb.format_exc()
-        _logger.exception("Recovered pipeline crashed: %s", exc)
+        _logger.exception("Recovered pipeline crashed at %s: %s", run.current_stage, exc)
         run.status = RunStatus.FAILED
-        await _push(run_id, StageEvent(
-            run_id=run_id, stage=run.current_stage, status="failed",
-            message=f"{type(exc).__name__}: {exc}",
-            payload={"error": str(exc), "error_type": type(exc).__name__,
-                     "traceback": tb[-2000:]},
-        ))
+        try:
+            await _push(run_id, StageEvent(
+                run_id=run_id, stage=run.current_stage, status="failed",
+                message=f"{type(exc).__name__}: {exc}",
+                payload={"error": str(exc), "error_type": type(exc).__name__,
+                         "traceback": tb[-2000:]},
+            ))
+        except Exception:
+            _logger.exception("failed to push failure event for %s", run_id)
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
     finally:
         lease_stop.set()
         if lease_task:
