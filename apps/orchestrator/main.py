@@ -545,17 +545,36 @@ async def _drive(run_id: str, prd_text: str) -> None:
             if ev.status == "gate_open":
                 await _open_gate(run, ev.stage)
 
-        for gen in (
-            stage_test_plan(run, prd_text=prd_text), stage_codegen(run),
-            stage_review_scan(run), stage_deliver(run),
+        for stage_name, gen in (
+            ("test_plan", stage_test_plan(run, prd_text=prd_text)),
+            ("codegen", stage_codegen(run)),
+            ("review_scan", stage_review_scan(run)),
+            ("deliver", stage_deliver(run)),
         ):
-            async for ev in gen:
-                await _push(run_id, ev)
-                if ev.status == "completed":
-                    checkpoint(run, ev.stage, "completed")
-                if ev.status == "failed":
-                    run.status = RunStatus.FAILED
-                    return
+            try:
+                async for ev in gen:
+                    await _push(run_id, ev)
+                    if ev.status == "completed":
+                        checkpoint(run, ev.stage, "completed")
+                    if ev.status == "failed":
+                        run.status = RunStatus.FAILED
+                        return
+            except Exception as stage_exc:
+                # Surface the REAL error for this stage into the failed event so
+                # it's visible in /api/runs/<id> instead of being swallowed with
+                # the stage stamped as the prior (already-completed) stage.
+                import traceback as _tb
+                tb = _tb.format_exc()
+                _logger.exception("Stage %s crashed: %s", stage_name, stage_exc)
+                run.status = RunStatus.FAILED
+                await _push(run_id, StageEvent(
+                    run_id=run_id, stage=run.current_stage, status="failed",
+                    message=f"{stage_name} failed: {type(stage_exc).__name__}: {stage_exc}",
+                    payload={"stage": stage_name, "error": str(stage_exc),
+                             "error_type": type(stage_exc).__name__,
+                             "traceback": tb[-2000:]},
+                ))
+                return
 
         run.status = RunStatus.COMPLETED
         url = await write_decisions_md(run)
