@@ -19,7 +19,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -2314,6 +2314,73 @@ async def list_runs(
         _ledger, team_id=team_id, status=status, limit=limit,
     )
     return {"items": items, "count": len(items)}
+
+
+@app.post("/api/admin/backfill-canonical-teams", tags=["Admin"])
+async def backfill_canonical_teams(request: Request, dry_run: bool = True) -> dict:
+    """One-shot migration: move runs + ledger entries written under a
+    non-canonical team_id (bare slug like ``cardiology``) to the canonical
+    ``team-<slug>`` partition so the dashboard's canonical-scoped token can read
+    them (KI-1 Bug B backfill).
+
+    - pipeline-runs is partitioned on /run_id, so a run's team_id is a plain
+      field → update in place (upsert).
+    - decision-ledger is partitioned on /team_id, so an entry must be
+      delete+recreate under the new partition key.
+
+    Admin-only. Defaults to dry_run=True (reports counts, writes nothing).
+    Idempotent: entries already canonical are skipped.
+    """
+    from .org_model import canonical_team_id
+    principal = _principal(request)
+    if not principal.has_any_role("admin"):
+        raise HTTPException(403, "admin role required")
+    if _ledger is None:
+        raise HTTPException(503, "ledger unavailable")
+
+    report: dict[str, Any] = {
+        "dry_run": dry_run,
+        "runs_scanned": 0, "runs_migrated": 0,
+        "ledger_scanned": 0, "ledger_migrated": 0, "ledger_skipped": 0,
+        "teams_seen": {},
+    }
+
+    # ---- 1. runs: update team_id field in place (cross-partition scan) ----
+    async for run_doc in _ledger._runs.query_items(  # noqa: SLF001
+        query="SELECT * FROM c",
+    ):
+        report["runs_scanned"] += 1
+        old = run_doc.get("team_id") or ""
+        canon = canonical_team_id(old)
+        report["teams_seen"][old] = report["teams_seen"].get(old, 0) + 1
+        if canon and canon != old:
+            if not dry_run:
+                run_doc["team_id"] = canon
+                await _ledger._runs.upsert_item(run_doc)  # noqa: SLF001
+            report["runs_migrated"] += 1
+
+    # ---- 2. ledger: delete+recreate under canonical partition ----
+    async for entry in _ledger._ledger.query_items(  # noqa: SLF001
+        query="SELECT * FROM c",
+    ):
+        report["ledger_scanned"] += 1
+        old = entry.get("team_id") or ""
+        canon = canonical_team_id(old)
+        if not canon or canon == old:
+            report["ledger_skipped"] += 1
+            continue
+        if not dry_run:
+            eid = entry.get("id")
+            new_doc = {k: v for k, v in entry.items() if not k.startswith("_")}
+            new_doc["team_id"] = canon
+            await _ledger._ledger.upsert_item(new_doc)  # noqa: SLF001
+            try:
+                await _ledger._ledger.delete_item(item=eid, partition_key=old)  # noqa: SLF001
+            except Exception as exc:  # noqa: BLE001
+                report.setdefault("delete_errors", []).append(f"{eid}: {exc}")
+        report["ledger_migrated"] += 1
+
+    return report
 
 
 # ---------- prompt-library endpoints -----------------------------------------
