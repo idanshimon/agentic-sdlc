@@ -20,6 +20,45 @@ from .models import (
 _logger = logging.getLogger("ledger_core.cosmos")
 
 
+# Payload keys that can carry large generated-code / document strings. These are
+# needed live (in-memory) for the deliver stage but must not bloat the durable
+# run doc, which is re-PUT on every event. Cap length in the persisted snapshot.
+_LARGE_PAYLOAD_KEYS = frozenset({
+    "code", "app_code", "test_code", "architecture", "test_plan",
+    "impl", "tests", "content", "decisions_md", "diff", "patch",
+})
+_MAX_PERSISTED_STR = 2000  # chars kept per large field in the durable doc
+
+
+def _trim_run_doc_payloads(doc: dict) -> None:
+    """Mutate a serialized run doc in place: replace oversized event-payload
+    strings with a short head + a length/hash marker so the durable snapshot
+    stays small. Idempotent and defensive — never raises on unexpected shapes.
+    """
+    import hashlib
+
+    events = doc.get("events")
+    if not isinstance(events, list):
+        return
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        payload = ev.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        for key, val in list(payload.items()):
+            if (
+                key in _LARGE_PAYLOAD_KEYS
+                and isinstance(val, str)
+                and len(val) > _MAX_PERSISTED_STR
+            ):
+                digest = hashlib.sha256(val.encode("utf-8")).hexdigest()[:12]
+                payload[key] = val[:_MAX_PERSISTED_STR]
+                payload[f"{key}__truncated"] = {
+                    "full_len": len(val), "sha256_12": digest,
+                }
+
+
 class InvariantWriteBlocked(Exception):
     """Raised when a write would contradict an invariant-class org entry."""
 
@@ -254,6 +293,15 @@ class LedgerClient:
         incoming["decision_outbox"] = authoritative.decision_outbox or run.decision_outbox
         incoming["run_version"] = max(authoritative.run_version, run.run_version)
         incoming["checkpoint_version"] = max(authoritative.checkpoint_version, run.checkpoint_version)
+        # Keep the persisted doc small: real codegen embeds ~9KB app + ~9KB test
+        # strings (under code/app_code/test_code) plus architecture/test_plan in
+        # EVERY event payload, and the whole run doc is re-PUT on every event.
+        # Left unbounded the doc balloons (66KB+ and climbing) until the async
+        # driver task starves/dies mid-review_scan and the run is reaped as
+        # FAILED with no exception. Trim oversized payload strings out of the
+        # DURABLE snapshot only — the live in-memory run keeps them for the
+        # deliver stage during the run.
+        _trim_run_doc_payloads(incoming)
         return await self.replace_run_strict(incoming, expected_etag=current["_etag"])
 
     async def save_run(self, doc) -> None:
