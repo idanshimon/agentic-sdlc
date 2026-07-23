@@ -505,10 +505,20 @@ async def _drive_from_stage(run_id: str, prd_text: str, start: Stage) -> None:
     owner = os.getenv("HOSTNAME", "orchestrator-local")
     lease_stop = asyncio.Event()
     lease_lost = asyncio.Event()
+    # The recovery lease is a MULTI-REPLICA failover guard. With a single replica
+    # it only causes harm: maintain_lease renews via replace_run_strict on a
+    # fixed etag, but _push writes a fresh run snapshot (bumping the etag) on
+    # every event. During a stage with many rapid events + long LLM calls
+    # (codegen), the lease renewal's CAS loses to _push, maintain_lease declares
+    # the lease lost, and the driver aborts with a LeaseConflict right after
+    # codegen — whose failed-event write then also loses the CAS, so it vanishes
+    # (the silent codegen->review_scan death). Gate the lease behind an opt-in
+    # env; default OFF so single-replica runs complete.
+    lease_enabled = os.getenv("ENABLE_RECOVERY_LEASE", "").strip().lower() in ("1", "true", "yes", "on")
     lease_task = (
         asyncio.create_task(maintain_lease(
             _ledger, run_id=run_id, owner=owner, stop=lease_stop, lost=lease_lost,
-        )) if _ledger and run.lease_owner == owner else None
+        )) if lease_enabled and _ledger and run.lease_owner == owner else None
     )
     try:
         for _, generator in _generators_from_stage(run, prd_text, start):
