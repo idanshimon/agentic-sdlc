@@ -346,6 +346,16 @@ async def _push(run_id: str, ev: StageEvent | None) -> None:
     if ev is not None and _ledger is not None:
         run = _runs.get(run_id)
         if run is not None:
+            # Persist main.py-emitted events (driver markers, failure events)
+            # into run.events. Stage generators append their own events to
+            # run.events internally, but events created in the orchestrator
+            # (e.g. the per-stage failure capture) were queued to SSE and saved
+            # via save_run_cas WITHOUT being appended — so they never showed in
+            # /api/runs/<id>. That silently hid every _drive-level failure event
+            # and its traceback. Append here (deduped against stage-appended
+            # events by identity) so orchestrator-emitted events are durable.
+            if ev not in run.events:
+                run.events.append(ev)
             try:
                 await _ledger.save_run_cas(run)
             except Exception as exc:
