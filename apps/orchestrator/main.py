@@ -627,6 +627,11 @@ async def _drive(run_id: str, prd_text: str) -> None:
             ("review_scan", stage_review_scan(run)),
             ("deliver", stage_deliver(run)),
         ):
+            _logger.info("_drive[%s]: entering stage %s", run_id, stage_name)
+            await _push(run_id, StageEvent(
+                run_id=run_id, stage=run.current_stage, status="progress",
+                message=f"[driver] entering {stage_name}",
+            ))
             try:
                 async for ev in gen:
                     await _push(run_id, ev)
@@ -635,7 +640,7 @@ async def _drive(run_id: str, prd_text: str) -> None:
                     if ev.status == "failed":
                         run.status = RunStatus.FAILED
                         return
-            except Exception as stage_exc:
+            except BaseException as stage_exc:
                 # Surface the REAL error for this stage into the failed event so
                 # it's visible in /api/runs/<id> instead of being swallowed with
                 # the stage stamped as the prior (already-completed) stage.
@@ -643,13 +648,18 @@ async def _drive(run_id: str, prd_text: str) -> None:
                 tb = _tb.format_exc()
                 _logger.exception("Stage %s crashed: %s", stage_name, stage_exc)
                 run.status = RunStatus.FAILED
-                await _push(run_id, StageEvent(
-                    run_id=run_id, stage=run.current_stage, status="failed",
-                    message=f"{stage_name} failed: {type(stage_exc).__name__}: {stage_exc}",
-                    payload={"stage": stage_name, "error": str(stage_exc),
-                             "error_type": type(stage_exc).__name__,
-                             "traceback": tb[-2000:]},
-                ))
+                try:
+                    await _push(run_id, StageEvent(
+                        run_id=run_id, stage=run.current_stage, status="failed",
+                        message=f"{stage_name} failed: {type(stage_exc).__name__}: {stage_exc}",
+                        payload={"stage": stage_name, "error": str(stage_exc),
+                                 "error_type": type(stage_exc).__name__,
+                                 "traceback": tb[-2000:]},
+                    ))
+                except Exception:
+                    _logger.exception("could not push failure event for %s", run_id)
+                if isinstance(stage_exc, (KeyboardInterrupt, SystemExit)):
+                    raise
                 return
 
         run.status = RunStatus.COMPLETED
