@@ -679,7 +679,11 @@ async def _open_gate(run: RunState, stage: Stage) -> None:
     checkpoint(run, stage, "completed")
 
 
-def _release_gate(run_id: str) -> None:
+def _release_gate(run_id: str) -> bool:
+    """Release the open gate. Returns True if a LIVE driver task was waiting on
+    the gate event (it will resume on its own), False if there was no waiter
+    (e.g. the run was rehydrated from Cosmos after a replica swap and needs an
+    explicit continuation task spawned by the caller)."""
     run = _runs.get(run_id)
     if run is not None and run.pending_gate:
         run.pending_gate["status"] = "resolved"
@@ -687,6 +691,8 @@ def _release_gate(run_id: str) -> None:
     ev = _gate_events.pop(run_id, None)
     if ev:
         ev.set()
+        return True
+    return False
 
 
 # ---------- routes ------------------------------------------------------------
@@ -1778,7 +1784,19 @@ async def approve(run_id: str, decision: GateDecision, request: Request) -> dict
     # to release the gate. Non-Resolver gates (e.g. design_review) still auto-release
     # because they are whole-stage approvals with no per-card cycle.
     if decision.gate and decision.gate != "resolver" and decision.decision_kind != "reject":
-        _release_gate(run_id)
+        had_live_waiter = _release_gate(run_id)
+        if not had_live_waiter:
+            # Rehydrated run (no live driver awaiting the design_review gate) —
+            # spawn continuation from the next stage after design_review.
+            raw = _prd_cache.get(run_id)
+            if raw is None and _input_store is not None and run.input_ref and run.input_sha256:
+                try:
+                    raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
+                    _prd_cache[run_id] = raw
+                except Exception as exc:
+                    _logger.warning("approve: could not load PRD for continuation of %s: %s", run_id, exc)
+            if raw is not None:
+                _spawn(_drive_from_stage(run_id, raw, Stage.TEST_PLAN))
     result = {
         "ok": True,
         "decisions_count": len(run.decisions),
@@ -1892,7 +1910,20 @@ async def finalize_gate(run_id: str, request: Request, body: dict | None = None)
         )
         if run.pending_gate:
             run.pending_gate["status"] = "resolved"
-        _release_gate(run_id)
+        had_live_waiter = _release_gate(run_id)
+        if not had_live_waiter:
+            # Run was rehydrated from Cosmos (no live _drive task awaiting the
+            # gate). Spawn an explicit continuation from the next stage so the
+            # pipeline actually advances instead of re-opening the gate.
+            raw = _prd_cache.get(run_id)
+            if raw is None and _input_store is not None and run.input_ref and run.input_sha256:
+                try:
+                    raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
+                    _prd_cache[run_id] = raw
+                except Exception as exc:
+                    _logger.warning("finalize: could not load PRD for continuation of %s: %s", run_id, exc)
+            if raw is not None:
+                _spawn(_drive_from_stage(run_id, raw, Stage.ARCHITECT))
         return result
 
     result = mutate(run)
