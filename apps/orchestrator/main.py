@@ -56,7 +56,7 @@ from ._pipeline_stages import ModelPolicyRefusal
 from .prompt_library import build_catalog_view, get_prompt, UnknownStageError
 from .recovery import PIPELINE_ORDER, checkpoint
 from .recovery_worker import recover_nonterminal_runs
-from .leases import LeaseConflict, maintain_lease, release_lease
+from .leases import LeaseConflict, acquire_lease, maintain_lease, release_lease
 from .review_dispatch import (
     ReviewLoopDispatch, ReviewLoopRegistry, identity_for,
 )
@@ -96,6 +96,32 @@ def _spawn(coro) -> None:
         return
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+
+
+async def _spawn_gate_continuation(run, run_id: str, from_stage) -> None:
+    """Continue a gate-released run that has no live driver task (rehydrated from
+    Cosmos after a replica swap / GC). Claim the lease for THIS replica and
+    persist it first — otherwise maintain_lease sees a foreign/absent owner and
+    immediately fires lease_lost, aborting the continuation with a swallowed
+    LeaseConflict right after codegen (the silent codegen->review_scan death)."""
+    raw = _prd_cache.get(run_id)
+    if raw is None and _input_store is not None and run.input_ref and run.input_sha256:
+        try:
+            raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
+            _prd_cache[run_id] = raw
+        except Exception as exc:
+            _logger.warning("gate-continuation: could not load PRD for %s: %s", run_id, exc)
+    if raw is None:
+        _logger.error("gate-continuation: no PRD available for %s; cannot continue", run_id)
+        return
+    owner = os.getenv("HOSTNAME", "orchestrator-local")
+    try:
+        acquire_lease(run, owner)
+        if _ledger:
+            await _ledger.save_run_cas(run)  # persist ownership so maintain_lease agrees
+    except Exception as exc:
+        _logger.warning("gate-continuation: lease claim failed for %s: %s", run_id, exc)
+    _spawn(_drive_from_stage(run_id, raw, from_stage))
 
 
 @asynccontextmanager
@@ -504,10 +530,15 @@ async def _drive_from_stage(run_id: str, prd_text: str, start: Stage) -> None:
             message=f"decisions.md written: {url}", payload={"decisions_md_url": url},
         ))
     except Exception as exc:
+        import traceback as _tb
+        tb = _tb.format_exc()
         _logger.exception("Recovered pipeline crashed: %s", exc)
         run.status = RunStatus.FAILED
         await _push(run_id, StageEvent(
-            run_id=run_id, stage=run.current_stage, status="failed", message=str(exc),
+            run_id=run_id, stage=run.current_stage, status="failed",
+            message=f"{type(exc).__name__}: {exc}",
+            payload={"error": str(exc), "error_type": type(exc).__name__,
+                     "traceback": tb[-2000:]},
         ))
     finally:
         lease_stop.set()
@@ -1787,16 +1818,8 @@ async def approve(run_id: str, decision: GateDecision, request: Request) -> dict
         had_live_waiter = _release_gate(run_id)
         if not had_live_waiter:
             # Rehydrated run (no live driver awaiting the design_review gate) —
-            # spawn continuation from the next stage after design_review.
-            raw = _prd_cache.get(run_id)
-            if raw is None and _input_store is not None and run.input_ref and run.input_sha256:
-                try:
-                    raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
-                    _prd_cache[run_id] = raw
-                except Exception as exc:
-                    _logger.warning("approve: could not load PRD for continuation of %s: %s", run_id, exc)
-            if raw is not None:
-                _spawn(_drive_from_stage(run_id, raw, Stage.TEST_PLAN))
+            # spawn continuation from test_plan (the stage after design_review).
+            await _spawn_gate_continuation(run, run_id, Stage.TEST_PLAN)
     result = {
         "ok": True,
         "decisions_count": len(run.decisions),
@@ -1913,17 +1936,9 @@ async def finalize_gate(run_id: str, request: Request, body: dict | None = None)
         had_live_waiter = _release_gate(run_id)
         if not had_live_waiter:
             # Run was rehydrated from Cosmos (no live _drive task awaiting the
-            # gate). Spawn an explicit continuation from the next stage so the
-            # pipeline actually advances instead of re-opening the gate.
-            raw = _prd_cache.get(run_id)
-            if raw is None and _input_store is not None and run.input_ref and run.input_sha256:
-                try:
-                    raw = (await _input_store.get(run.input_ref, run.input_sha256)).decode("utf-8")
-                    _prd_cache[run_id] = raw
-                except Exception as exc:
-                    _logger.warning("finalize: could not load PRD for continuation of %s: %s", run_id, exc)
-            if raw is not None:
-                _spawn(_drive_from_stage(run_id, raw, Stage.ARCHITECT))
+            # gate). Spawn an explicit continuation from architect so the
+            # pipeline advances instead of re-opening the gate.
+            await _spawn_gate_continuation(run, run_id, Stage.ARCHITECT)
         return result
 
     result = mutate(run)
