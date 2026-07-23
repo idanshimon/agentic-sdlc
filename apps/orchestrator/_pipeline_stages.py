@@ -218,7 +218,13 @@ async def _call(
         c_tok = resp.completion_tokens
     except Exception as exc:
         profile = os.getenv("EXECUTION_PROFILE", "development").strip().lower()
-        if profile not in {"demo", "test", "development"}:
+        # REQUIRE_LIVE_PROVIDERS forces fail-closed even in a dev/demo profile —
+        # so a real LLM is wired and a provider error surfaces loudly instead of
+        # silently stubbing (which then blocks at delivery as "synthetic
+        # output"). Decoupled from EXECUTION_PROFILE=production, which ALSO locks
+        # down auth; here we want real providers without the auth lockdown.
+        require_live = os.getenv("REQUIRE_LIVE_PROVIDERS", "").strip().lower() in ("1", "true", "yes", "on")
+        if require_live or profile not in {"demo", "test", "development"}:
             _logger.error(
                 "Provider call failed closed (%s/%s on %s): %s",
                 agent_name, stage_key, model, exc,
