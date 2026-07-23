@@ -2332,6 +2332,12 @@ async def backfill_canonical_teams(request: Request, dry_run: bool = True) -> di
     Idempotent: entries already canonical are skipped.
     """
     from .org_model import canonical_team_id
+    # Opt-in guard: a one-shot data-migration endpoint that DELETES + recreates
+    # ledger rows should not sit callable by default (AUTH_MODE=disabled makes
+    # every caller admin). Enable only for the migration window by setting
+    # ENABLE_TEAM_BACKFILL=1 on the container, then remove it.
+    if os.getenv("ENABLE_TEAM_BACKFILL", "").strip() not in ("1", "true", "yes"):
+        raise HTTPException(404, "not found")
     principal = _principal(request)
     if not principal.has_any_role("admin"):
         raise HTTPException(403, "admin role required")
