@@ -24,7 +24,7 @@ from apps.orchestrator.models import Blocker, ReviewVerdict, RunState, Stage
 
 def test_clean_code_yields_pass_verdict():
     verdict = rv.build_review_verdict(
-        {"src/main.py": "def handler():\n    return redacted_id()\n"},
+        {"src/main.py": "def redacted_id():\n    return '***'\ndef handler():\n    return redacted_id()\n"},
         team="defaults",
     )
     assert isinstance(verdict, ReviewVerdict)

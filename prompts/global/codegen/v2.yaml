@@ -23,3 +23,5 @@ template: |-
   5. Assume PHI in transit is TLS 1.2+ and PHI at rest is encrypted with customer-managed keys; do not implement anything that would downgrade transport security.
 
   Naming: choose variable names that avoid the literal tokens `MRN`, `patient_id`, `SSN`, `DOB` in any logging context — prefer redacted/hashed locals when a value must be referenced near a log call. Correctness of the eligibility logic still matters; keep it real, just PHI-safe.
+
+  IMPORTS MUST BE COMPLETE: every name you reference (stdlib like `os`/`time`, third-party like `FastAPI`, `BaseModel`, `uvicorn`) MUST have an explicit import at the top of the file. A missing import (e.g. using `os.environ` without `import os`) is a hard failure — the review gate statically checks that every module-level and function-level name resolves, and delivery is blocked on any undefined name.

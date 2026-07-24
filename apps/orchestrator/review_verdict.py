@@ -43,19 +43,35 @@ def _now_ref(run_id: str, attempt: int) -> str:
 
 def _static_runnability_blockers(code_files: dict[str, str]) -> "list[Blocker]":
     """Catch generated code that will not even import/run: syntax errors and
-    obvious use-before-import of stdlib modules (e.g. `time.time()` with no
+    use-before-definition of any name at module scope (e.g. `TestClient(app)`
+    with no `from fastapi.testclient import TestClient`, or `time.time()` with no
     `import time`). This is a governance guarantee that delivered code at least
-    parses and has its module references satisfied — the difference between
+    parses and has its module-level names resolvable — the difference between
     'plausible-looking' and 'actually runnable'. Deterministic, stdlib-only
-    (ast), so it runs identically in the pipeline and CI.
+    (ast + symtable), so it runs identically in the pipeline and CI.
+
+    Detection is scoped to MODULE-level references (import-time NameErrors), the
+    class of defect that breaks a delivered file on `import`/collection. It uses
+    Python's own symbol table so it generalizes to any undefined name (third
+    party like TestClient, stdlib like time, or a typo) rather than a hand
+    allowlist. Builtins are excluded; nested function/class scopes are not
+    flagged (their free vars may legitimately resolve to module globals or
+    late-bound names).
     """
     import ast
+    import builtins
+    import symtable
+
+    _BUILTINS = set(dir(builtins)) | {
+        "__name__", "__file__", "__doc__", "__package__", "__loader__",
+        "__spec__", "__builtins__", "__annotations__", "__dict__",
+    }
 
     blockers: list[Blocker] = []
     for path, content in code_files.items():
         if not path.endswith(".py"):
             continue
-        # 1. Syntax must parse.
+        # 1. Syntax must parse (and compile, catching a wider error class).
         try:
             tree = ast.parse(content, filename=path)
         except SyntaxError as exc:
@@ -65,50 +81,90 @@ def _static_runnability_blockers(code_files: dict[str, str]) -> "list[Blocker]":
                 file=path, line=exc.lineno or 1, phi=False,
             ))
             continue
-        # 2. Collect imported top-level names (import x / from x import y / as z).
-        imported: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for a in node.names:
-                    imported.add((a.asname or a.name).split(".")[0])
-            elif isinstance(node, ast.ImportFrom):
-                for a in node.names:
-                    imported.add(a.asname or a.name)
-        # locally-bound names (defs, classes, assignments, args, comprehensions)
-        bound: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                bound.add(node.name)
-            elif isinstance(node, ast.arg):
-                bound.add(node.arg)
-            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                bound.add(node.id)
-            elif isinstance(node, ast.alias):
-                bound.add((node.asname or node.name).split(".")[0])
-        # 3. Flag `MODULE.attr` where MODULE is a known stdlib module that is
-        #    neither imported nor locally bound → use-before-import (NameError).
-        _COMMON_STDLIB = {
-            "time", "os", "sys", "json", "re", "math", "random", "uuid",
-            "hashlib", "datetime", "logging", "asyncio", "base64", "collections",
-            "itertools", "functools", "typing", "pathlib", "subprocess",
+        try:
+            table = symtable.symtable(content, path, "exec")
+        except (SyntaxError, ValueError):
+            continue
+
+        # 2. Module-scope names that are referenced but never bound anywhere in
+        #    module scope (not imported, assigned, def/class'd, or global'd) and
+        #    are not builtins → they will NameError at import time.
+        module_defined: set[str] = set()
+        module_referenced: set[str] = set()
+        for sym in table.get_symbols():
+            if sym.is_assigned() or sym.is_imported() or sym.is_parameter():
+                module_defined.add(sym.get_name())
+            # namespaces (def/class) bind their own name in the module scope
+            if sym.is_namespace():
+                module_defined.add(sym.get_name())
+            if sym.is_referenced():
+                module_referenced.add(sym.get_name())
+
+        undefined = {
+            n for n in module_referenced
+            if n not in module_defined and n not in _BUILTINS
         }
-        seen: set[tuple[str, int]] = set()
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.Attribute)
-                    and isinstance(node.value, ast.Name)
-                    and node.value.id in _COMMON_STDLIB
-                    and node.value.id not in imported
-                    and node.value.id not in bound):
-                key = (node.value.id, getattr(node, "lineno", 1))
-                if key in seen:
-                    continue
-                seen.add(key)
+
+        # 3. Map each undefined name to the first line it's used on a MODULE-level
+        #    statement (an import-time NameError), for a precise, actionable
+        #    blocker. Only flag names actually used at module top level.
+        module_level_names: dict[str, int] = {}
+        for node in tree.body:  # top-level statements only
+            for sub in ast.walk(node):
+                if (isinstance(sub, ast.Name)
+                        and isinstance(sub.ctx, ast.Load)
+                        and sub.id in undefined
+                        and sub.id not in module_level_names):
+                    module_level_names[sub.id] = getattr(sub, "lineno", 1)
+
+        for name, line in sorted(module_level_names.items(), key=lambda kv: kv[1]):
+            blockers.append(Blocker(
+                check="static-runnability",
+                rule="runnability/v0.1.0/IMPORT-001",
+                detail=f"name `{name}` is used at module scope but never defined "
+                       f"or imported (NameError at import time)",
+                file=path, line=line, phi=False,
+            ))
+
+        # 4. Function/method bodies: a name that resolves to a module GLOBAL
+        #    (free var with no local binding) but is never defined at module
+        #    scope and isn't a builtin → NameError when that function runs
+        #    (e.g. `time.time()` inside a test with no top-level `import time`).
+        #    Walk nested scopes via symtable so comprehensions/args/locals are
+        #    correctly excluded.
+        def _walk_scopes(tbl):
+            for child in tbl.get_children():
+                yield child
+                yield from _walk_scopes(child)
+
+        fn_undefined: dict[str, int] = {}
+        for scope in _walk_scopes(table):
+            if scope.get_type() != "function":
+                continue
+            for sym in scope.get_symbols():
+                nm = sym.get_name()
+                if (sym.is_global()
+                        and sym.is_referenced()
+                        and not sym.is_assigned()
+                        and nm not in module_defined
+                        and nm not in _BUILTINS
+                        and nm not in fn_undefined):
+                    fn_undefined[nm] = 0  # line filled from the AST below
+
+        if fn_undefined:
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Name)
+                        and isinstance(node.ctx, ast.Load)
+                        and node.id in fn_undefined
+                        and fn_undefined[node.id] == 0):
+                    fn_undefined[node.id] = getattr(node, "lineno", 1)
+            for name, line in sorted(fn_undefined.items(), key=lambda kv: kv[1]):
                 blockers.append(Blocker(
                     check="static-runnability",
                     rule="runnability/v0.1.0/IMPORT-001",
-                    detail=f"uses `{node.value.id}.*` but never imports `{node.value.id}` "
-                           f"(NameError at runtime)",
-                    file=path, line=getattr(node, "lineno", 1), phi=False,
+                    detail=f"name `{name}` is used in a function but never defined "
+                           f"or imported at module scope (NameError at call time)",
+                    file=path, line=line or 1, phi=False,
                 ))
     return blockers
 
