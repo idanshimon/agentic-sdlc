@@ -91,3 +91,40 @@ Per the two-stream model, this workflow belongs on **both**:
   previously-missing CI.
 - **the delivery repo** (where the factory's produced PRs land) — demonstrates
   that the dark factory's output is gated before it can merge.
+
+## Context-scoped rule matching
+
+A pattern rule may declare two optional fields so it can express its real intent
+declaratively (matched identically by the CI lane `enforce_bundles.scan_file` and
+the pipeline `review_verdict._scan_text` — one matcher, no drift):
+
+| Field | Meaning |
+|---|---|
+| `pattern` | The primary token/shape that must appear on a line (required). |
+| `context_pattern` | Optional. The line must ALSO match this for the rule to fire. |
+| `safe_wrapper_pattern` | Optional. If the line matches this, it is EXEMPT even when `pattern` + `context_pattern` match. |
+
+A line violates iff `pattern` AND (`context_pattern` absent or matches) AND NOT
+`safe_wrapper_pattern`. **PHI-001** uses all three so it flags *cleartext logging*
+of patient identifiers (its HIPAA intent) without blocking the legitimate use of
+those identifiers as domain field/param names — a real eligibility service must
+name a `patient_id` field. It fires on `logger.info(f'patient {mrn}')` but passes
+`patient_id: str = Field(...)` and redacted logging like `_redact(mrn)`.
+
+## Static runnability gate (pipeline review)
+
+Beyond the bundle pattern rules, the pipeline review (`review_verdict`) runs a
+deterministic **static-runnability** check on every generated Python file:
+
+- **`runnability/v0.1.0/SYNTAX-001`** — the file must parse.
+- **`runnability/v0.1.0/IMPORT-001`** — every referenced name must resolve. Uses
+  Python's `symtable` to flag any name used at module scope (import-time
+  NameError) or inside a function (call-time NameError) that is never
+  defined/imported and is not a builtin. Excludes comprehension locals,
+  parameters, and forward references between module-level functions.
+
+This makes "the delivered code actually runs" a first-class governance guarantee:
+a missing `import os`, `from fastapi.testclient import TestClient`, or `import
+time` is a BLOCK that stops delivery — not a defect a team discovers on checkout.
+The gate guarantees the code *runs*; it does not assert that every generated
+business-logic test passes (that remains the test suite's job).

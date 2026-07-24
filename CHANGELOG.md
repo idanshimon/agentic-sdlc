@@ -2,6 +2,93 @@
 
 All notable changes to the v0.7 reference design.
 
+## [0.10.0] — 2026-07-24 — real-LLM end-to-end, run-lifecycle stability, codegen governance
+
+The pipeline now runs end-to-end on a real LLM in the v07 resource group and
+opens real delivery PRs — and this release makes that path actually complete and
+adoptable, not just reachable. Three themes, each a strict-validated OpenSpec
+change.
+
+### Added — wire real LLM providers (openspec: `wire-real-llm-providers`)
+
+- Keyless Managed-Identity auth in `providers/aoai.py` (`DefaultAzureCredential`
+  + Cognitive Services bearer token) — no API key required *(e291d6b)*.
+- `REQUIRE_LIVE_PROVIDERS` flag: fail-closed on provider errors without the
+  production auth lockdown, so a demo can run real models with `AUTH_MODE=disabled`
+  *(e291d6b)*.
+- Ledger query cap 200 → 2000; graph views fetch 1000 with an honest cap notice
+  *(7581829)*. One-shot team backfill gated behind `ENABLE_TEAM_BACKFILL`
+  *(1869783)*.
+- Verified live: real GPT-4.1 producing multi-KB code at real cost across
+  eligibility, vitals-streaming, and payer-contract (Neo4j) PRDs.
+
+### Added — stabilize run lifecycle execution (openspec: `stabilize-run-lifecycle-execution`)
+
+- Strong-referenced `_spawn` helper so pipeline driver tasks are not
+  garbage-collected mid-run *(dccffc4)*.
+- `_push` now persists orchestrator-emitted events into `run.events`, making
+  driver failures + tracebacks observable via the API *(dc03b49, 16241ba)*.
+- Recovery lease made CAS-race-resistant — survives the owner's own per-event
+  writes, loses the lease only on a real ownership change; enables safe
+  horizontal scale *(e172ac4, 94be94e, 3db1310)*.
+- Approve/finalize rehydrate the run from Cosmos on cache-miss; gate release on a
+  rehydrated run spawns a continuation; single-driver-per-segment gate flow
+  *(a47c977, 160db7f, c01eb16, 9460029)*.
+- Durable run doc trims oversized code payloads (live run keeps full artifacts)
+  *(8e5528e)*.
+
+### Added — harden codegen governance quality (openspec: `harden-codegen-governance-quality`)
+
+- **Context-scoped PHI-001**: new declarative `context_pattern` +
+  `safe_wrapper_pattern` bundle-rule fields, so the rule flags cleartext PHI
+  *logging* without blocking legitimate domain field/param names; one matcher
+  shared by the CI lane and the pipeline review *(17191bd, a13d4f5)*.
+- **Static runnability gate**: review-scan now statically proves generated code
+  parses and every name resolves (symtable-based, module + function scope), so
+  unrunnable code (missing `import os`, `TestClient`, `time`) is a first-class
+  BLOCK *(07b0155, 72e9f4b)*.
+- **Delivered-layout prompts**: codegen delivers `src/main.py`, tests import
+  `from main import app` (was a broken `from app import app`) — delivered suites
+  are now collectable *(07b0155, 72e9f4b)*.
+- PHI-safe codegen prompt so generated healthcare code redacts by construction
+  *(b6cfca4)*.
+
+### Fixed
+
+- Silent codegen→review_scan run failures — root cause was `_push` never
+  persisting driver events (hid the traceback), compounded by GC'd driver tasks
+  and the lease CAS race. All three fixed.
+- PHI-001 blocking 100% of legitimate healthcare code (blanket token match).
+- Delivered test suites failing at collection (`ModuleNotFoundError: app`).
+- Generated code shipping missing imports (now blocked by the runnability gate).
+
+### Tests
+
+- 440 orchestrator tests pass (was 427 at session start; +13).
+- New test files: `test_phi001_context_scoped.py`, `test_static_runnability.py`,
+  `test_lease_cas_race.py`.
+
+### Deployed (all services green)
+
+- `ca-orchestrator-vnet--0000040` (real AOAI, runnability gate, CAS-safe lease,
+  min=1/max=3 with `ENABLE_RECOVERY_LEASE=1`).
+- `ca-ledger-mcp-vnet--0000004`, `ca-ledger-ui-vnet--0000028` unchanged.
+
+### Openspec status (strict-validated this session)
+
+- ✅ `wire-real-llm-providers` — tasks 100% complete
+- ✅ `stabilize-run-lifecycle-execution` — tasks 100% complete
+- ✅ `harden-codegen-governance-quality` — tasks 100% complete
+
+### Known follow-ons
+
+- Generated code still emits Pydantic v1 idioms (`@validator`, `.dict()`,
+  `Field(example=)`) — deprecation warnings, not failures; a prompt note would fix.
+- Business-logic test quality varies (a delivered suite may have a slow-SLA or
+  logic test that fails); the runnability gate guarantees the code *runs*, not
+  that every generated contract test passes.
+- Databricks-Claude routing for architect/codegen remains unimplemented.
+
 ## [0.9.0] — 2026-07-12 — decision graph views (Map / Lineage / Run Flow)
 
 The `/decisions` table and activity feed read the record beautifully but cannot
