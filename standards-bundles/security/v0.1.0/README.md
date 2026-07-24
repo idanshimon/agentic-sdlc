@@ -30,3 +30,28 @@ mis-edited to permit PHI fixes, the validator refuses).
 Examples:
 - `security/v0.1.0/PHI-001`
 - `security/v0.1.0/SECRET-001`
+
+## Context-scoped rule matching
+
+Pattern rules support three fields so a rule can express its true intent
+declaratively (matched identically by the CI lane `enforce_bundles.scan_file`
+and the pipeline `review_verdict._scan_text` — one matcher, no drift):
+
+| Field | Meaning |
+|---|---|
+| `pattern` | The primary token/shape that must appear on a line (required). |
+| `context_pattern` | Optional. The line must ALSO match this for the rule to fire. |
+| `safe_wrapper_pattern` | Optional. If the line matches this, it is EXEMPT even when `pattern` + `context_pattern` match. |
+
+A line violates iff: `pattern` **AND** (`context_pattern` absent or matches)
+**AND NOT** `safe_wrapper_pattern`.
+
+**PHI-001** uses all three so it flags *cleartext logging* of patient
+identifiers — its actual HIPAA intent — without blocking the legitimate use of
+those identifiers as domain field/param names (a real eligibility service must
+name a `patient_id` field). It fires on `logger.info(f'patient {mrn}')` but
+passes `patient_id: str = Field(...)`, `def check(mrn)`, and redacted logging
+such as `logger.info(f'{_redact(mrn)}')` / `patient_id_redacted()`. The rule's
+own `test_cases` block is enforced as a contract by
+`tests/test_phi001_context_scoped.py`.
+
