@@ -1,13 +1,13 @@
 prompt_id: codegen-tests-global
 version: v1
-status: published
+status: superseded
 scope: global
 owner_persona: sre
 stage: codegen-tests
 model_compat_notes: |-
   Production prompt extracted from apps/orchestrator/_pipeline_stages.py at commit acc5420. Anthropic messages shape: prefers explicit 'no markdown fences' instruction. OpenAI: JSON-mode safe via APIM. Gemini: tolerates OpenAI-shaped messages.
 effective_from: '2026-06-16T00:00:00Z'
-superseded_by:
+superseded_by: v2
 git_sha: MIGRATION_PROD_PROMPTS
 authored_by: platform-team@microsoft.com
 reason: |-

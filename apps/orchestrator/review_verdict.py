@@ -41,6 +41,78 @@ def _now_ref(run_id: str, attempt: int) -> str:
     return f"verdict-{run_id[:8]}-{attempt}"
 
 
+def _static_runnability_blockers(code_files: dict[str, str]) -> "list[Blocker]":
+    """Catch generated code that will not even import/run: syntax errors and
+    obvious use-before-import of stdlib modules (e.g. `time.time()` with no
+    `import time`). This is a governance guarantee that delivered code at least
+    parses and has its module references satisfied — the difference between
+    'plausible-looking' and 'actually runnable'. Deterministic, stdlib-only
+    (ast), so it runs identically in the pipeline and CI.
+    """
+    import ast
+
+    blockers: list[Blocker] = []
+    for path, content in code_files.items():
+        if not path.endswith(".py"):
+            continue
+        # 1. Syntax must parse.
+        try:
+            tree = ast.parse(content, filename=path)
+        except SyntaxError as exc:
+            blockers.append(Blocker(
+                check="static-runnability", rule="runnability/v0.1.0/SYNTAX-001",
+                detail=f"file does not parse: {exc.msg}",
+                file=path, line=exc.lineno or 1, phi=False,
+            ))
+            continue
+        # 2. Collect imported top-level names (import x / from x import y / as z).
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    imported.add((a.asname or a.name).split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                for a in node.names:
+                    imported.add(a.asname or a.name)
+        # locally-bound names (defs, classes, assignments, args, comprehensions)
+        bound: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(node.name)
+            elif isinstance(node, ast.arg):
+                bound.add(node.arg)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                bound.add(node.id)
+            elif isinstance(node, ast.alias):
+                bound.add((node.asname or node.name).split(".")[0])
+        # 3. Flag `MODULE.attr` where MODULE is a known stdlib module that is
+        #    neither imported nor locally bound → use-before-import (NameError).
+        _COMMON_STDLIB = {
+            "time", "os", "sys", "json", "re", "math", "random", "uuid",
+            "hashlib", "datetime", "logging", "asyncio", "base64", "collections",
+            "itertools", "functools", "typing", "pathlib", "subprocess",
+        }
+        seen: set[tuple[str, int]] = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Attribute)
+                    and isinstance(node.value, ast.Name)
+                    and node.value.id in _COMMON_STDLIB
+                    and node.value.id not in imported
+                    and node.value.id not in bound):
+                key = (node.value.id, getattr(node, "lineno", 1))
+                if key in seen:
+                    continue
+                seen.add(key)
+                blockers.append(Blocker(
+                    check="static-runnability",
+                    rule="runnability/v0.1.0/IMPORT-001",
+                    detail=f"uses `{node.value.id}.*` but never imports `{node.value.id}` "
+                           f"(NameError at runtime)",
+                    file=path, line=getattr(node, "lineno", 1), phi=False,
+                ))
+    return blockers
+
+
 def build_review_verdict(
     code_files: dict[str, str],
     *,
@@ -52,7 +124,10 @@ def build_review_verdict(
     structured verdict. `code_files` maps a display path -> file content.
 
     Reuses enforce_bundles.load_ci_rules + scan_file so the CI lane and the
-    pipeline review agree on exactly the same rule-set and matcher.
+    pipeline review agree on exactly the same rule-set and matcher. Also runs a
+    static runnability check (syntax + use-before-import) so unrunnable
+    generated code is a first-class blocker, not something a team discovers on
+    checkout.
     """
     pins = eb.load_pins(_BUNDLES_ROOT / "PINS.yaml")
     resolved = eb.resolve_versions(pins, team)
@@ -71,6 +146,9 @@ def build_review_verdict(
                 line=viol.line,
                 phi=viol.phi,
             ))
+
+    # Static runnability: syntax + use-before-import (does the code actually run?)
+    blockers.extend(_static_runnability_blockers(code_files))
 
     status = "FAIL" if blockers else "PASS"
     return ReviewVerdict(
