@@ -45,13 +45,29 @@ class BundleLoadError(Exception):
 
 @dataclasses.dataclass(frozen=True)
 class CIRule:
-    """A single CI-enforceable rule: a compiled regex + its bundle citation."""
+    """A single CI-enforceable rule: a compiled regex + its bundle citation.
+
+    Context-scoped matching (all optional, default to legacy single-pattern
+    behaviour when absent):
+      * ``pattern``              — the primary token/shape that must appear.
+      * ``context_pattern``      — the line must ALSO match this for the rule to
+                                   fire (e.g. "only inside a logging call").
+      * ``safe_wrapper_pattern`` — if the line matches this, it is EXEMPT even
+                                   when pattern+context match (e.g. the value is
+                                   wrapped in a redaction/hash helper).
+    A violation requires: pattern AND (context_pattern is None OR matches)
+    AND NOT (safe_wrapper_pattern matches). This lets a rule express its real
+    intent (e.g. PHI-001 = cleartext *logging*, not legitimate field names)
+    declaratively in the bundle, with zero per-rule logic in the scanner.
+    """
     dept: str
     version: str
     rule_id: str
     title: str
     pattern: str
     phi: bool = False
+    context_pattern: Optional[str] = None
+    safe_wrapper_pattern: Optional[str] = None
 
     @property
     def citation(self) -> str:
@@ -64,6 +80,45 @@ class CIRule:
             raise BundleLoadError(
                 f"rule {self.citation} has an invalid pattern: {exc}"
             ) from exc
+
+    def compiled_context(self) -> "Optional[re.Pattern[str]]":
+        if not self.context_pattern:
+            return None
+        try:
+            return re.compile(self.context_pattern)
+        except re.error as exc:
+            raise BundleLoadError(
+                f"rule {self.citation} has an invalid context_pattern: {exc}"
+            ) from exc
+
+    def compiled_safe_wrapper(self) -> "Optional[re.Pattern[str]]":
+        if not self.safe_wrapper_pattern:
+            return None
+        try:
+            return re.compile(self.safe_wrapper_pattern)
+        except re.error as exc:
+            raise BundleLoadError(
+                f"rule {self.citation} has an invalid safe_wrapper_pattern: {exc}"
+            ) from exc
+
+    def matches_line(self, line: str,
+                     _rx: "Optional[re.Pattern[str]]" = None,
+                     _ctx: "Optional[re.Pattern[str]]" = None,
+                     _safe: "Optional[re.Pattern[str]]" = None) -> bool:
+        """True iff this rule flags ``line`` under context-scoped semantics.
+
+        Pass pre-compiled patterns to avoid recompiling per line.
+        """
+        rx = _rx or self.compiled()
+        if not rx.search(line):
+            return False
+        ctx = _ctx if _ctx is not None else self.compiled_context()
+        if ctx is not None and not ctx.search(line):
+            return False
+        safe = _safe if _safe is not None else self.compiled_safe_wrapper()
+        if safe is not None and safe.search(line):
+            return False
+        return True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -152,6 +207,10 @@ def select_ci_rules_from_file(
             dept=dept, version=version,
             rule_id=str(rule["id"]), title=str(rule.get("title", rule["id"])),
             pattern=str(rule["pattern"]), phi=bool(rule.get("phi", False)),
+            context_pattern=(str(rule["context_pattern"])
+                             if rule.get("context_pattern") else None),
+            safe_wrapper_pattern=(str(rule["safe_wrapper_pattern"])
+                                  if rule.get("safe_wrapper_pattern") else None),
         ))
     return out
 
@@ -208,11 +267,14 @@ def scan_file(
     except (OSError, UnicodeError):
         # An unreadable changed file is a finding, not a silent pass.
         return [Violation(disp, 0, "READ-ERROR", "enforcer/read", f"could not read {disp}")]
-    compiled = [(r, r.compiled()) for r in rules]
+    compiled = [
+        (r, r.compiled(), r.compiled_context(), r.compiled_safe_wrapper())
+        for r in rules
+    ]
     violations: list[Violation] = []
     for lineno, line in enumerate(text.splitlines(), start=1):
-        for rule, rx in compiled:
-            if rx.search(line):
+        for rule, rx, ctx, safe in compiled:
+            if rule.matches_line(line, _rx=rx, _ctx=ctx, _safe=safe):
                 violations.append(Violation(
                     display_path=disp, line=lineno, rule_id=rule.rule_id,
                     citation=rule.citation, title=rule.title, phi=rule.phi,

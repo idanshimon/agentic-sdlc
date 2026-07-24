@@ -82,12 +82,20 @@ def build_review_verdict(
 
 
 def _scan_text(content: str, rules, display_path: str):
-    """Apply enforce_bundles rules to raw text (no temp file needed)."""
-    compiled = [(r, r.compiled()) for r in rules]
+    """Apply enforce_bundles rules to raw text (no temp file needed).
+
+    Uses the same context-scoped matcher as the CI lane (CIRule.matches_line),
+    so pipeline review and CI agree on exactly which lines violate — including
+    context_pattern / safe_wrapper_pattern semantics (e.g. PHI-001 fires only on
+    cleartext logging, not legitimate field/param usage)."""
+    compiled = [
+        (r, r.compiled(), r.compiled_context(), r.compiled_safe_wrapper())
+        for r in rules
+    ]
     out = []
     for lineno, line in enumerate(content.splitlines(), start=1):
-        for rule, rx in compiled:
-            if rx.search(line):
+        for rule, rx, ctx, safe in compiled:
+            if rule.matches_line(line, _rx=rx, _ctx=ctx, _safe=safe):
                 out.append(eb.Violation(
                     display_path=display_path, line=lineno,
                     rule_id=rule.rule_id, citation=rule.citation,

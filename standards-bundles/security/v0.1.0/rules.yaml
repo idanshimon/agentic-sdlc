@@ -18,13 +18,29 @@ rules:
     enforcement:
       pipeline_stages: [codegen, review-scan]
       ide_hooks: [pre-tool-use, post-tool-use]
-    pattern: '(?i)(MRN|patient_id|SSN|DOB[\s_-]*[0-9]{4})'
+    # PHI-001 targets CLEARTEXT LOGGING of identifiers, not their legitimate use
+    # as domain fields/params (a real eligibility service unavoidably names a
+    # `patient_id` field). Enforcement is therefore context-scoped:
+    #   * `context_pattern` — the line must invoke a logging/output sink.
+    #   * `pattern`         — a raw PHI identifier token appears on that line.
+    #   * `safe_wrapper_pattern` — …UNLESS the identifier is wrapped by a
+    #                              redaction/hash/mask helper (e.g. _redact(mrn),
+    #                              mask(patient_id), patient_id_redacted()).
+    # A match requires context_pattern AND pattern AND NOT safe_wrapper_pattern.
+    # This makes the rule match its own test cases (below) exactly.
+    context_pattern: '(?i)\b(logger|logging|log|print)\b|\.(info|debug|warning|warn|error|critical|exception|write)\s*\(|sys\.std(out|err)'
+    pattern: '(?i)(?<![\w(])\b(MRN|patient_id|SSN|DOB)\b(?!\s*\()'
+    safe_wrapper_pattern: '(?i)\b(redact|mask|hash|hash_id|deidentify|de_identify|scrub|anonymize|_redact|redacted)\w*\s*\(|(MRN|patient_id|SSN|DOB)_?(redacted|masked|hashed|hash)'
     severity: BLOCK
     rationale: HIPAA Safe Harbor; logs are persistent and accessible to ops.
     test_cases:
       - input: "logger.info(f'patient {mrn} updated')"
         expect: BLOCK
       - input: "logger.info(f'patient {patient_id_redacted()} updated')"
+        expect: PASS
+      - input: "patient_id: str = Field(...)"
+        expect: PASS
+      - input: "logger.info(f'patient {_redact(mrn)} updated')"
         expect: PASS
 
   - id: PHI-002
