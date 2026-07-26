@@ -1,11 +1,13 @@
 "use client";
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
-import { GitBranch, ArrowRight, Table as TableIcon, LayoutGrid } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { GitBranch, ArrowRight, Table as TableIcon, LayoutGrid, ListChecks } from "lucide-react";
 import { useRuns } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
 import { RunCard } from "@/components/domain/run-card";
 import { RunsTable } from "@/components/domain/runs-table";
+import { RunsTriage } from "@/components/domain/runs-triage";
 import { RunsInsights } from "@/components/domain/runs-insights";
 import {
   RunsFilterBar,
@@ -18,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 
-type ViewMode = "table" | "cards";
+type ViewMode = "triage" | "table" | "cards";
 
 export default function RunsPage() {
   return (
@@ -38,9 +40,14 @@ function RunsPageInner() {
   const visible = useMemo(() => applyRunsFilters(runs, filters), [runs, filters]);
 
   // View toggle, persisted in localStorage (same pattern as /decisions).
+  // A `?view=` param from a dashboard KPI wins over the stored preference for
+  // that visit — the operator asked for that specific slice by clicking it.
+  const params = useSearchParams();
+  const urlView = params.get("view");
   const [view, setView] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "table";
-    return (localStorage.getItem("li.runs.view") as ViewMode) || "table";
+    if (urlView === "attention" || urlView === "failed" || urlView === "active") return "triage";
+    if (typeof window === "undefined") return "triage";
+    return (localStorage.getItem("li.runs.view") as ViewMode) || "triage";
   });
   const setViewPersist = (v: ViewMode) => {
     setView(v);
@@ -106,6 +113,12 @@ function RunsPageInner() {
             </div>
             <div className="inline-flex rounded-md border border-[var(--border-default)] bg-[var(--surface)] p-0.5">
               <ViewToggle
+                active={view === "triage"}
+                onClick={() => setViewPersist("triage")}
+                icon={ListChecks}
+                label="Triage"
+              />
+              <ViewToggle
                 active={view === "table"}
                 onClick={() => setViewPersist("table")}
                 icon={TableIcon}
@@ -131,6 +144,8 @@ function RunsPageInner() {
                 Clear filters
               </button>
             </div>
+          ) : view === "triage" ? (
+            <RunsTriage runs={visible} />
           ) : view === "table" ? (
             <RunsTable runs={visible} />
           ) : (
