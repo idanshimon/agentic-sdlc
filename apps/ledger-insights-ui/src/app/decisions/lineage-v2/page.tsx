@@ -18,6 +18,7 @@ import dagre from "cytoscape-dagre";
 import { GitBranch, User, Bot, ShieldAlert, Flag, X, ExternalLink } from "lucide-react";
 import { useDecisions } from "@/lib/hooks/use-runs";
 import { PageHeader } from "@/components/layout/page-header";
+import { useCanvasTheme, type CanvasTheme } from "@/lib/graph/canvas-theme";
 import { buildPrecedentLineage } from "@/lib/graph/build-lineage";
 import { lineageToCyElements } from "@/lib/graph/cy-lineage";
 
@@ -27,13 +28,16 @@ if (typeof cytoscape === "function" && !(cytoscape as unknown as { _dagre?: bool
 }
 
 // ── dark-theme stylesheet: distinct silhouette per entity type ──
-const CY_STYLE = ([
+/* Canvas cannot resolve CSS custom properties, so these must be literal
+ * values -- resolved from live tokens at render time so lineage follows the
+ * active theme instead of pinning to dark. */
+const cyStyle = (t: CanvasTheme) => ([
   {
     selector: "node",
     style: {
       "font-family": "var(--font-geist-sans), system-ui, sans-serif",
       "font-size": 11,
-      color: "#E6EDF3",
+      color: t.text,
       "text-wrap": "wrap",
       "text-max-width": "150px",
       "text-valign": "center",
@@ -46,9 +50,9 @@ const CY_STYLE = ([
     selector: "node.lane",
     style: {
       shape: "round-rectangle",
-      "background-color": "#11161D",
+      "background-color": t.surface,
       "background-opacity": 0.6,
-      "border-color": "#243042",
+      "border-color": t.border,
       "border-width": 1,
       label: "data(label)",
       "text-valign": "top",
@@ -58,7 +62,7 @@ const CY_STYLE = ([
       "text-max-width": "220px",
       "font-size": 11,
       "font-weight": 600,
-      color: "#9FB0C3",
+      color: t.textSecondary,
       padding: "40px",
     },
   },
@@ -67,8 +71,8 @@ const CY_STYLE = ([
     selector: "node.precedent",
     style: {
       shape: "round-hexagon",
-      "background-color": "#161D26",
-      "border-color": "#22C55E",
+      "background-color": t.elevated,
+      "border-color": t.success,
       "border-width": 2,
       width: 190,
       height: 74,
@@ -82,8 +86,8 @@ const CY_STYLE = ([
     selector: "node.agent",
     style: {
       shape: "round-rectangle",
-      "background-color": "#161D26",
-      "border-color": "#0EA5E9",
+      "background-color": t.elevated,
+      "border-color": t.primary,
       width: 190,
       height: 58,
       "font-size": 10,
@@ -96,8 +100,8 @@ const CY_STYLE = ([
     selector: "node.teaching",
     style: {
       shape: "ellipse",
-      "background-color": "#161D26",
-      "border-color": "#22C55E",
+      "background-color": t.elevated,
+      "border-color": t.success,
       width: 20,
       height: 20,
       "font-size": 9,
@@ -109,20 +113,20 @@ const CY_STYLE = ([
   // flagged overrides border → danger red
   {
     selector: "node.flagged",
-    style: { "border-color": "#EF4444", "border-width": 2.5 },
+    style: { "border-color": t.danger, "border-width": 2.5 },
   },
   // phi tint
   {
     selector: "node.phi",
-    style: { "background-color": "#1A1520" },
+    style: { "background-color": t.overlay },
   },
   // edges
   {
     selector: "edge",
     style: {
       width: 1,
-      "line-color": "#475569",
-      "target-arrow-color": "#475569",
+      "line-color": t.border,
+      "target-arrow-color": t.border,
       "target-arrow-shape": "triangle",
       "curve-style": "bezier",
       opacity: 0.55,
@@ -132,12 +136,12 @@ const CY_STYLE = ([
     selector: 'edge[relation = "reuses"]',
     style: {
       width: 2.5,
-      "line-color": "#22C55E",
-      "target-arrow-color": "#22C55E",
+      "line-color": t.success,
+      "target-arrow-color": t.success,
       label: "data(label)",
       "font-size": 9,
-      color: "#22C55E",
-      "text-background-color": "#0B0F14",
+      color: t.success,
+      "text-background-color": t.bg,
       "text-background-opacity": 0.85,
       "text-background-padding": "2px",
       opacity: 0.9,
@@ -145,7 +149,7 @@ const CY_STYLE = ([
   },
   {
     selector: 'edge[relation = "teaches"]',
-    style: { "line-style": "dashed", "line-color": "#F59E0B", "target-arrow-color": "#F59E0B", width: 1.5 },
+    style: { "line-style": "dashed", "line-color": t.warning, "target-arrow-color": t.warning, width: 1.5 },
   },
   // focus / dim states
   {
@@ -158,7 +162,7 @@ const CY_STYLE = ([
   },
   {
     selector: "node.sel",
-    style: { "border-color": "#0EA5E9", "border-width": 3, "overlay-color": "#0EA5E9", "overlay-opacity": 0.12, "overlay-padding": 6 },
+    style: { "border-color": t.primary, "border-width": 3, "overlay-color": t.primary, "overlay-opacity": 0.12, "overlay-padding": 6 },
   },
 ] as unknown) as cytoscape.StylesheetStyle[];
 
@@ -188,13 +192,15 @@ export default function LineageV2Page() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const [panel, setPanel] = useState<PanelData | null>(null);
+  // Live token values — re-read on theme switch so the canvas repaints.
+  const theme = useCanvasTheme();
 
   useEffect(() => {
     if (!containerRef.current || elements.length === 0) return;
     const cy = cytoscape({
       container: containerRef.current,
       elements: elements as cytoscape.ElementDefinition[],
-      style: CY_STYLE,
+      style: cyStyle(theme),
       minZoom: 0.2,
       maxZoom: 2.5,
       wheelSensitivity: 0.2,
@@ -270,7 +276,7 @@ export default function LineageV2Page() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [elements]);
+  }, [elements, theme]);
 
   const empty = !isLoading && graph.nodes.length === 0;
 
@@ -297,9 +303,9 @@ export default function LineageV2Page() {
             <div ref={containerRef} className="h-full w-full" />
             {/* legend */}
             <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#22C55E]" /> Human precedent</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#0EA5E9]" /> Agent decision</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#EF4444]" /> Flagged</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--success)]" /> Human precedent</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Agent decision</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--danger)]" /> Flagged</span>
             </div>
             {/* quick-view modal — centered, dims graph behind it */}
             {panel && (

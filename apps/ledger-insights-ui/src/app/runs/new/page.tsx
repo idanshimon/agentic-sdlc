@@ -185,33 +185,6 @@ export default function NewRunPage() {
 
   const onSample = useCallback(
     async (s: Sample) => {
-      // Demo Mode short-circuit: replay pre-canned fixtures, no LLM call.
-      if (demo) {
-        const scenario = getScenario(s.id);
-        if (!scenario) {
-          toast.error("No demo fixture for this sample", {
-            description: `Demo Mode currently ships fixtures for: ${
-              ["vitals"].join(", ")
-            }. Try "Patient Vitals Streaming".`,
-          });
-          return;
-        }
-        setBusy(s.id);
-        setError(null);
-        try {
-          const runId = startDemoRun(s.id);
-          toast.success("Demo run started", {
-            description: `${s.title} · replaying audit-grade pipeline`,
-          });
-          router.push(`/runs/${runId}`);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Failed to start demo run";
-          setError(msg);
-          setBusy(null);
-        }
-        return;
-      }
-
       setBusy(s.id);
       setError(null);
       try {
@@ -220,9 +193,30 @@ export default function NewRunPage() {
         setFilename(s.filename);
         await submit(text, s.filename, s.id);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to load sample";
+        // Demo Mode is a DATA posture (curated sample PRDs), not a fake
+        // pipeline: samples run through the real orchestrator, hit real
+        // gates, and write real ledger entries. Local fixture replay is kept
+        // ONLY as an offline fallback so a disconnected demo still shows the
+        // flow — and it is announced as a replay, never as a live run.
+        if (demo) {
+          const scenario = getScenario(s.id);
+          if (scenario) {
+            try {
+              const runId = startDemoRun(s.id);
+              toast.warning("Orchestrator unreachable — replaying a recorded run", {
+                description: `${s.title} · this is a fixture, not live telemetry`,
+              });
+              router.push(`/runs/${runId}`);
+              return;
+            } catch {
+              /* fall through to the real error below */
+            }
+          }
+        }
+        const msg = e instanceof Error ? e.message : "Failed to start run";
         setError(msg);
         setBusy(null);
+        toast.error("Failed to start run", { description: msg });
       }
     },
     [demo, router, submit],
@@ -258,10 +252,10 @@ export default function NewRunPage() {
     <div className="space-y-6">
       <PageHeader
         plane="pipeline"
-        title={demo ? "Start a new demo run" : "Start a new run"}
+        title={demo ? "Start a new run (Demo Mode)" : "Start a new run"}
         description={
           demo
-            ? "Demo Mode — runs replay pre-canned audit-grade output from a real Phase-A-fixed pipeline run. Zero LLM calls, zero network. Click any sample tagged DEMO to begin."
+            ? "Demo Mode — curated sample PRDs and synthetic data only. Runs still go through the real orchestrator: real gates, real policy checks, real ledger entries. If the backend is unreachable, a recorded run is replayed and labelled as such."
             : "Drop in a PRD or pick a sample. The pipeline classifies ambiguities, resolves them (with you in the loop), generates code, runs the policy gates, and opens a PR."
         }
       />
@@ -279,27 +273,22 @@ export default function NewRunPage() {
           <div>
             <h2 className="text-sm font-semibold">Sample PRDs</h2>
             <p className="text-xs text-[var(--text-tertiary)]">
-              {demo
-                ? "Click a DEMO-tagged sample to replay a pre-canned audit-grade pipeline run."
-                : "Click any sample to load + start a run immediately with your current mode/team."}
+              Click any sample to load + start a run immediately with your current mode/team.
             </p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {SAMPLES.map((s) => {
             const hasDemoFixture = !!getScenario(s.id);
-            const disabledInDemo = demo && !hasDemoFixture;
             return (
               <button
                 key={s.id}
                 onClick={() => onSample(s)}
-                disabled={busy !== null || disabledInDemo}
-                title={disabledInDemo ? "No demo fixture for this sample yet" : undefined}
+                disabled={busy !== null}
                 className={cn(
                   "group text-left rounded-lg border border-[var(--border-default)] bg-[var(--bg)] p-4 hover:border-[var(--text-tertiary)] hover:bg-[var(--overlay)]/40 transition-colors relative overflow-hidden",
                   busy === s.id && "border-[var(--primary)] bg-[var(--primary)]/5",
                   busy && busy !== s.id && "opacity-50 cursor-not-allowed",
-                  disabledInDemo && "opacity-40 cursor-not-allowed",
                 )}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
@@ -309,8 +298,12 @@ export default function NewRunPage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {demo && hasDemoFixture && (
-                      <Badge variant="warning" className="text-[10px]">
-                        DEMO
+                      <Badge
+                        variant="outline"
+                        className="text-[10px]"
+                        title="A recorded run exists for this sample — used only if the orchestrator is unreachable."
+                      >
+                        OFFLINE OK
                       </Badge>
                     )}
                     <Badge variant={s.badge_tone === "ok" ? "success" : s.badge_tone === "primary" ? "info" : s.badge_tone === "secondary" ? "secondary" : "warning"} className="text-[10px]">
@@ -322,7 +315,7 @@ export default function NewRunPage() {
                 <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)]">
                   <span className="mono">{s.filename}</span>
                   <span className="tabular">
-                    {disabledInDemo ? "no demo fixture" : s.size_kb >= 1 ? `~${s.size_kb} KB` : "<1 KB"}
+                    {s.size_kb >= 1 ? `~${s.size_kb} KB` : "<1 KB"}
                   </span>
                 </div>
               </button>
@@ -510,7 +503,7 @@ export default function NewRunPage() {
       <div className="flex items-center justify-end gap-2 pb-4">
         {demo && (
           <span className="text-[11px] text-[var(--text-tertiary)] mr-auto">
-            Demo Mode is active — paste/upload submission disabled. Use a DEMO-tagged sample above.
+            Demo Mode — use synthetic data only. Runs execute for real against the orchestrator.
           </span>
         )}
         <Button variant="ghost" onClick={() => { setPrdText(""); setFilename("untitled.md"); }}>
@@ -520,8 +513,7 @@ export default function NewRunPage() {
           variant="primary"
           size="lg"
           onClick={onTextSubmit}
-          disabled={!prdText.trim() || busy !== null || demo}
-          title={demo ? "Disabled in Demo Mode — use a sample" : undefined}
+          disabled={!prdText.trim() || busy !== null}
         >
           {busy === "text" ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Starting run…</>

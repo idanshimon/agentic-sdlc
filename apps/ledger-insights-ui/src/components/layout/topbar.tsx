@@ -63,17 +63,17 @@ export function TopBar() {
               <Link
                 href="/runs/new"
                 className="inline-flex items-center gap-1.5 px-2.5 h-7 text-amber-400 text-xs font-medium hover:bg-amber-500/15 transition-colors"
-                title="Demo Mode active — pre-canned pipeline replays, no LLM calls"
+                title="Demo Mode — synthetic sample data only. Runs execute for real: real gates, real ledger writes."
               >
                 <Sparkles className="h-3 w-3" />
-                <span>DEMO MODE</span>
+                <span>DEMO DATA</span>
               </Link>
               <button
                 type="button"
                 onClick={onResetDemo}
                 className="inline-flex items-center justify-center w-7 h-7 border-l border-amber-500/40 text-amber-400 hover:bg-amber-500/15 transition-colors"
-                title="Reset demo state — clear all demo runs from this browser"
-                aria-label="Reset demo state"
+                title="Reset local demo state — clears locally replayed runs from THIS browser only. Never touches the ledger, the database, or real runs."
+                aria-label="Reset local demo state (browser only)"
               >
                 <RotateCcw className="h-3 w-3" />
               </button>

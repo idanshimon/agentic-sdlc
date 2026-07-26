@@ -12,21 +12,27 @@ import dagre from "cytoscape-dagre";
 import { Workflow, User, Bot, ShieldAlert, Flag, X, ExternalLink } from "lucide-react";
 import { useDecisions } from "@/lib/hooks/use-runs";
 import { PageHeader } from "@/components/layout/page-header";
-import { buildRunFlow, runIdsFrom } from "@/lib/graph/build-runflow";
+import { buildRunFlow } from "@/lib/graph/build-runflow";
+import { buildRunOptions, filterRunOptions } from "@/lib/run-options";
 import { runFlowToCyElements } from "@/lib/graph/cy-runflow";
+import { useCanvasTheme, type CanvasTheme } from "@/lib/graph/canvas-theme";
 
 if (typeof cytoscape === "function" && !(cytoscape as unknown as { _dagre?: boolean })._dagre) {
   cytoscape.use(dagre);
   (cytoscape as unknown as { _dagre?: boolean })._dagre = true;
 }
 
-const CY_STYLE = ([
+/* Cytoscape styles to <canvas>, which cannot resolve CSS custom properties, so
+ * these values must be literal. They are resolved from the LIVE tokens at
+ * render time (see lib/graph/canvas-theme) rather than frozen, so the graph
+ * follows the active theme instead of staying dark on a white page. */
+const cyStyle = (t: CanvasTheme) => ([
   {
     selector: "node",
     style: {
       "font-family": "var(--font-geist-sans), system-ui, sans-serif",
       "font-size": 10,
-      color: "#E6EDF3",
+      color: t.text,
       "text-wrap": "wrap",
       "text-max-width": "150px",
       "text-valign": "center",
@@ -39,11 +45,11 @@ const CY_STYLE = ([
     selector: "node.stage",
     style: {
       shape: "round-rectangle",
-      "background-color": "#0C1A2400",
+      "background-color": t.bg,
       "background-opacity": 0.15,
-      "border-color": "#0EA5E9",
+      "border-color": t.primary,
       "border-width": 1.5,
-      color: "#38BDF8",
+      color: t.primary,
       "font-size": 11,
       "font-weight": 600,
       width: 130,
@@ -56,8 +62,8 @@ const CY_STYLE = ([
     selector: "node.decision.agent",
     style: {
       shape: "round-rectangle",
-      "background-color": "#161D26",
-      "border-color": "#0EA5E9",
+      "background-color": t.elevated,
+      "border-color": t.primary,
       width: 200,
       height: 58,
       "text-max-width": "178px",
@@ -69,22 +75,22 @@ const CY_STYLE = ([
     selector: "node.decision.human",
     style: {
       shape: "round-rectangle",
-      "background-color": "#161D26",
-      "border-color": "#22C55E",
+      "background-color": t.elevated,
+      "border-color": t.success,
       width: 200,
       height: 58,
       "text-max-width": "178px",
       label: "data(label)",
     },
   },
-  { selector: "node.flagged", style: { "border-color": "#EF4444", "border-width": 2.5 } },
-  { selector: "node.phi", style: { "background-color": "#1A1520" } },
+  { selector: "node.flagged", style: { "border-color": t.danger, "border-width": 2.5 } },
+  { selector: "node.phi", style: { "background-color": t.overlay } },
   {
     selector: "edge",
     style: {
       width: 1,
-      "line-color": "#475569",
-      "target-arrow-color": "#475569",
+      "line-color": t.border,
+      "target-arrow-color": t.border,
       "target-arrow-shape": "triangle",
       "curve-style": "bezier",
       opacity: 0.5,
@@ -93,18 +99,18 @@ const CY_STYLE = ([
   // spine edge (stage→stage) — solid blue
   {
     selector: 'edge[relation = "of_class"]',
-    style: { width: 2, "line-color": "#0EA5E9", "target-arrow-color": "#0EA5E9", opacity: 0.9 },
+    style: { width: 2, "line-color": t.primary, "target-arrow-color": t.primary, opacity: 0.9 },
   },
   // leaf edge (stage→decision) — dashed
   {
     selector: 'edge[relation = "in_run"]',
-    style: { "line-style": "dashed", "line-color": "#334155", "target-arrow-shape": "none", opacity: 0.7 },
+    style: { "line-style": "dashed", "line-color": t.border, "target-arrow-shape": "none", opacity: 0.7 },
   },
   { selector: ".focused", style: { opacity: 1, "z-index": 10 } },
   { selector: ".dimmed", style: { opacity: 0.12, "text-opacity": 0.12 } },
   {
     selector: "node.sel",
-    style: { "border-color": "#0EA5E9", "border-width": 3, "overlay-color": "#0EA5E9", "overlay-opacity": 0.12, "overlay-padding": 6 },
+    style: { "border-color": t.primary, "border-width": 3, "overlay-color": t.primary, "overlay-opacity": 0.12, "overlay-padding": 6 },
   },
 ] as unknown) as cytoscape.StylesheetStyle[];
 
@@ -121,12 +127,24 @@ export default function RunFlowPage() {
   const router = useRouter();
   const { data, isLoading } = useDecisions({ limit: 1000 });
   const entries = useMemo(() => data?.entries ?? [], [data]);
-  const runIds = useMemo(() => runIdsFrom(entries), [entries]);
+  const runOptions = useMemo(() => buildRunOptions(entries), [entries]);
+
+  const [query, setQuery] = useState("");
+  const visibleRuns = useMemo(
+    () => filterRunOptions(runOptions, query),
+    [runOptions, query],
+  );
 
   const [runId, setRunId] = useState<string | null>(null);
   useEffect(() => {
-    if (!runId && runIds.length) setRunId(runIds[0]);
-  }, [runIds, runId]);
+    // Default to the newest run, and follow the filter: if the selected run is
+    // filtered out, jump to the first visible one rather than showing a blank
+    // canvas with a stale selection.
+    if (visibleRuns.length === 0) return;
+    if (!runId || !visibleRuns.some((o) => o.runId === runId)) {
+      setRunId(visibleRuns[0].runId);
+    }
+  }, [visibleRuns, runId]);
 
   const graph = useMemo(() => (runId ? buildRunFlow(entries, runId) : null), [entries, runId]);
   const elements = useMemo(() => (graph ? runFlowToCyElements(graph) : []), [graph]);
@@ -134,13 +152,16 @@ export default function RunFlowPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const [panel, setPanel] = useState<PanelData | null>(null);
+  // Live token values — re-read when the user switches theme so the canvas
+  // repaints instead of keeping dark nodes on a light page.
+  const theme = useCanvasTheme();
 
   useEffect(() => {
     if (!containerRef.current || elements.length === 0) return;
     const cy = cytoscape({
       container: containerRef.current,
       elements: elements as cytoscape.ElementDefinition[],
-      style: CY_STYLE,
+      style: cyStyle(theme),
       minZoom: 0.2,
       maxZoom: 2.5,
       wheelSensitivity: 0.2,
@@ -190,7 +211,7 @@ export default function RunFlowPage() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [elements]);
+  }, [elements, theme]);
 
   const closeModal = () => {
     setPanel(null);
@@ -211,16 +232,31 @@ export default function RunFlowPage() {
       />
 
       <div className="flex flex-wrap items-center gap-3 text-xs">
-        <label className="text-[var(--text-tertiary)]">Run:</label>
+        <label className="text-[var(--text-tertiary)]" htmlFor="runflow-search">
+          Find a run:
+        </label>
+        <input
+          id="runflow-search"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="team, class, decision text, or run id…"
+          className="w-56 rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-2 py-1 text-[var(--text)] placeholder:text-[var(--text-tertiary)]"
+        />
         <select
           value={runId ?? ""}
           onChange={(e) => setRunId(e.target.value)}
-          className="rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-2 py-1 text-[var(--text)]"
+          className="max-w-md rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-2 py-1 text-[var(--text)]"
         >
-          {runIds.map((id) => (
-            <option key={id} value={id}>{id}</option>
+          {visibleRuns.map((o) => (
+            <option key={o.runId} value={o.runId}>{o.label}</option>
           ))}
         </select>
+        {query && (
+          <span className="text-[var(--text-tertiary)] tabular">
+            {visibleRuns.length} of {runOptions.length}
+          </span>
+        )}
         {graph && (
           <>
             <Stat label="Stages / buckets" value={graph.stats.stages} />
@@ -241,9 +277,9 @@ export default function RunFlowPage() {
           <>
             <div ref={containerRef} className="h-full w-full" />
             <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#0EA5E9]" /> Stage / agent</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#22C55E]" /> Human decision</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#EF4444]" /> Flagged</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Stage / agent</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--success)]" /> Human decision</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--danger)]" /> Flagged</span>
             </div>
             {panel && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-6" onClick={closeModal}>

@@ -88,7 +88,10 @@
   --radius: 0.5rem;
 }
 
-/* Light theme — derived. */
+/* Light theme — derived. Surfaces invert AND the accent ramp darkens: the
+   dark-theme accents are tuned for luminous-on-dark and fail contrast on
+   white (#0EA5E9 on #FFF is ~2.9:1). These are the same hues, shifted down
+   the L channel to clear 4.5:1 on light surfaces. */
 .light {
   --bg: #FAFAFA;
   --surface: #FFFFFF;
@@ -98,7 +101,26 @@
   --border-muted: #F3F4F6;
   --text: #0B0F14;
   --text-secondary: #4B5563;
-  --text-tertiary: #9CA3AF;
+  --text-tertiary: #6B7280;
+
+  --primary: #0369A1;
+  --secondary: #6D28D9;
+  --tertiary: #047857;
+  --success: #15803D;
+  --warning: #B45309;
+  --danger: #B91C1C;
+  --info: #0369A1;
+
+  /* Foreground on a filled accent surface flips to white when the accent
+     itself is dark. */
+  --on-primary: #FFFFFF;
+
+  --plane-standards: #6D28D9;
+  --plane-pipeline: #0369A1;
+  --plane-ledger: #047857;
+  --plane-agenthq: #B45309;
+
+  --ring: #0369A1;
 }
 
 * {
@@ -106,8 +128,9 @@
 }
 
 /* React Flow ships light defaults (#fff nodes, white edge labels, #fefefe
-   controls) scoped under .react-flow. Pin its internal vars to our dark tokens
-   so the graph panes can never leak the light theme regardless of colorMode. */
+   controls) scoped under .react-flow. Pin its internal vars to OUR TOKENS —
+   not to literal dark values — so the graph panes follow the active theme
+   instead of leaking react-flow's palette in dark or staying black in light. */
 .react-flow {
   --xy-node-background-color-default: var(--surface);
   --xy-node-color-default: var(--text);

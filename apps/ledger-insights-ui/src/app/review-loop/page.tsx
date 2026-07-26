@@ -1,11 +1,13 @@
 "use client";
 import { Workflow, GitMerge, AlertTriangle, MessageSquare, ShieldCheck } from "lucide-react";
 import { useMemo } from "react";
-import { useReviewLoops, useRepoAutonomy } from "@/lib/hooks/use-runs";
+import { useReviewLoops, useRepoAutonomy, useDecisions } from "@/lib/hooks/use-runs";
 import { EmptyState } from "@/components/domain/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 import { projectReviewLoops, type ReviewLoopProjection as Loop } from "@/lib/review-loop";
+import { projectAutonomy } from "@/lib/autonomy-governance";
+import { AutonomyRules } from "@/components/domain/autonomy-rules";
 import { deriveAssurance } from "@/lib/assurance";
 import { AssurancePanel } from "@/components/domain/assurance-panel";
 import type { LedgerEntry, RepoTier } from "@/lib/types";
@@ -80,9 +82,17 @@ function Timeline({ hops }: { hops: LedgerEntry[] }) {
 export default function ReviewLoopPage() {
   const { data: loopData, isLoading } = useReviewLoops();
   const { data: posture } = useRepoAutonomy();
+  // Per-decision autonomy governance is a different mechanism from the PR
+  // review loop and is populated on essentially every tenant. Read it from the
+  // ledger so this page says something true even before a loop has ever run.
+  const { data: decisionData } = useDecisions({ limit: 300 });
 
   const loops = useMemo(() => projectReviewLoops(loopData?.hops ?? []), [loopData]);
   const escalations = loops.filter((l) => l.terminal === "escalated" || l.terminal === "failed");
+  const autonomy = useMemo(
+    () => projectAutonomy(decisionData?.entries ?? []),
+    [decisionData],
+  );
 
   return (
     <div className="space-y-5">
@@ -150,14 +160,17 @@ export default function ReviewLoopPage() {
         </section>
       )}
 
+      {/* Per-decision autonomy governance — real data, present on every tenant. */}
+      <AutonomyRules summary={autonomy} />
+
       {/* Live loop timelines */}
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="skeleton h-16 rounded-lg" />)}</div>
       ) : loops.length === 0 ? (
         <EmptyState
           icon={Workflow}
-          title="No review loops yet"
-          description="When a Coding Agent opens a PR on a repo the loop is configured for, its review → remediate → re-review hops land in the ledger and stream here. Each hop links to its ledger entry and the real GitHub PR."
+          title="No PR review loops have run yet"
+          description="This tracks a different mechanism from the autonomy rules above: when a Coding Agent opens a PR on a configured repo, its review → remediate → re-review hops land in the ledger and stream here. No repo has been graduated past Tier C (advisory), so no loop has executed."
         />
       ) : (
         <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)" }}>

@@ -12,6 +12,7 @@ import fcose from "cytoscape-fcose";
 import { Scale, User, Bot, ShieldAlert, Flag, X, ExternalLink } from "lucide-react";
 import { useDecisions } from "@/lib/hooks/use-runs";
 import { PageHeader } from "@/components/layout/page-header";
+import { useCanvasTheme, type CanvasTheme } from "@/lib/graph/canvas-theme";
 import { buildGovernanceNetwork, type GraphEdgeKind } from "@/lib/graph/build-graph";
 import { applyMapFilters, defaultMapFilters } from "@/lib/graph/map-filters";
 import { mapToCyElements } from "@/lib/graph/cy-map";
@@ -21,13 +22,16 @@ if (typeof cytoscape === "function" && !(cytoscape as unknown as { _fcose?: bool
   (cytoscape as unknown as { _fcose?: boolean })._fcose = true;
 }
 
-const CY_STYLE = ([
+/* Canvas cannot resolve CSS custom properties, so these must be literal
+ * values -- resolved from live tokens at render time so the map follows the
+ * active theme instead of pinning to dark. */
+const cyStyle = (t: CanvasTheme) => ([
   {
     selector: "node",
     style: {
       "font-family": "var(--font-geist-sans), system-ui, sans-serif",
       "font-size": 9,
-      color: "#C9D4E0",
+      color: t.text,
       "text-wrap": "wrap",
       "text-max-width": "90px",
       "text-valign": "center",
@@ -40,9 +44,9 @@ const CY_STYLE = ([
     selector: "node.bundle",
     style: {
       shape: "round-diamond",
-      "background-color": "#1C1710",
-      "border-color": "#F59E0B",
-      color: "#FBBF24",
+      "background-color": t.overlay,
+      "border-color": t.warning,
+      color: t.warning,
       "font-size": 10,
       width: "mapData(degree, 0, 8, 44, 120)",
       height: "mapData(degree, 0, 8, 44, 120)",
@@ -52,36 +56,36 @@ const CY_STYLE = ([
   // ambiguity class — blue hexagon
   {
     selector: "node.klass",
-    style: { shape: "round-hexagon", "background-color": "#0F1822", "border-color": "#0EA5E9", color: "#38BDF8", width: 74, height: 52, label: "data(label)" },
+    style: { shape: "round-hexagon", "background-color": t.elevated, "border-color": t.primary, color: t.primary, width: 74, height: 52, label: "data(label)" },
   },
   // decision — green/blue small card
   {
     selector: "node.decision",
-    style: { shape: "round-rectangle", "background-color": "#161D26", "border-color": "#22C55E", width: 96, height: 40, label: "data(label)" },
+    style: { shape: "round-rectangle", "background-color": t.elevated, "border-color": t.success, width: 96, height: 40, label: "data(label)" },
   },
   // run — grey pill
   {
     selector: "node.run",
-    style: { shape: "round-rectangle", "background-color": "#12161C", "border-color": "#475569", color: "#94A3B8", width: 70, height: 30, label: "data(label)" },
+    style: { shape: "round-rectangle", "background-color": t.surface, "border-color": t.border, color: t.textSecondary, width: 70, height: 30, label: "data(label)" },
   },
   // teaching — small warning dot
   {
     selector: "node.teaching",
-    style: { shape: "ellipse", "background-color": "#1C1710", "border-color": "#F59E0B", width: 24, height: 24, "font-size": 8, label: "data(label)" },
+    style: { shape: "ellipse", "background-color": t.overlay, "border-color": t.warning, width: 24, height: 24, "font-size": 8, label: "data(label)" },
   },
-  { selector: "node.flagged", style: { "border-color": "#EF4444", "border-width": 2.5 } },
-  { selector: "node.phi", style: { "background-color": "#1A1520" } },
+  { selector: "node.flagged", style: { "border-color": t.danger, "border-width": 2.5 } },
+  { selector: "node.phi", style: { "background-color": t.overlay } },
   {
     selector: "edge",
-    style: { width: 1, "line-color": "#334155", "curve-style": "bezier", opacity: 0.4, "target-arrow-shape": "none" },
+    style: { width: 1, "line-color": t.border, "curve-style": "bezier", opacity: 0.4, "target-arrow-shape": "none" },
   },
-  { selector: 'edge[relation = "reuses"]', style: { width: 2, "line-color": "#22C55E", opacity: 0.9, label: "data(label)", "font-size": 8, color: "#22C55E", "target-arrow-shape": "triangle", "target-arrow-color": "#22C55E" } },
-  { selector: 'edge[relation = "teaches"]', style: { "line-color": "#F59E0B", opacity: 0.6 } },
-  { selector: 'edge[relation = "grounded_in"]', style: { "line-style": "dashed", "line-color": "#475569" } },
-  { selector: 'edge[relation = "same_slot"]', style: { "line-style": "dashed", "line-color": "#0EA5E9", opacity: 0.5 } },
+  { selector: 'edge[relation = "reuses"]', style: { width: 2, "line-color": t.success, opacity: 0.9, label: "data(label)", "font-size": 8, color: t.success, "target-arrow-shape": "triangle", "target-arrow-color": t.success } },
+  { selector: 'edge[relation = "teaches"]', style: { "line-color": t.warning, opacity: 0.6 } },
+  { selector: 'edge[relation = "grounded_in"]', style: { "line-style": "dashed", "line-color": t.border } },
+  { selector: 'edge[relation = "same_slot"]', style: { "line-style": "dashed", "line-color": t.primary, opacity: 0.5 } },
   { selector: ".focused", style: { opacity: 1, "z-index": 10 } },
   { selector: ".dimmed", style: { opacity: 0.1, "text-opacity": 0.1 } },
-  { selector: "node.sel", style: { "border-color": "#0EA5E9", "border-width": 3, "overlay-color": "#0EA5E9", "overlay-opacity": 0.12, "overlay-padding": 6 } },
+  { selector: "node.sel", style: { "border-color": t.primary, "border-width": 3, "overlay-color": t.primary, "overlay-opacity": 0.12, "overlay-padding": 6 } },
 ] as unknown) as cytoscape.StylesheetStyle[];
 
 interface PanelData {
@@ -121,13 +125,15 @@ export default function DecisionsMapPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const [panel, setPanel] = useState<PanelData | null>(null);
+  // Live token values — re-read on theme switch so the canvas repaints.
+  const theme = useCanvasTheme();
 
   useEffect(() => {
     if (!containerRef.current || elements.length === 0) return;
     const cy = cytoscape({
       container: containerRef.current,
       elements: elements as cytoscape.ElementDefinition[],
-      style: CY_STYLE,
+      style: cyStyle(theme),
       minZoom: 0.1,
       maxZoom: 2.5,
       wheelSensitivity: 0.2,
@@ -178,7 +184,7 @@ export default function DecisionsMapPage() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [elements]);
+  }, [elements, theme]);
 
   const closeModal = () => {
     setPanel(null);
@@ -236,10 +242,10 @@ export default function DecisionsMapPage() {
           <>
             <div ref={containerRef} className="h-full w-full" />
             <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rotate-45 border-2 border-[#F59E0B]" /> Rule hub</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#0EA5E9]" /> Ambiguity class</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#22C55E]" /> Decision</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[#EF4444]" /> Flagged</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rotate-45 border-2 border-[var(--warning)]" /> Rule hub</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Ambiguity class</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--success)]" /> Decision</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--danger)]" /> Flagged</span>
             </div>
             {panel && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-6" onClick={closeModal}>

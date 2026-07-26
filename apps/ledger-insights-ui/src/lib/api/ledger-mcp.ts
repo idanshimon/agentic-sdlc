@@ -50,21 +50,22 @@ export const ledgerMcp = {
     live_unreachable?: boolean;
   }> {
     if (isDemoMode()) {
-      // Demo Mode: merge demo ledger entries with live entries. The merge
-      // de-dupes by id (live wins) and sorts newest-first, so a just-written
-      // live decision surfaces at the TOP instead of being appended below the
-      // demo seed block (the "decisions table shows nothing new / 2d ago" bug).
+      // Demo Mode reads the REAL ledger. Seeded historical entries are merged
+      // in (de-duped by id, live wins, newest-first) so a demo has depth of
+      // history — but they never replace or mask live data. If the live read
+      // fails we say so via `live_unreachable` rather than quietly rendering
+      // seed rows as if they were current.
       const demoEntries = listDemoLedgerEntries(filter) as unknown as LedgerEntry[];
-      try {
-        const live = await proxy<{ entries: LedgerEntry[]; team_id?: string }>("/api/ledger/query", filter);
-        return {
-          entries: mergeLedgerEntries(demoEntries, live.entries ?? []),
-          team_id: live.team_id,
-          demo: true,
-        };
-      } catch {
+      const live = await proxy<{ entries: LedgerEntry[]; team_id?: string }>("/api/ledger/query", filter)
+        .catch(() => null);
+      if (live === null) {
         return { entries: mergeLedgerEntries(demoEntries, []), demo: true, live_unreachable: true };
       }
+      return {
+        entries: mergeLedgerEntries(demoEntries, live.entries ?? []),
+        team_id: live.team_id,
+        demo: true,
+      };
     }
     const live = await proxy<{ entries: LedgerEntry[]; team_id?: string }>("/api/ledger/query", filter);
     return { entries: live.entries ?? [], team_id: live.team_id };

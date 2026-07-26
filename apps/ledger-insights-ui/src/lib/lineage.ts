@@ -35,11 +35,28 @@ export function isTeachingSignal(e: LedgerEntry): boolean {
   return !!e.runtime_kind && TEACHING_KINDS.has(e.runtime_kind);
 }
 
-/** Did a human override the recommendation here (the teaching event)? */
+/** Did a human override the recommendation here (the explicit teaching event)? */
 export function isHumanSwap(e: LedgerEntry): boolean {
   return (
     isStageDecision(e) &&
     e.decision_kind === "swap" &&
+    (e.confidence_source === "human" || e.actor?.kind === "human")
+  );
+}
+
+/**
+ * Was this decision authored by a human at all?
+ *
+ * `swap` is the LOUD teaching event (human overrode the recommendation), but a
+ * human `accept` is still a human ruling: they read it and signed off. When an
+ * agent later lands on the same slot value, it is reusing that ruling as
+ * precedent. Real ledgers are overwhelmingly `accept` — treating only `swap` as
+ * precedent-bearing made the lineage view render empty against live data even
+ * though the reuse relationships were plainly there.
+ */
+export function isHumanAuthored(e: LedgerEntry): boolean {
+  return (
+    isStageDecision(e) &&
     (e.confidence_source === "human" || e.actor?.kind === "human")
   );
 }
@@ -100,10 +117,18 @@ export function buildLineageIndex(entries: LedgerEntry[]): LineageIndex {
     byBucket.set(e.slot_value_hash, arr);
   }
 
-  // buckets that contain a human swap = "taught" buckets
+  // A bucket is precedent-bearing when a human ruled on it FIRST and an agent
+  // later reached the same slot value. Ordering matters: an agent decision that
+  // predates every human ruling in the bucket did not reuse anything.
   const taughtBuckets = new Set<string>();
   for (const [hash, arr] of byBucket) {
-    if (arr.some(isHumanSwap)) taughtBuckets.add(hash);
+    const humans = arr.filter(isHumanAuthored);
+    if (humans.length === 0) continue;
+    const firstHumanAt = Math.min(...humans.map((h) => Date.parse(h.created_at || "") || Infinity));
+    const reusedLater = arr.some(
+      (b) => isAutopilot(b) && (Date.parse(b.created_at || "") || 0) >= firstHumanAt,
+    );
+    if (reusedLater || arr.some(isHumanSwap)) taughtBuckets.add(hash);
   }
 
   // --- teaching signals pointing at each entry ---
@@ -147,6 +172,9 @@ export function buildLineageIndex(entries: LedgerEntry[]): LineageIndex {
     else if (signalCount > 0) role = "flagged";
     else if (isHumanSwap(e)) role = "taught";
     else if (isAutopilot(e) && slotKey && taughtBuckets.has(slotKey)) role = "reused";
+    // A human ruling that a later agent decision reused is precedent too, even
+    // when it was an `accept` rather than an explicit `swap`.
+    else if (isHumanAuthored(e) && slotKey && taughtBuckets.has(slotKey)) role = "taught";
 
     if (role === "taught") taughtCount += 1;
     if (role === "reused") reusedCount += 1;
