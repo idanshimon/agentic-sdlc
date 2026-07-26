@@ -209,23 +209,37 @@ export default function LineageV2Page() {
     });
     cyRef.current = cy;
 
-    // Real precedent lineage is SHALLOW and WIDE: a handful of human rulings,
-    // each reused by dozens of later agent decisions. Left-to-right ranking
-    // gives that shape two ranks and one enormous column, which crushes into a
-    // sliver against the canvas edge. Top-to-bottom lets each precedent fan out
-    // across the full width instead.
-    cy.layout({
-      name: "dagre",
-      rankDir: "TB",
-      nodeSep: 14,
-      rankSep: 160,
-      edgeSep: 6,
-      ranker: "network-simplex",
-      spacingFactor: 0.85,
-      animate: false,
-      fit: true,
-      padding: 36,
-    } as cytoscape.LayoutOptions).run();
+    // Layout must match the SHAPE of real precedent, which the card_id fix
+    // revealed: many INDEPENDENT 1→1 pairs (one human ruling, one later agent
+    // reuse of that same decision card), not one deep or wide tree.
+    //
+    // Generic layouts get this wrong. dagre and breadthfirst both treat the
+    // disconnected pairs as a single rank and emit one flat row that occupies a
+    // ~3%-tall strip with the rest of the canvas empty. Since the topology is
+    // known, position the components explicitly in a grid instead of asking a
+    // force/rank algorithm to infer it.
+    const roots = cy.nodes().filter((n) => n.indegree(false) === 0);
+    const box = cy.container()?.getBoundingClientRect();
+    const usableW = Math.max(640, (box?.width ?? 1200) - 120);
+    const colW = 250;
+    const rowH = 190;
+    const perRow = Math.max(1, Math.floor(usableW / colW));
+
+    roots.forEach((root, i) => {
+      const col = i % perRow;
+      const row = Math.floor(i / perRow);
+      const x = 90 + col * colW;
+      const y = 70 + row * rowH;
+      root.position({ x, y });
+      // Stack this root's reuses directly beneath it so the precedent → reuse
+      // relationship stays readable at a glance.
+      root.outgoers("node").forEach((child, j) => {
+        child.position({ x, y: y + 92 + j * 46 });
+      });
+    });
+
+    cy.fit(undefined, 44);
+    if (cy.zoom() > 1.15) cy.zoom({ level: 1.15, position: { x: 0, y: 0 } });
 
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
