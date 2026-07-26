@@ -1,0 +1,87 @@
+name: supply-chain-scan
+
+# Enforces security/v0.2.0 SUPPLY-001 — "SBOM must be scanned; critical or high
+# CVEs block the build".
+#
+# SBOM-001 (v0.1.0) requires an SBOM to be produced. Until this workflow existed
+# nothing read it, so a generated SBOM listing a critical CVE passed the gate.
+# That is the failure mode the bundle should least tolerate: the paperwork of
+# assurance without the substance.
+#
+# Anchore's syft/grype are used because they run offline against a filesystem or
+# image, need no service account, and emit SARIF that GitHub renders natively in
+# the Security tab.
+#
+# GitHub-native alternatives (Dependabot, GHAS/CodeQL) cover adjacent ground and
+# should be enabled independently — see docs/supply-chain-scanning.md. They do
+# not replace this workflow: Dependabot raises PRs but does not fail a build,
+# and CodeQL scans first-party code rather than third-party CVEs. SUPPLY-001
+# needs a gate that blocks.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # New CVEs are published against dependencies that have not changed, so a
+    # PR-only trigger goes stale. Weekly re-scan of main catches those.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: SBOM + CVE scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # SBOM generation (satisfies SBOM-001)
+      - name: Generate SBOM (SPDX)
+        id: sbom
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: true
+
+      # CVE scan of that SBOM (satisfies SUPPLY-001).
+      # fail-build is deliberately false: the action's own failure mode is
+      # coarse, and the SARIF should reach the Security tab even on a failing
+      # scan. The explicit gate below decides pass/fail.
+      - name: Scan SBOM for vulnerabilities
+        id: grype
+        uses: anchore/scan-action@v3
+        with:
+          sbom: sbom.spdx.json
+          severity-cutoff: high
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload results to the Security tab
+        if: always() && steps.grype.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: supply-chain
+
+      # The gate. Counts critical/high findings and fails explicitly, so the log
+      # states which rule blocked and why rather than an opaque action failure.
+      - name: Enforce SUPPLY-001
+        if: always()
+        run: |
+          python3 scripts/enforce_supply_chain.py \
+            --sarif "${{ steps.grype.outputs.sarif }}" \
+            --rule-id SUPPLY-001 \
+            --bundle security/v0.2.0 \
+            --severity-cutoff high

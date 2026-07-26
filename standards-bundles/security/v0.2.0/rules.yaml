@@ -1,0 +1,292 @@
+metadata:
+  bundle: security
+  version: 0.2.0
+  authors: ["@security-leadership"]
+  date: 2026-07-26
+  description: >
+    PHI handling, secret scanning, and SBOM requirements (carried forward from
+    v0.1.0 unchanged) plus enterprise control coverage: identity least-privilege,
+    supply-chain scanning, network posture, and cryptographic floors.
+  supersedes: 0.1.0
+  change_proposal: openspec/changes/add-security-bundle-v0.2.0
+  # Opt every BLOCK rule that carries a `pattern` into the CI enforcement
+  # lane (scripts/enforce_bundles.py). Semantic BLOCK rules without a pattern
+  # are still enforced only by pipeline_stages / ide_hooks / the review loop.
+  ci_checks_default: true
+
+rules:
+  - id: PHI-001
+    title: Patient identifiers may not appear in cleartext logs
+    phi: true
+    phi_locked: true
+    blast_class: high
+    enforcement:
+      pipeline_stages: [codegen, review-scan]
+      ide_hooks: [pre-tool-use, post-tool-use]
+    # PHI-001 targets CLEARTEXT LOGGING of identifiers, not their legitimate use
+    # as domain fields/params (a real eligibility service unavoidably names a
+    # `patient_id` field). Enforcement is therefore context-scoped:
+    #   * `context_pattern` — the line must invoke a logging/output sink.
+    #   * `pattern`         — a raw PHI identifier token appears on that line.
+    #   * `safe_wrapper_pattern` — …UNLESS the identifier is wrapped by a
+    #                              redaction/hash/mask helper (e.g. _redact(mrn),
+    #                              mask(patient_id), patient_id_redacted()).
+    # A match requires context_pattern AND pattern AND NOT safe_wrapper_pattern.
+    # This makes the rule match its own test cases (below) exactly.
+    context_pattern: '(?i)\b(logger|logging|log|print)\b|\.(info|debug|warning|warn|error|critical|exception|write)\s*\(|sys\.std(out|err)'
+    pattern: '(?i)(?<![\w(])\b(MRN|patient_id|SSN|DOB)\b(?!\s*\()'
+    safe_wrapper_pattern: '(?i)\b(redact|mask|hash|hash_id|deidentify|de_identify|scrub|anonymize|_redact|redacted)\w*\s*\(|(MRN|patient_id|SSN|DOB)_?(redacted|masked|hashed|hash)'
+    severity: BLOCK
+    rationale: HIPAA Safe Harbor; logs are persistent and accessible to ops.
+    test_cases:
+      - input: "logger.info(f'patient {mrn} updated')"
+        expect: BLOCK
+      - input: "logger.info(f'patient {patient_id_redacted()} updated')"
+        expect: PASS
+      - input: "patient_id: str = Field(...)"
+        expect: PASS
+      - input: "logger.info(f'patient {_redact(mrn)} updated')"
+        expect: PASS
+
+  - id: PHI-002
+    title: PHI in transit must be TLS 1.2+
+    phi: true
+    phi_locked: true
+    blast_class: high
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    severity: BLOCK
+    rationale: HIPAA technical safeguards (45 CFR 164.312).
+
+  - id: PHI-003
+    title: PHI at rest must be encrypted with customer-managed keys
+    phi: true
+    phi_locked: true
+    blast_class: high
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    severity: BLOCK
+    rationale: Defense-in-depth; vendor key compromise must not equal PHI exposure.
+
+  - id: PHI-004
+    title: De-identification before analytics export
+    phi: true
+    phi_locked: true
+    blast_class: high
+    enforcement:
+      pipeline_stages: [architect, codegen]
+    severity: BLOCK
+    rationale: HIPAA Safe Harbor; analytics workloads do not have minimum-necessary justification.
+
+  - id: PHI-005
+    title: Audit log retention 7 years for PHI access events
+    phi: true
+    phi_locked: true
+    blast_class: high
+    enforcement:
+      pipeline_stages: [architect]
+    severity: BLOCK
+    rationale: HIPAA 45 CFR 164.530 (j)(2).
+
+  - id: SECRET-001
+    title: No service-principal secrets in source code
+    phi: false
+    blast_class: high
+    enforcement:
+      pipeline_stages: [review-scan]
+      ide_hooks: [pre-tool-use]
+    pattern: '(?i)(client[\s_-]?secret|api[\s_-]?key|password)\s*[:=]\s*["'']?[A-Za-z0-9+/=_-]{16,}'
+    severity: BLOCK
+    rationale: Secrets in code = leaked on every clone, every backup. Use Key Vault + MI.
+
+  - id: SECRET-002
+    title: Connection strings must use Managed Identity
+    phi: false
+    blast_class: med
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    severity: BLOCK
+    rationale: MI rotation is automatic; account-key rotation is manual and frequently skipped.
+
+  - id: SBOM-001
+    title: All container images must produce an SBOM at build time
+    phi: false
+    blast_class: low
+    enforcement:
+      pipeline_stages: [review-scan]
+    severity: BLOCK
+    rationale: Supply chain audit trail; required for SOC 2 Type II.
+
+  - id: AUTH-001
+    title: Authentication policy must be explicitly resolved before codegen
+    phi: false
+    phi_locked: true
+    blast_class: high
+    enforcement:
+      pipeline_stages: [resolver, codegen]
+    severity: BLOCK
+    rationale: Auth ambiguity is a Resolver-gate invariant class.
+
+  # ────────────────────────────────────────────────────────────────────────
+  # v0.2.0 additions — enterprise control coverage.
+  # Everything above this line is carried forward from v0.1.0 unchanged.
+  # See openspec/changes/add-security-bundle-v0.2.0 for the rationale.
+  # ────────────────────────────────────────────────────────────────────────
+
+  - id: IAM-001
+    title: Managed Identity must not hold Owner or Contributor at subscription scope
+    phi: false
+    blast_class: high
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+      ide_hooks: [pre-tool-use]
+    # Matches a role assignment naming a privileged built-in role. Least
+    # privilege is the single most common enterprise review finding, and it is
+    # mechanically detectable at the IaC layer.
+    pattern: '(?i)(role[\s_-]?definition[\s_-]?name|--role|roleDefinitionId)\s*[:=]?\s*["'']?(Owner|Contributor|User Access Administrator)\b'
+    severity: BLOCK
+    rationale: >
+      A compromised identity inherits every permission it was granted. Owner and
+      Contributor at subscription scope convert a single service compromise into
+      tenant-wide blast radius. Use a purpose-built role, or a scoped built-in
+      role such as Storage Blob Data Contributor.
+    test_cases:
+      - input: 'roleDefinitionName: "Owner"'
+        expect: BLOCK
+      - input: 'az role assignment create --role Contributor'
+        expect: BLOCK
+      - input: 'roleDefinitionName: "Storage Blob Data Reader"'
+        expect: PASS
+
+  - id: IAM-002
+    title: Role assignments should be scoped to a resource group or narrower
+    phi: false
+    blast_class: med
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    # WARN, not BLOCK: a subscription-scoped assignment is occasionally correct
+    # (platform tooling, policy engines). Blocking it outright would train
+    # operators to bypass the bundle, so this asks a human to look instead.
+    pattern: '(?i)--scope\s+["'']?/subscriptions/[^/\s"'']+/?["'']?(\s|$)'
+    severity: WARN
+    rationale: >
+      Scope is the second half of least privilege. A correctly-chosen role
+      applied to the whole subscription still grants far more than the workload
+      needs. Prefer /subscriptions/<id>/resourceGroups/<rg>.
+    test_cases:
+      - input: 'az role assignment create --scope /subscriptions/abc-123'
+        expect: WARN
+      - input: 'az role assignment create --scope /subscriptions/abc-123/resourceGroups/rg-app'
+        expect: PASS
+
+  - id: SUPPLY-001
+    title: SBOM must be scanned; critical or high CVEs block the build
+    phi: false
+    blast_class: high
+    enforcement:
+      # NOT enforceable by the deterministic pattern matcher — there is no regex
+      # for "this dependency has a CVE". This rule is enforced by an external
+      # scanner in CI, and is inert until that workflow exists.
+      ci_workflow: .github/workflows/supply-chain-scan.yml
+      pipeline_stages: [review-scan]
+    severity: BLOCK
+    requires_mechanism: true
+    mechanism_status: implemented
+    rationale: >
+      SBOM-001 requires the SBOM to exist. An SBOM that is generated, archived,
+      and never read is an audit artifact rather than a control — the failure
+      mode this bundle should least tolerate, because it produces the paperwork
+      of assurance without the substance. This rule makes the SBOM actionable:
+      the scan must run and must fail the build on critical or high severity
+      findings.
+    depends_on: [SBOM-001]
+
+  - id: SUPPLY-002
+    title: Dependencies must be version-pinned
+    phi: false
+    blast_class: high
+    enforcement:
+      pipeline_stages: [codegen, review-scan]
+      ide_hooks: [pre-tool-use]
+    # Scoped to direct install invocations rather than attempting to parse every
+    # manifest format — lockfile ecosystems express pins too differently for a
+    # single regex to judge them fairly.
+    pattern: '(?i)\b(pip install|npm install|yarn add|pnpm add)\s+(?!.*(==|@\d|@\^|@~|--require-hashes))[a-z0-9@/_-]+\s*$'
+    severity: BLOCK
+    rationale: >
+      An unpinned dependency means the artifact you reviewed is not the artifact
+      you deploy. This is the highest-frequency path by which an agentic pipeline
+      introduces an unvetted transitive package, because codegen adds imports
+      faster than humans read diffs.
+    test_cases:
+      - input: 'pip install requests'
+        expect: BLOCK
+      - input: 'pip install requests==2.32.3'
+        expect: PASS
+      - input: 'npm install lodash@4.17.21'
+        expect: PASS
+      - input: 'pnpm add zod'
+        expect: BLOCK
+
+  - id: NET-001
+    title: PHI-handling services must not expose a public ingress
+    phi: true
+    phi_locked: true
+    blast_class: high
+    enforcement:
+      pipeline_stages: [architect, review-scan]
+    # Scoped to PHI-handling services rather than all services: internal-only
+    # tooling and deliberately public APIs are legitimate and should not be
+    # caught by a rule aimed at patient data exposure.
+    pattern: '(?i)\b(external|public[\s_-]?network[\s_-]?access|public[\s_-]?(ingress|endpoint)|allow[\s_-]?public[\s_-]?access)\s*[:=]\s*["'']?(true|enabled|yes)\b'
+    severity: BLOCK
+    rationale: >
+      A public endpoint on a PHI workload is the control most likely to be
+      raised by a regulated customer's architecture review board, and the one
+      whose failure mode is unrecoverable — data egress cannot be un-done. Use a
+      private endpoint or VNet-internal ingress.
+    test_cases:
+      - input: 'external: true'
+        expect: BLOCK
+      - input: 'publicNetworkAccess: Enabled'
+        expect: BLOCK
+      - input: 'external: false'
+        expect: PASS
+
+  - id: NET-002
+    title: Egress should be explicitly allow-listed
+    phi: false
+    blast_class: med
+    enforcement:
+      pipeline_stages: [architect]
+    severity: WARN
+    rationale: >
+      Default-open egress means a compromised container can reach any host it
+      likes, which is how data leaves. Allow-listing is right for most services
+      and wrong for a deliberate outbound integration, so this is a judgement
+      call surfaced to a human rather than a hard block.
+
+  - id: CRYPTO-001
+    title: TLS 1.2 floor for all traffic; deprecated algorithms refused
+    phi: false
+    blast_class: high
+    enforcement:
+      pipeline_stages: [architect, codegen, review-scan]
+      ide_hooks: [pre-tool-use]
+    # PHI-002 sets a TLS floor for PHI in transit. This generalises the floor to
+    # all traffic and additionally refuses broken primitives wherever they appear.
+    pattern: '(?i)\b(TLSv1(\.[01])?|SSLv[23])\b|\b(MD5|SHA1|SHA-1|DES|RC4)\b\s*[\(\)]|hashlib\.(md5|sha1)\s*\('
+    severity: BLOCK
+    rationale: >
+      TLS below 1.2 and the MD5/SHA-1/DES/RC4 family are broken rather than
+      merely dated. PHI-002 already covers PHI in transit; a service that
+      negotiates TLS 1.0 for its health endpoint is still a finding.
+    test_cases:
+      - input: 'hashlib.md5(payload)'
+        expect: BLOCK
+      - input: 'ssl_version = "TLSv1"'
+        expect: BLOCK
+      - input: 'hashlib.sha256(payload)'
+        expect: PASS
+      - input: 'min_tls_version = "TLS1_2"'
+        expect: PASS
