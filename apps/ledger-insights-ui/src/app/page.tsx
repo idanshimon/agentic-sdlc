@@ -1,112 +1,54 @@
 "use client";
 import Link from "next/link";
+import { useMemo } from "react";
 import {
-  Activity, GitBranch, Library, Scale, Bot, ShieldCheck,
-  ArrowRight, ExternalLink, Github, Sparkles,
+  Activity, GitBranch, Library, Scale, Bot, ArrowRight, ExternalLink, Sparkles,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { KpiCard } from "@/components/domain/kpi-card";
 import { RunCard } from "@/components/domain/run-card";
-import { ArchitectureMini } from "@/components/domain/architecture-mini";
+import { NeedsAttention } from "@/components/domain/needs-attention";
 import { EmptyState } from "@/components/domain/empty-state";
-import { useRuns, useTelemetryCost, useHealth } from "@/lib/hooks/use-runs";
+import { useRuns, useTelemetryCost, useDecisions } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
+import { buildAttentionQueue, attentionCounts } from "@/lib/attention";
 import { fmtUsd } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { data: runs, isLoading: runsLoading } = useRuns();
   const { data: cost } = useTelemetryCost();
-  const { data: health } = useHealth();
+  const { data: decisions } = useDecisions({ limit: 200 });
   useAssistantContext({ kind: "dashboard", label: "Dashboard" });
 
-  const runsList = runs?.items ?? [];
+  const runsList = useMemo(() => runs?.items ?? [], [runs]);
+  const entries = useMemo(() => decisions?.entries ?? [], [decisions]);
+
+  // The attention queue is the whole point of this page. Everything else is
+  // context for it.
+  const queue = useMemo(
+    () => buildAttentionQueue(runsList, entries, { limit: 6 }),
+    [runsList, entries],
+  );
+  const counts = useMemo(() => attentionCounts(runsList, entries), [runsList, entries]);
+  const queueTotal = counts.blocked + counts.failed + counts.flagged + counts.stalled;
+
   const activeRuns = runsList.filter((r) =>
     ["running", "awaiting_gate", "paused", "queued"].includes(r.status),
   ).length;
+  // Total failures, not just the 24h alert window. Reporting "0" because every
+  // failure is 2 days old is technically true and deeply misleading — a ~50%
+  // failure rate is the most important fact on this page.
+  const failedTotal = runsList.filter((r) => r.status === "failed").length;
   const totalCost = cost?.total_cost_usd ?? 0;
-  const mcpToolCount = health?.tools?.length ?? 0;
+  const recent = runsList.slice(0, 4);
 
   return (
     <div className="space-y-6">
-      {/* Hero */}
-      <section className="rounded-xl border border-[var(--border-default)] bg-gradient-to-br from-[var(--surface)] via-[var(--surface)] to-[var(--elevated)] p-6 relative overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-30 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(circle at 0% 0%, var(--plane-standards) 0%, transparent 40%), radial-gradient(circle at 100% 0%, var(--plane-pipeline) 0%, transparent 40%), radial-gradient(circle at 0% 100%, var(--plane-ledger) 0%, transparent 40%), radial-gradient(circle at 100% 100%, var(--plane-agenthq) 0%, transparent 40%)",
-          }}
-        />
-        <div className="relative flex flex-col lg:flex-row gap-6 items-start justify-between">
-          <div className="flex-1 min-w-0 space-y-3">
-            <Badge variant="secondary" className="text-[10px]">
-              <Sparkles className="h-2.5 w-2.5" />
-              v0.7-rc1 · live
-            </Badge>
-            <h1 className="text-3xl font-semibold tracking-tight text-[var(--text)] max-w-2xl">
-              Governed agentic SDLC, made auditable.
-            </h1>
-            <p className="text-sm text-[var(--text-secondary)] max-w-2xl leading-relaxed">
-              Four planes — <span className="text-[var(--plane-standards)] font-medium">Standards</span>,{" "}
-              <span className="text-[var(--plane-pipeline)] font-medium">Pipeline</span>,{" "}
-              <span className="text-[var(--plane-ledger)] font-medium">Ledger + Doctor</span>, and{" "}
-              <span className="text-[var(--plane-agenthq)] font-medium">Agent HQ</span> — wired so every
-              AI-agent decision is captured, every standards change is committee-approved, and every
-              PHI rule is enforced at the hook layer before a single token is generated.
-            </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button variant="primary" asChild>
-                <Link href="/runs">View live runs <ArrowRight className="h-4 w-4" /></Link>
-              </Button>
-              <Button variant="secondary" asChild>
-                <a href="https://github.com/idanshimon/agentic-sdlc" target="_blank" rel="noreferrer">
-                  <Github className="h-4 w-4" /> Source
-                </a>
-              </Button>
-              <Button variant="ghost" asChild>
-                <a
-                  href="https://ca-orchestrator-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io/docs"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  API docs <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              </Button>
-            </div>
-          </div>
-          <Card className="w-full lg:w-[280px] p-4 bg-[var(--bg)]/50 border-[var(--border-default)]">
-            <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)] mb-3">
-              Live infrastructure
-            </div>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--text-secondary)]">Orchestrator</span>
-                <span className="mono text-[10px] text-[var(--success)] truncate">200 OK</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--text-secondary)]">Ledger MCP</span>
-                <span className="mono text-[10px] text-[var(--success)]">v0.7.0</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--text-secondary)]">MCP tools</span>
-                <span className="mono text-[10px] tabular text-[var(--text)]">{mcpToolCount}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--text-secondary)]">Region</span>
-                <span className="mono text-[10px] text-[var(--text)]">eastus2</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 pt-2 border-t border-[var(--border-default)]">
-                <span className="text-[var(--text-secondary)]">Auth</span>
-                <span className="mono text-[10px] text-[var(--text)]">Managed Identity</span>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </section>
+      {/* Fold one: what needs a human. Not a pitch. */}
+      <NeedsAttention items={queue} loading={runsLoading} total={queueTotal} />
 
-      {/* KPIs */}
+      {/* KPIs are navigation, not decoration — each one filters a real view. */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard
           label="Active runs"
@@ -115,60 +57,47 @@ export default function DashboardPage() {
           accent="pipeline"
           hint="running, awaiting, paused, queued"
           loading={runsLoading}
+          href="/runs?view=active"
         />
         <KpiCard
-          label="Decisions logged"
-          value={runsLoading ? null : runsList.reduce((acc, r) => acc + (r.decisions_count ?? 0), 0) || (cost?.total_decisions ?? 0)}
+          label="Blocked on a human"
+          value={runsLoading ? null : counts.blocked}
           icon={Scale}
-          accent="ledger"
-          hint="across all runs"
+          accent={counts.blocked > 0 ? "warning" : "ledger"}
+          hint="gates waiting for a decision"
           loading={runsLoading}
+          href="/runs?view=attention"
+        />
+        <KpiCard
+          label="Failed runs"
+          value={runsLoading ? null : failedTotal}
+          icon={Activity}
+          accent={failedTotal > 0 ? "danger" : "ledger"}
+          hint={
+            runsList.length > 0
+              ? `${Math.round((failedTotal / runsList.length) * 100)}% of all runs`
+              : "produced no delivery"
+          }
+          loading={runsLoading}
+          href="/runs?view=failed"
         />
         <KpiCard
           label="Spend (period)"
           value={fmtUsd(totalCost, 2)}
-          icon={Activity}
-          accent="warning"
-          hint="model inference + tools"
-        />
-        <KpiCard
-          label="Active bundles"
-          value={4}
           icon={Library}
           accent="standards"
-          hint="security · privacy · architect · finops"
+          hint="model inference + tools"
+          href="/economics"
         />
       </section>
 
-      {/* Architecture mini */}
+      {/* Recent activity — context, deliberately below the queue. */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold">Architecture</h2>
+            <h2 className="text-base font-semibold">Recent activity</h2>
             <p className="text-xs text-[var(--text-tertiary)]">
-              The four planes you&apos;re operating against.
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" asChild>
-            <a
-              href="https://github.com/idanshimon/agentic-sdlc/blob/main/docs/explainer.html"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Full explainer <ExternalLink className="h-3 w-3" />
-            </a>
-          </Button>
-        </div>
-        <ArchitectureMini />
-      </section>
-
-      {/* Recent runs */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold">Recent runs</h2>
-            <p className="text-xs text-[var(--text-tertiary)]">
-              Pipeline activity in the last 24h. Click any run to drill into stage events, decisions, and the gate timeline.
+              Latest pipeline runs. Click any run for stage events, decisions, and the gate timeline.
             </p>
           </div>
           <Button variant="ghost" size="sm" asChild>
@@ -195,14 +124,14 @@ export default function DashboardPage() {
           />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {runsList.slice(0, 6).map((run) => (
+            {recent.map((run) => (
               <RunCard key={run.run_id} run={run} />
             ))}
           </div>
         )}
       </section>
 
-      {/* Plane shortcuts — Reports is the management surface */}
+      {/* Shortcuts + the architecture explainer, which belongs here — not in the fold. */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { href: "/reports", title: "Reports", desc: "Exec-readable governance posture, cost, drift.", icon: Sparkles, plane: "ledger" },
@@ -225,6 +154,18 @@ export default function DashboardPage() {
           );
         })}
       </section>
+
+      <div className="flex justify-end">
+        <Button variant="ghost" size="sm" asChild>
+          <a
+            href="https://github.com/idanshimon/agentic-sdlc/blob/main/docs/explainer.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            How the four planes fit together <ExternalLink className="h-3 w-3" />
+          </a>
+        </Button>
+      </div>
     </div>
   );
 }

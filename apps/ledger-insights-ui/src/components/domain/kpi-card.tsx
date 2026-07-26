@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { type LucideIcon } from "lucide-react";
@@ -10,6 +11,7 @@ export function KpiCard({
   hint,
   accent,
   loading,
+  href,
 }: {
   label: string;
   value: string | number | null | undefined;
@@ -18,6 +20,8 @@ export function KpiCard({
   hint?: string;
   accent?: "primary" | "success" | "warning" | "danger" | "standards" | "pipeline" | "ledger" | "agenthq";
   loading?: boolean;
+  /** When set, the whole KPI becomes a filter link into the view it summarizes. */
+  href?: string;
 }) {
   const accentVar: Record<string, string> = {
     primary: "var(--primary)",
@@ -31,8 +35,13 @@ export function KpiCard({
   };
   const accentColor = accent ? accentVar[accent] : "var(--text-tertiary)";
 
-  return (
-    <Card className="p-4">
+  const body = (
+    <Card
+      className={cn(
+        "p-4 h-full",
+        href && "transition-colors hover:border-[var(--text-tertiary)]",
+      )}
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
           {label}
@@ -59,5 +68,12 @@ export function KpiCard({
         )}
       </div>
     </Card>
+  );
+
+  if (!href) return body;
+  return (
+    <Link href={href} className="group block h-full">
+      {body}
+    </Link>
   );
 }
