@@ -1,0 +1,62 @@
+---
+title: Onboarding — from nothing to a governed factory
+config:
+  look: handDrawn
+  theme: neutral
+  flowchart:
+    curve: basis
+    nodeSpacing: 40
+    rankSpacing: 50
+---
+flowchart LR
+
+  subgraph S1["1 · ENTERPRISE"]
+    direction TB
+    ORG["org.yaml<br/><i>entra tenant<br/>departments · teams</i>"]
+    NOTE1["team_id is a<br/><b>precedent boundary</b><br/><i>not an org chart</i>"]
+    ORG -.- NOTE1
+  end
+
+  subgraph S2["2 · DEPARTMENTS AUTHOR"]
+    direction TB
+    RULES["rules.yaml<br/><i>severity · pattern<br/>rationale</i>"]
+    TESTS["test_cases<br/><i>every rule proves itself</i>"]
+    MECH["requires_mechanism<br/><i>a BLOCK rule must name<br/>what enforces it</i>"]
+    RULES --> TESTS --> MECH
+  end
+
+  subgraph S3["3 · TEAM ONBOARDS"]
+    direction TB
+    PIN["PINS.yaml<br/><i>pin bundle versions</i>"]
+    CANARY["canary one team<br/><i>7 days, then promote<br/>or revert</i>"]
+    PIN --> CANARY
+  end
+
+  subgraph S4["4 · RUN"]
+    direction TB
+    DROP(["PRD"])
+    PIPE["pipeline<br/><i>classify → resolve<br/>→ build → scan</i>"]
+    PR["PR<br/><i>+ decisions.md</i>"]
+    DROP --> PIPE --> PR
+  end
+
+  subgraph S5["5 · IT COMPOUNDS"]
+    direction TB
+    LEDG[("ledger")]
+    EARN["autonomy earned<br/><i>per class, on evidence</i>"]
+    CHECK["disagreement rate<br/><i>the honest check</i>"]
+    LEDG --> EARN
+    LEDG --> CHECK
+  end
+
+  S1 ==> S2 ==> S3 ==> S4 ==> S5
+  S5 ==>|"precedent makes the<br/>next PRD cheaper"| S4
+
+  classDef step fill:#f8fafc,stroke:#334155
+  classDef law fill:#ede9fe,stroke:#6d28d9,stroke-width:2px
+  classDef store fill:#ecfdf5,stroke:#047857,stroke-width:2px
+  classDef warn fill:#fef3c7,stroke:#b45309,stroke-width:2px
+
+  class ORG,RULES,PIN law
+  class LEDG,EARN store
+  class MECH,TESTS,CHECK warn

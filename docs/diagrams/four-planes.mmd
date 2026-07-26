@@ -1,0 +1,66 @@
+---
+title: Agentic SDLC — the four planes
+config:
+  look: handDrawn
+  theme: neutral
+  flowchart:
+    curve: basis
+    nodeSpacing: 45
+    rankSpacing: 55
+---
+flowchart TB
+
+  subgraph STANDARDS["🏛️ STANDARDS — bundles are the law"]
+    direction TB
+    BUNDLES["security · privacy<br/>architect · finops"]
+    PINS{{"PINS.yaml<br/>team → version"}}
+    BUNDLES --- PINS
+  end
+
+  subgraph PIPELINE["⚙️ PIPELINE — classify before acting"]
+    direction LR
+    PRD(["PRD"])
+    ASSESS["ASSESS<br/><i>typed ambiguity cards</i>"]
+    RESOLVE{"RESOLVE"}
+    AUTO["autopilot<br/><i>precedent + confidence</i>"]
+    HUMAN["GATE<br/><i>a human rules</i>"]
+    BUILD["ARCHITECT<br/>→ CODEGEN"]
+    SCAN["REVIEW-SCAN<br/><i>fail-hard gate</i>"]
+    BLOCKED(["blocked by policy<br/><i>the guardrail working</i>"])
+    DELIVER["DELIVER<br/><i>PR + decisions.md</i>"]
+
+    PRD --> ASSESS --> RESOLVE
+    RESOLVE -->|"class earned it"| AUTO
+    RESOLVE -->|"invariant /<br/>low confidence"| HUMAN
+    AUTO --> BUILD
+    HUMAN --> BUILD
+    BUILD --> SCAN
+    SCAN -->|"BLOCK rule<br/>refuses"| BLOCKED
+    SCAN -->|"clean"| DELIVER
+  end
+
+  subgraph LEDGER["📒 LEDGER + DOCTOR — the audit substrate"]
+    direction LR
+    ENTRIES[("decision ledger<br/><i>decision · rule · actor · cost</i>")]
+    PRECEDENT["precedent<br/>accumulates"]
+    DOCTOR["doctor<br/>detects drift"]
+    ENTRIES --> PRECEDENT
+    ENTRIES --> DOCTOR
+  end
+
+  STANDARDS ==>|"injected at every stage<br/>cited as dept/version/RULE-ID"| PIPELINE
+  PIPELINE ==>|"every decision written"| LEDGER
+  PRECEDENT ==>|"⚡ FAST LOOP — next run<br/>the class earns autonomy"| RESOLVE
+  DOCTOR ==>|"🕰 SLOW LOOP — committee + canary<br/>v0.1.0 → v0.2.0"| STANDARDS
+
+  classDef human fill:#fef3c7,stroke:#b45309,stroke-width:2px
+  classDef agent fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px
+  classDef block fill:#fee2e2,stroke:#b91c1c,stroke-width:2px
+  classDef store fill:#ecfdf5,stroke:#047857,stroke-width:2px
+  classDef law fill:#ede9fe,stroke:#6d28d9,stroke-width:2px
+
+  class HUMAN human
+  class AUTO,BUILD agent
+  class BLOCKED,SCAN block
+  class ENTRIES,PRECEDENT store
+  class BUNDLES,PINS law

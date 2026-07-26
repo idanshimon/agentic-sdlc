@@ -383,6 +383,13 @@ def _classify_failure(run: dict) -> dict:
     elif message:
         kind = "technical"
     else:
+        # No terminal failure event was ever written. On live data 17 of 24
+        # failed runs are in this state: the last event is codegen/completed
+        # and the status flipped to failed with nothing recorded. That is a
+        # real orchestrator defect (a run died without emitting a failure), and
+        # it MUST surface as unknown rather than being folded into either
+        # bucket. Counting it as a policy block would manufacture a compliance
+        # win out of a missing log line.
         kind = "unknown"
 
     return {

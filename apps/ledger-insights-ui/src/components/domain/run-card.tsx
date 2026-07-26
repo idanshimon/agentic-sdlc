@@ -95,6 +95,37 @@ export function RunCard({ run }: { run: RunState }) {
             return <StagePill key={s} stage={s} status={status} />;
           })}
         </div>
+        {/* Why a failed run failed. Without the citation an operator cannot
+            tell a working guardrail from a broken pipeline, and will assume
+            the worse of the two. */}
+        {run.status === "failed" && run.failure_kind === "policy_block" && (
+          <div className="mt-2 rounded-md border border-[var(--warning)]/35 bg-[var(--warning)]/10 px-2.5 py-1.5">
+            <div className="text-[11px] font-medium text-[var(--warning)]">
+              Blocked by policy
+              {run.blocker_count ? ` — ${run.blocker_count} blocker${run.blocker_count === 1 ? "" : "s"}` : ""}
+            </div>
+            {run.blocking_rules && run.blocking_rules.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {run.blocking_rules.map((rule) => (
+                  <span
+                    key={rule}
+                    className="rounded border border-[var(--border-default)] bg-[var(--bg)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]"
+                  >
+                    {rule}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {run.status === "failed" && run.failure_kind === "technical" && run.failure_reason && (
+          <div className="mt-2 rounded-md border border-[var(--danger)]/35 bg-[var(--danger)]/10 px-2.5 py-1.5">
+            <div className="text-[11px] font-medium text-[var(--danger)]">Technical failure</div>
+            <div className="mt-0.5 truncate text-[11px] text-[var(--text-secondary)]">
+              {run.failure_reason}
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between text-[11px] text-[var(--text-tertiary)] pt-2 border-t border-[var(--border-muted)] gap-2">
           <span className="truncate">updated {relativeTime(run.updated_at)}</span>
           <span className="tabular shrink-0">

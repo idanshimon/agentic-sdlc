@@ -36,10 +36,25 @@ export default function DashboardPage() {
   const activeRuns = runsList.filter((r) =>
     ["running", "awaiting_gate", "paused", "queued"].includes(r.status),
   ).length;
-  // Total failures, not just the 24h alert window. Reporting "0" because every
-  // failure is 2 days old is technically true and deeply misleading — a ~50%
-  // failure rate is the most important fact on this page.
-  const failedTotal = runsList.filter((r) => r.status === "failed").length;
+  // A failed run is one of two OPPOSITE things, and merging them is the single
+  // most misleading number on this page. "24 failed / 48% of runs" reads as an
+  // outage. In fact most are the governance layer refusing to merge code that
+  // violates a BLOCK rule — the guardrail working, and the strongest evidence
+  // in the product that it does. Split them, and lead with the blocks.
+  const failedRuns = runsList.filter((r) => r.status === "failed");
+  const failedTotal = failedRuns.length;
+  const blockedByPolicy = failedRuns.filter(
+    (r) => r.failure_kind === "policy_block",
+  ).length;
+  const technicalFailures = failedRuns.filter(
+    (r) => r.failure_kind === "technical",
+  ).length;
+  // Older runs predate the failure classifier and carry no failure_kind. Do not
+  // silently fold them into either bucket — an unclassified failure is unknown,
+  // and claiming it as a policy win would be exactly the flattering lie this
+  // split exists to prevent.
+  const unclassifiedFailures = failedTotal - blockedByPolicy - technicalFailures;
+  const classifierRan = blockedByPolicy + technicalFailures > 0;
   const totalCost = cost?.total_cost_usd ?? 0;
   const recent = runsList.slice(0, 4);
 
@@ -69,14 +84,32 @@ export default function DashboardPage() {
           href="/runs?view=attention"
         />
         <KpiCard
-          label="Failed runs"
-          value={runsLoading ? null : failedTotal}
+          label={classifierRan ? "Blocked by policy" : "Failed runs"}
+          value={runsLoading ? null : classifierRan ? blockedByPolicy : failedTotal}
           icon={Activity}
-          accent={failedTotal > 0 ? "danger" : "ledger"}
+          // A policy block is NOT a fault. Colouring it red trains an operator
+          // to read a working control as an incident.
+          accent={
+            classifierRan
+              ? blockedByPolicy > 0
+                ? "warning"
+                : "ledger"
+              : failedTotal > 0
+                ? "danger"
+                : "ledger"
+          }
           hint={
-            runsList.length > 0
-              ? `${Math.round((failedTotal / runsList.length) * 100)}% of all runs`
-              : "produced no delivery"
+            classifierRan
+              ? `a BLOCK rule refused the code${
+                  technicalFailures > 0 ? ` · ${technicalFailures} technical` : ""
+                }${
+                  unclassifiedFailures > 0
+                    ? ` · ${unclassifiedFailures} unclassified`
+                    : ""
+                }`
+              : runsList.length > 0
+                ? `${Math.round((failedTotal / runsList.length) * 100)}% of all runs`
+                : "produced no delivery"
           }
           loading={runsLoading}
           href="/runs?view=failed"

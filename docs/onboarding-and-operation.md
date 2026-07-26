@@ -13,30 +13,34 @@ yet it is marked **[not built]** rather than described in the present tense.
 Four planes. Every AI decision passes through all four, and the Ledger is what
 makes the other three auditable.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  STANDARDS          Bundles are the law.                            │
-│                     security · privacy · architect · finops         │
-│                     Authored per department, PINNED per team.        │
-├─────────────────────────────────────────────────────────────────────┤
-│  PIPELINE           Assess → Resolve → Architect → Codegen →        │
-│                     Review-Scan → Deliver                            │
-│                     Gates are fail-hard. Rules are cited.            │
-├─────────────────────────────────────────────────────────────────────┤
-│  LEDGER + DOCTOR    Every decision, its rule, its actor, its cost.   │
-│                     Precedent accumulates here. Drift is detected    │
-│                     here.                                            │
-├─────────────────────────────────────────────────────────────────────┤
-│  AGENT HQ           The runtime that executes stages and opens PRs.  │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![The four planes](diagrams/four-planes.png)
+
+Read it in two movements. **Left to right** is one run: a PRD becomes typed
+ambiguity cards, each card is either auto-resolved from precedent or gated to a
+human, code is generated, and the review gate either refuses it against a BLOCK
+rule or lets it through to a PR.
+
+**The two arrows coming back** are where the value is:
+
+- **⚡ Fast loop** — a human ruling becomes precedent, and the next run needs one
+  fewer human. Measured in runs.
+- **🕰 Slow loop** — drift becomes a standards change, committee-approved and
+  canaried. Measured in weeks.
 
 The product is not code generation. It is that six weeks in you can answer
 *"why does our software look like this?"* with rows instead of recollection.
 
+> Diagram sources live in `docs/diagrams/*.mmd` (Mermaid). Re-render with:
+> `npx @mermaid-js/mermaid-cli -i docs/diagrams/four-planes.mmd -o docs/diagrams/four-planes.png -b white -w 1600`
+
 ---
 
 ## Part 2 — Onboarding
+
+![Onboarding flow](diagrams/onboarding-flow.png)
+
+Five steps. The first three are set up once; the last two are the loop you live
+in afterwards.
 
 ### Step 1 — Enterprise: the identity spine
 
