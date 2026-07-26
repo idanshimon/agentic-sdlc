@@ -231,6 +231,30 @@ export default function DecisionsMapPage() {
         <EdgeChip label="⚑ Only flagged + neighbors" active={onlyFlagged} color="var(--danger)" onClick={() => setOnlyFlagged((v) => !v)} />
       </div>
 
+      {/* What "flagged" means — the word appears on nodes, in a stat, and on a
+          filter chip, and nowhere said what it is or what to do about it. */}
+      <div className="flex items-start gap-2 rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-3 py-2">
+        <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--danger)]" />
+        <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+          <strong className="text-[var(--text)]">Flagged</strong> means a human
+          marked that decision as wrong after the fact. It is the teaching
+          signal: the agent stops reusing that answer as precedent, and every
+          decision downstream of it becomes suspect — which is why flagged nodes
+          and their neighbours are shown together.{" "}
+          {graph.stats.flagged === 0 ? (
+            <span className="text-[var(--text-tertiary)]">
+              Nothing is flagged right now, so no precedent has been retracted.
+              Open any decision and use <em>Flag</em> when the agent got it wrong.
+            </span>
+          ) : (
+            <span>
+              {graph.stats.flagged} decision{graph.stats.flagged === 1 ? " is" : "s are"} flagged —
+              use the filter above to isolate the blast radius.
+            </span>
+          )}
+        </p>
+      </div>
+
       <div className="relative h-[70vh] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg)]">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>

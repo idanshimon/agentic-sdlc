@@ -9,8 +9,48 @@ import { Badge } from "@/components/ui/badge";
 import { Lock, Bot, UserCheck } from "lucide-react";
 import type { AutonomyRule, AutonomySummary } from "@/lib/autonomy-governance";
 
-export function AutonomyRules({ summary }: { summary: AutonomySummary }) {
-  if (summary.rules.length === 0) return null;
+export function AutonomyRules({
+  summary,
+  isLoading = false,
+}: {
+  summary: AutonomySummary;
+  isLoading?: boolean;
+}) {
+  // Rendering nothing while the ledger loads is indistinguishable from "this
+  // feature is broken" — the exact failure this page already had. Show the
+  // skeleton, then either real rules or an explicit reason there are none.
+  if (isLoading) {
+    return (
+      <section className="space-y-3">
+        <div className="h-4 w-48 skeleton rounded" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-16 skeleton rounded-lg" />
+          ))}
+        </div>
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-20 skeleton rounded-lg" />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (summary.rules.length === 0) {
+    return (
+      <section className="rounded-lg border border-[var(--border-default)] bg-[var(--surface)] p-4">
+        <h2 className="text-base font-semibold text-[var(--text)]">
+          Autonomy rules in force
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
+          No decision in the ledger carries an autonomy reference yet. Every
+          decision the pipeline makes records which rule allowed the agent to act
+          alone — once a run completes, the rules it exercised appear here.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-3">

@@ -85,7 +85,7 @@ export default function ReviewLoopPage() {
   // Per-decision autonomy governance is a different mechanism from the PR
   // review loop and is populated on essentially every tenant. Read it from the
   // ledger so this page says something true even before a loop has ever run.
-  const { data: decisionData } = useDecisions({ limit: 300 });
+  const { data: decisionData, isLoading: decisionsLoading } = useDecisions({ limit: 300 });
 
   const loops = useMemo(() => projectReviewLoops(loopData?.hops ?? []), [loopData]);
   const escalations = loops.filter((l) => l.terminal === "escalated" || l.terminal === "failed");
@@ -161,7 +161,7 @@ export default function ReviewLoopPage() {
       )}
 
       {/* Per-decision autonomy governance — real data, present on every tenant. */}
-      <AutonomyRules summary={autonomy} />
+      <AutonomyRules summary={autonomy} isLoading={decisionsLoading} />
 
       {/* Live loop timelines */}
       {isLoading ? (
