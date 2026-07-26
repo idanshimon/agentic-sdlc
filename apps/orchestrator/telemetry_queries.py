@@ -22,6 +22,7 @@ not a true per-call sum. Totals + per-run timeseries are exact.
 """
 from __future__ import annotations
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -340,6 +341,60 @@ def _per_class_stats(runs: list[dict]) -> dict[str, dict[str, Any]]:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Failure classification
+# ────────────────────────────────────────────────────────────────────────────
+# A BLOCK-rule citation looks like `security/v0.1.0/PHI-001`.
+_RULE_CITATION = re.compile(r"\b([a-z][a-z0-9_-]*)/v\d+\.\d+\.\d+/([A-Z][A-Z0-9-]*)\b")
+
+
+def _classify_failure(run: dict) -> dict:
+    """Separate 'the guardrails stopped it' from 'something broke'.
+
+    These are opposite outcomes that share a status. A policy block is the
+    governance layer doing its job — the agent wrote code that violates a rule
+    and was refused. A technical failure is a defect. Reporting them as one
+    number invites a reader to conclude the pipeline is unreliable when the
+    evidence says the reverse.
+
+    Returns keys merged into the run summary:
+      failure_kind   — "policy_block" | "technical" | "unknown"
+      failure_stage  — stage that emitted the terminal failure
+      failure_reason — operator-readable message
+      blocking_rules — cited rule ids, e.g. ["security/v0.1.0/PHI-001"]
+      blocker_count  — number of blockers reported by the gate
+    """
+    events = run.get("events") or []
+    terminal = None
+    for e in events:
+        if (e.get("status") or "").lower() == "failed":
+            terminal = e  # keep the LAST failure event
+    message = str((terminal or {}).get("message") or "").strip()
+    stage = (terminal or {}).get("stage") or run.get("current_stage")
+
+    rules = sorted({m.group(0) for m in _RULE_CITATION.finditer(message)})
+
+    count = 0
+    m = re.search(r"(\d+)\s+blocker", message, re.IGNORECASE)
+    if m:
+        count = int(m.group(1))
+
+    if rules or "policy gate failed" in message.lower():
+        kind = "policy_block"
+    elif message:
+        kind = "technical"
+    else:
+        kind = "unknown"
+
+    return {
+        "failure_kind": kind,
+        "failure_stage": stage,
+        "failure_reason": message or None,
+        "blocking_rules": rules,
+        "blocker_count": count,
+    }
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Runs index (recent runs list for /runs page)
 # ────────────────────────────────────────────────────────────────────────────
 async def query_recent_runs(
@@ -412,6 +467,13 @@ async def query_recent_runs(
                 "namespace": item.get("namespace"),
                 "source_run_dir": item.get("source_run_dir"),
             }
+            # Why a run failed. Without this the dashboard can only say "24
+            # failed / 48% of runs", which reads as an outage — when in fact
+            # most failures are the governance layer refusing to merge code
+            # that violates a BLOCK rule. That is the system working, and it
+            # is the opposite conclusion from the same number.
+            if summary["status"] == "failed":
+                summary.update(_classify_failure(item))
             out.append(summary)
         # Sort newest-first client-side (Cosmos ORDER BY cross-partition needs index).
         out.sort(key=lambda r: r.get("updated_at") or r.get("created_at") or "", reverse=True)

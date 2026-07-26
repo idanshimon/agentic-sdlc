@@ -51,6 +51,16 @@ export interface RunState {
   total_cost_usd?: number;
   total_tokens?: number;
   decisions_count?: number;
+  /** Why a failed run failed. Set by the orchestrator's failure classifier.
+   *  "policy_block" means a BLOCK rule refused the code — the governance layer
+   *  working, not a defect. "technical" is a real failure. Reporting them as
+   *  one number makes a working guardrail look like an outage. */
+  failure_kind?: "policy_block" | "technical" | "unknown" | null;
+  failure_stage?: string | null;
+  failure_reason?: string | null;
+  /** Cited rule ids, e.g. ["security/v0.1.0/PHI-001"]. */
+  blocking_rules?: string[];
+  blocker_count?: number;
   /** Per-stage wall-clock seconds. Populated by the orchestrator + the
    *  experiments harness; absent on legacy in-memory-only runs. */
   stage_durations_seconds?: Record<string, number>;

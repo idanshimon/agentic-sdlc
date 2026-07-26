@@ -217,6 +217,15 @@ These are deliberately stated up-front because hand-waving them undermines trust
   `.github/workflows/supply-chain-scan.yml` supplies one. A missing or unreadable
   scan report fails the build; it is never treated as a pass.
 
+## Onboarding and daily operation
+
+**[docs/onboarding-and-operation.md](docs/onboarding-and-operation.md)** is the
+end-to-end walkthrough: how an organization gets from nothing to a governed
+agent factory (identity spine → department bundles → team pins → PRD → pipeline
+→ the loop closing), and what an operator actually does with the dashboard each
+day. It includes the three-queue daily loop, how to read a failed run correctly,
+and the honest limits to state before a demo rather than after.
+
 ## Measuring autonomy honestly
 
 **Autonomy earned** (the share of decisions resolved without a human) measures how
