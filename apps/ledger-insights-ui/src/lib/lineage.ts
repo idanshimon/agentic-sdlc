@@ -108,13 +108,19 @@ export function buildLineageIndex(entries: LedgerEntry[]): LineageIndex {
   const stage = entries.filter(isStageDecision);
   const signals = entries.filter(isTeachingSignal);
 
-  // --- group stage decisions by ambiguity bucket (slot_value_hash) ---
+  // --- group stage decisions by decision question (card_id) ---
+  //
+  // Keyed on card_id, NOT slot_value_hash. Despite its name and the original
+  // design intent (team + class + slot), slot_value_hash is class-level on real
+  // data: all 18 distinct values map 1:1 onto ambiguity_class, so one "bucket"
+  // swallows 63 unrelated decisions with 52 different resolutions. Precedent
+  // means "the same question was answered before", and card_id is that identity.
   const byBucket = new Map<string, LedgerEntry[]>();
   for (const e of stage) {
-    if (!e.slot_value_hash) continue;
-    const arr = byBucket.get(e.slot_value_hash) ?? [];
+    if (!e.card_id) continue;
+    const arr = byBucket.get(e.card_id) ?? [];
     arr.push(e);
-    byBucket.set(e.slot_value_hash, arr);
+    byBucket.set(e.card_id, arr);
   }
 
   // A bucket is precedent-bearing when a human ruled on it FIRST and an agent
@@ -155,7 +161,7 @@ export function buildLineageIndex(entries: LedgerEntry[]): LineageIndex {
   let reusedCount = 0;
 
   for (const e of stage) {
-    const slotKey = e.slot_value_hash;
+    const slotKey = e.card_id;
     const bucket = slotKey ? byBucket.get(slotKey) ?? [] : [];
     const bucketSize = Math.max(0, bucket.length - 1);
     const signalCount = signalsByTarget.get(e.id) ?? 0;

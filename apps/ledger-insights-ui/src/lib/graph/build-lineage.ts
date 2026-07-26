@@ -63,6 +63,41 @@ export function buildPrecedentLineage(entries: LedgerEntry[]): LineageGraph {
     }
   }
 
+  // DERIVED reuse. Explicit precedent_id/precedent_refs are only written by the
+  // reuse path when it fires; a real ledger can be entirely null there and still
+  // contain the relationship plainly. Derive it from `card_id` — the identity of
+  // a single decision question.
+  //
+  // NOT `slot_value_hash`. That field looks like a slot identity but is not one:
+  // on live data all 18 distinct hashes map 1:1 onto ambiguity_class (zero span
+  // more than one class), so one hash covers 63 entries with 52 different
+  // resolutions across 31 runs. Bucketing on it draws "every scope-resolution
+  // decision ever made" as a single precedent chain — a graph that renders
+  // convincingly and means nothing.
+  if (reuse.length === 0) {
+    const buckets = new Map<string, LedgerEntry[]>();
+    for (const e of decisions) {
+      const card = e.card_id;
+      if (!card) continue;
+      buckets.set(card, [...(buckets.get(card) ?? []), e]);
+    }
+    const at = (e: LedgerEntry) => Date.parse(e.created_at || "") || 0;
+    const isHuman = (e: LedgerEntry) =>
+      e.confidence_source === "human" || e.actor?.kind === "human";
+
+    for (const group of buckets.values()) {
+      if (group.length < 2) continue;
+      const humans = group.filter(isHuman).sort((a, b) => at(a) - at(b));
+      if (humans.length === 0) continue;
+      const precedent = humans[0];
+      for (const e of group) {
+        if (e.id === precedent.id) continue;
+        if (e.confidence_source !== "autopilot") continue;
+        reuse.push({ child: e.id, parent: precedent.id });
+      }
+    }
+  }
+
   // nodes that participate in any lineage
   const inLineage = new Set<string>();
   for (const { child, parent } of reuse) {

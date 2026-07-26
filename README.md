@@ -201,6 +201,57 @@ These are deliberately stated up-front because hand-waving them undermines trust
 - **Decision Ledger fan-out to A365 / Microsoft Graph audit events** is best-effort.
   If Graph emission fails, the ledger entry still persists. Compliance reads our ledger
   directly as the source of truth.
+- **`accuracy_score` is not yet populated.** The field exists on every ledger entry
+  and is `0.0` on all of them — nothing has computed it. Replay scoring
+  (`apps/orchestrator/replay.py`) reports such entries as `UNSCORED` and excludes
+  them from rates rather than counting them as agreements.
+- **`slot_value_hash` is class-level, not slot-level.** Despite the name and the
+  original `team + class + slot` intent, every distinct value maps 1:1 onto an
+  ambiguity class on real data. Precedent and replay therefore key on `card_id`,
+  which is the identity of a single decision question. Anything bucketing on
+  `slot_value_hash` is grouping a whole class, not a chain.
+- **A BLOCK rule is only as real as its mechanism.** `SBOM-001` shipped in
+  `security/v0.1.0` as a BLOCK rule with no scanner behind it — the review stage
+  reported `findings: 0` because nothing was ever scanned. `security/v0.2.0` adds
+  `requires_mechanism` so a rule must declare its enforcement path, and
+  `.github/workflows/supply-chain-scan.yml` supplies one. A missing or unreadable
+  scan report fails the build; it is never treated as a pass.
+
+## Measuring autonomy honestly
+
+**Autonomy earned** (the share of decisions resolved without a human) measures how
+much the agent was *allowed* to do. It is not evidence that it should have been.
+A system whose autonomy rate climbs while its error rate climbs looks like success
+on every chart in this repository.
+
+The number that grounds it is the **disagreement rate**: when the agent resolved a
+decision alone, how often did it diverge from a human ruling on the same question?
+
+```bash
+python3 -m pytest apps/orchestrator/tests/test_replay.py
+```
+
+Replay pairs each human ruling with autopilot decisions on the same `card_id` and
+reports a per-class verdict — `AUTONOMY EARNED`, `AUTONOMY DEFENSIBLE`,
+`REVOKE AUTONOMY`, `INVARIANT — HUMAN ALWAYS`, `INSUFFICIENT`, or `UNSCORED`.
+
+Three properties are load-bearing:
+
+1. **It refuses to report on thin evidence.** Below the sample floor the rate is
+   null and the verdict is `INSUFFICIENT` — never a flattering `0.0%` from n=2.
+2. **Thresholds are governance, not constants.** `ReplayPolicy.from_bundle()`
+   reads the same `defaults:` shape finops already uses for `AUTOPILOT-THRESHOLD-*`,
+   so teams on different pinned versions are judged by their own standards and a
+   threshold change is a bundle change with a canary, not a code deploy. Any rule
+   marked `phi_locked: true` becomes an autonomy invariant automatically, so
+   enforcement and scoring invariants cannot drift apart.
+3. **It never writes to the ledger.** Scoring is a read-only projection.
+   Fabricating rows to populate a metric would corrupt the audit substrate this
+   system exists to protect.
+
+Replay is also the fastest honest path to a calibrated baseline: instead of waiting
+for precedent to accumulate, it scores against outcomes that already happened.
+Spec: `openspec/changes/add-replay-disagreement-metric/`.
 
 ## Status
 

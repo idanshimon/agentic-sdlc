@@ -209,17 +209,22 @@ export default function LineageV2Page() {
     });
     cyRef.current = cy;
 
-    // dagre left→right DAG — clean lineage flow, no compound overlap
+    // Real precedent lineage is SHALLOW and WIDE: a handful of human rulings,
+    // each reused by dozens of later agent decisions. Left-to-right ranking
+    // gives that shape two ranks and one enormous column, which crushes into a
+    // sliver against the canvas edge. Top-to-bottom lets each precedent fan out
+    // across the full width instead.
     cy.layout({
       name: "dagre",
-      rankDir: "LR",
-      nodeSep: 34,
-      rankSep: 120,
-      edgeSep: 12,
+      rankDir: "TB",
+      nodeSep: 14,
+      rankSep: 160,
+      edgeSep: 6,
       ranker: "network-simplex",
+      spacingFactor: 0.85,
       animate: false,
       fit: true,
-      padding: 48,
+      padding: 36,
     } as cytoscape.LayoutOptions).run();
 
     const resetView = () => {
@@ -287,10 +292,9 @@ export default function LineageV2Page() {
         title={
           <span className="flex items-center gap-2">
             <GitBranch className="h-5 w-5" /> Precedent Lineage
-            <span className="rounded-full bg-[var(--plane-pipeline)]/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--plane-pipeline)]">v2 · Cytoscape</span>
           </span>
         }
-        description="Cytoscape spike: precedent lanes are native compound nodes; click any decision to focus its learning-loop neighborhood (upstream precedent + downstream reuse) and open its record."
+        description="Where the agent's answers came from. Each hub is a human ruling; the fan below it is every later decision the agent resolved the same way. Click any node to focus its learning loop — the precedent above it and the reuse below — and open the ledger record."
       />
 
       <div className="relative h-[74vh] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg)]">

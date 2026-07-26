@@ -29,13 +29,13 @@ describe("buildLineageIndex — teaching loop", () => {
     const entries: LedgerEntry[] = [
       entry({
         id: "swap1",
-        slot_value_hash: "H",
+        card_id: "H",
         decision_kind: "swap",
         confidence_source: "human",
         actor: { kind: "human", id: "operator@dashboard" },
       }),
-      entry({ id: "auto1", slot_value_hash: "H", confidence_source: "autopilot" }),
-      entry({ id: "auto2", slot_value_hash: "H", confidence_source: "autopilot" }),
+      entry({ id: "auto1", card_id: "H", confidence_source: "autopilot" }),
+      entry({ id: "auto2", card_id: "H", confidence_source: "autopilot" }),
     ];
     const idx = buildLineageIndex(entries);
     expect(idx.byId.get("swap1")!.role).toBe("taught");
@@ -46,10 +46,10 @@ describe("buildLineageIndex — teaching loop", () => {
 
   it("reports autonomy-earned metrics for the KPI strip", () => {
     const entries: LedgerEntry[] = [
-      entry({ id: "swap1", slot_value_hash: "H", decision_kind: "swap", confidence_source: "human", actor: { kind: "human", id: "op" } }),
-      entry({ id: "auto1", slot_value_hash: "H", confidence_source: "autopilot" }),
-      entry({ id: "auto2", slot_value_hash: "H", confidence_source: "autopilot" }),
-      entry({ id: "plain1", slot_value_hash: "OTHER", confidence_source: "human", actor: { kind: "human", id: "op" } }),
+      entry({ id: "swap1", card_id: "H", decision_kind: "swap", confidence_source: "human", actor: { kind: "human", id: "op" } }),
+      entry({ id: "auto1", card_id: "H", confidence_source: "autopilot" }),
+      entry({ id: "auto2", card_id: "H", confidence_source: "autopilot" }),
+      entry({ id: "plain1", card_id: "OTHER", confidence_source: "human", actor: { kind: "human", id: "op" } }),
     ];
     const { metrics } = buildLineageIndex(entries);
     expect(metrics.taughtCount).toBe(1);
@@ -61,8 +61,8 @@ describe("buildLineageIndex — teaching loop", () => {
 
   it("an autopilot decision in a bucket with NO human swap is 'plain', not 'reused'", () => {
     const entries: LedgerEntry[] = [
-      entry({ id: "auto1", slot_value_hash: "H", confidence_source: "autopilot" }),
-      entry({ id: "auto2", slot_value_hash: "H", confidence_source: "autopilot" }),
+      entry({ id: "auto1", card_id: "H", confidence_source: "autopilot" }),
+      entry({ id: "auto2", card_id: "H", confidence_source: "autopilot" }),
     ];
     const idx = buildLineageIndex(entries);
     expect(idx.byId.get("auto1")!.role).toBe("plain");
@@ -71,7 +71,7 @@ describe("buildLineageIndex — teaching loop", () => {
 
   it("classifies flagged decisions (teaching signal points at them)", () => {
     const entries: LedgerEntry[] = [
-      entry({ id: "dec1", slot_value_hash: "H" }),
+      entry({ id: "dec1", card_id: "H" }),
       entry({ id: "flag1", runtime_kind: "decision_flagged", references_entry_id: "dec1", actor: { kind: "human", id: "op" } }),
     ];
     const idx = buildLineageIndex(entries);
@@ -114,8 +114,8 @@ describe("predicates", () => {
 describe("lineageBadge", () => {
   it("taught + reused shows the reuse count", () => {
     const idx = buildLineageIndex([
-      entry({ id: "swap1", slot_value_hash: "H", decision_kind: "swap", confidence_source: "human", actor: { kind: "human", id: "op" } }),
-      entry({ id: "auto1", slot_value_hash: "H", confidence_source: "autopilot" }),
+      entry({ id: "swap1", card_id: "H", decision_kind: "swap", confidence_source: "human", actor: { kind: "human", id: "op" } }),
+      entry({ id: "auto1", card_id: "H", confidence_source: "autopilot" }),
     ]);
     const badge = lineageBadge(idx.byId.get("swap1")!);
     expect(badge?.label).toContain("reused 1");

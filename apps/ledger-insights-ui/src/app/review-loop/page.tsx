@@ -98,8 +98,8 @@ export default function ReviewLoopPage() {
     <div className="space-y-5">
       <PageHeader
         plane="agenthq"
-        title="Autonomous Review Loop"
-        description="Watch the dark factory run without being in the merge path. Each loop is a Coding Agent's PR reviewed by the deterministic verdict, remediated within bounds, then auto-merged (Tier A), sent for a human merge (Tier B), or escalated. PHI/auth/deny always escalate — model variance is contained, never solved."
+        title="Autonomy & Review"
+        description="Where the agent is trusted to act alone, where it is stopped, and by which rule. Autonomy is earned per ambiguity class from human precedent; invariants such as PHI and auth can never be auto-resolved regardless of precedent."
       />
 
       {/* Per-repo autonomy tiers — the "move the dial" control */}
