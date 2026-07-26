@@ -150,9 +150,26 @@ export function RunsTable({ runs }: { runs: RunState[] }) {
                     )}
                   </td>
                   <td className="px-3 py-2 align-middle">
-                    <Badge variant={statusVariant[r.status] ?? "default"}>
-                      {r.status.replace("_", " ")}
-                    </Badge>
+                    {/* A policy block is not a fault. Label and colour it as
+                        the governance outcome it is, and cite the rule that
+                        refused the code so the row is actionable. */}
+                    {r.status === "failed" && r.failure_kind === "policy_block" ? (
+                      <span className="inline-flex flex-col gap-0.5">
+                        <Badge variant="warning">blocked by policy</Badge>
+                        {r.blocking_rules && r.blocking_rules.length > 0 && (
+                          <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                            {r.blocking_rules[0]}
+                            {r.blocking_rules.length > 1
+                              ? ` +${r.blocking_rules.length - 1}`
+                              : ""}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <Badge variant={statusVariant[r.status] ?? "default"}>
+                        {r.status.replace("_", " ")}
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-3 py-2 align-middle text-[11px] text-[var(--text-secondary)] truncate">
                     {r.namespace ? (

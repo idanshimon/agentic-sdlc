@@ -38,16 +38,40 @@ describe("bandFor", () => {
     expect(bandFor(run({ status: "completed" }), NOW)).toBe("done");
     expect(bandFor(run({ status: "cancelled" }), NOW)).toBe("done");
   });
+
+  // A policy block and a defect share status="failed" but are opposite
+  // outcomes. Calling a working guardrail "failed" tells an operator to retry,
+  // which is exactly wrong: retrying re-runs the same generator against the
+  // same rule and blocks again.
+  it("routes a policy block to its own band, not failed", () => {
+    expect(
+      bandFor(run({ status: "failed", failure_kind: "policy_block" }), NOW),
+    ).toBe("blocked");
+  });
+
+  it("keeps genuine defects in the failed band", () => {
+    expect(
+      bandFor(run({ status: "failed", failure_kind: "technical" }), NOW),
+    ).toBe("failed");
+  });
+
+  it("treats an unclassified failure as failed, never as a policy win", () => {
+    expect(bandFor(run({ status: "failed" }), NOW)).toBe("failed");
+    expect(
+      bandFor(run({ status: "failed", failure_kind: "unknown" }), NOW),
+    ).toBe("failed");
+  });
 });
 
 describe("groupRuns", () => {
-  it("orders bands needs_you → failed → running → done", () => {
+  it("orders bands needs_you → blocked → failed → running → done", () => {
     const groups = groupRuns(
       [
         run({ run_id: "d", status: "completed" }),
         run({ run_id: "f", status: "failed" }),
         run({ run_id: "r", status: "running" }),
         run({ run_id: "n", status: "awaiting_gate" }),
+        run({ run_id: "b", status: "failed", failure_kind: "policy_block" }),
       ],
       NOW,
     );

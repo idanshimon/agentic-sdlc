@@ -130,3 +130,48 @@ derives button + guidance state from a pure, unit-tested `gateProgress()`:
 
 Covered by 7 new tests in `resolver-gate.test.ts` (16 total green); `npm run
 build` clean.
+
+---
+
+## KI-3 · Product name + sidebar identity mark need a UX/brand pass — TBD
+
+**Status:** open, not started. Cosmetic, but customer-visible on every screen.
+
+**Symptom.** The sidebar header currently renders a rounded-square "LI" glyph
+above the wordmark "Ledger Insights" with the sub-label "AGENTIC-SDLC V0.7".
+Three separate problems, in priority order:
+
+1. **The product name is not settled.** "Ledger Insights" describes a *reporting
+   tool*, which undersells what this is. The ledger is the substrate, not the
+   product — the product is governed autonomy with an audit trail. The name
+   should carry the thing a buyer is purchasing (enforced standards, earned
+   autonomy, provable compliance), not the storage layer it happens to use.
+   Treat the current string as a placeholder, not a decision.
+
+2. **The identity mark is a default-looking monogram.** A generic "LI" tile is
+   the visual equivalent of unstyled text. It reads as scaffolding rather than
+   product, which is corrosive in a governance tool where the entire pitch is
+   "this system is deliberate about everything."
+
+3. **Version and codename are leaking into the chrome.** "AGENTIC-SDLC V0.7"
+   sits under the wordmark on every page. A build version belongs in an about
+   panel or a footer, not in the persistent navigation — it dates the product
+   at a glance and reads as pre-release. (Related: `DESIGN.md` already forbids
+   dev/spike badges in the UI; this is the same class of leak.)
+
+**Constraints for whoever picks this up.**
+
+- `DESIGN.md` governs: no gradients, no hero treatment, no marketing language.
+  The mark must survive that — it should be quiet, monochrome-capable, and
+  legible at 24px in both light and dark themes.
+- The name change touches more than the sidebar: page `<title>`, the OG/meta
+  tags, the README, `docs/`, and the container app names. Do NOT rename
+  piecemeal — inventory every occurrence first, then change in one commit.
+- Renaming Azure resources (`ca-ledger-ui-vnet`, the ACR repo `ledger-insights-ui`)
+  is a deployment-affecting change, not a cosmetic one. It can lag the UI
+  rename; do not couple them.
+
+**Next step.** Naming decision first (it blocks the mark), then a single
+brand pass covering glyph + wordmark + where the version string lives.
+Nothing here blocks a demo — but the name is the first thing on screen and
+the last thing anyone remembers, so it should not stay accidental.

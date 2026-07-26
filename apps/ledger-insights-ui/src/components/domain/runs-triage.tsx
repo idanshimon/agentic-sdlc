@@ -5,14 +5,14 @@
  * a human under eleven failures. This groups by "what do I do about it",
  * newest-first inside each band, and lets the operator collapse the noise. */
 import { useMemo, useState } from "react";
-import { ChevronDown, PauseCircle, AlertTriangle, Clock, Play, CheckCircle2 } from "lucide-react";
+import { ChevronDown, PauseCircle, AlertTriangle, ShieldAlert, Clock, Play, CheckCircle2 } from "lucide-react";
 import type { RunState } from "@/lib/types";
 import { RunsTable } from "@/components/domain/runs-table";
 import { Badge } from "@/components/ui/badge";
 import { STALL_THRESHOLD_MS, FAILURE_WINDOW_MS } from "@/lib/attention";
 import { cn } from "@/lib/utils";
 
-export type TriageBand = "needs_you" | "failed" | "running" | "done";
+export type TriageBand = "needs_you" | "blocked" | "failed" | "running" | "done";
 
 export interface TriageGroup {
   band: TriageBand;
@@ -28,6 +28,17 @@ const BAND_META: Record<
     help: "Stopped at a gate. Nothing proceeds until a human answers.",
     color: "var(--warning)",
     icon: PauseCircle,
+    defaultOpen: true,
+  },
+  blocked: {
+    label: "Blocked by policy",
+    // NOT "failed". A BLOCK rule refusing the code is the governance layer
+    // doing its job. "Triage or retry" is actively wrong advice here — you do
+    // not retry a PHI violation, you fix the code or challenge the rule
+    // through a standards change.
+    help: "A standards rule refused the code. Fix the code, or challenge the rule.",
+    color: "var(--warning)",
+    icon: ShieldAlert,
     defaultOpen: true,
   },
   failed: {
@@ -53,7 +64,7 @@ const BAND_META: Record<
   },
 };
 
-export const BAND_ORDER: TriageBand[] = ["needs_you", "failed", "running", "done"];
+export const BAND_ORDER: TriageBand[] = ["needs_you", "blocked", "failed", "running", "done"];
 
 function ts(v: string | undefined | null): number {
   if (!v) return 0;
@@ -64,7 +75,11 @@ function ts(v: string | undefined | null): number {
 /** Pure classifier — unit-testable, no React. */
 export function bandFor(run: RunState, now: number = Date.now()): TriageBand {
   if (run.status === "awaiting_gate" || run.status === "paused") return "needs_you";
-  if (run.status === "failed") return "failed";
+  // A policy block is a governance outcome, not a fault. Only route genuine
+  // defects to the red "Failed" band.
+  if (run.status === "failed") {
+    return run.failure_kind === "policy_block" ? "blocked" : "failed";
+  }
   if (run.status === "running" || run.status === "queued") return "running";
   return "done";
 }

@@ -37,7 +37,15 @@ export function RunsInsights({ runs }: { runs: RunState[] }) {
   const total = runs.length;
   const completed = runs.filter((r) => r.status === "completed").length;
   const running = runs.filter((r) => r.status === "running").length;
-  const failed = runs.filter((r) => r.status === "failed" || r.status === "cancelled").length;
+  // Separate governance outcomes from defects. Lumping policy blocks into a
+  // "fail" count tells the operator the pipeline is unreliable when in fact a
+  // standards rule refused the code exactly as designed.
+  const blocked = runs.filter(
+    (r) => r.status === "failed" && r.failure_kind === "policy_block",
+  ).length;
+  const failed =
+    runs.filter((r) => r.status === "failed" || r.status === "cancelled").length -
+    blocked;
 
   const totalCost = runs.reduce((s, r) => s + (r.total_cost_usd ?? r.cost_usd ?? 0), 0);
   const totalTokens = runs.reduce((s, r) => s + (r.total_tokens ?? 0), 0);
@@ -65,7 +73,7 @@ export function RunsInsights({ runs }: { runs: RunState[] }) {
         sub={
           total === 0
             ? "no runs match"
-            : `${completed} done · ${running} live · ${failed} fail`
+            : `${completed} done · ${running} live · ${blocked} blocked · ${failed} fail`
         }
         icons={[Activity]}
       />
