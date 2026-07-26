@@ -57,6 +57,12 @@
   --danger: #EF4444;
   --info: #0EA5E9;
 
+  /* Foreground for filled accent surfaces (primary buttons, badges on solid
+     fills). Near-black with a blue cast so it reads as intentional against
+     --primary rather than as pure #000. Was duplicated as a literal #001018 in
+     button.tsx, sidebar.tsx, assistant-panel.tsx and teaching-signal-bar.tsx. */
+  --on-primary: #001018;
+
   /* Plane palette */
   --plane-standards: #A78BFA;
   --plane-pipeline: #0EA5E9;

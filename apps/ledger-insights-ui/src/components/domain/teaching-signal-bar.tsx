@@ -307,7 +307,7 @@ function FormPanel({
           disabled={disabled}
           className={cn(
             "text-[11px] px-2 py-1 rounded font-medium",
-            "bg-[var(--primary)] text-[var(--surface-inverted,#001018)]",
+            "bg-[var(--primary)] text-[var(--on-primary)]",
             "hover:bg-[var(--primary-hover,var(--primary))]",
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}

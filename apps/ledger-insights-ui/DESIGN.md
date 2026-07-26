@@ -6,6 +6,7 @@ colors:
   primary: "#0EA5E9"
   secondary: "#A78BFA"
   tertiary: "#10B981"
+  onPrimary: "#001018"
   neutral: "#0B0F14"
   surface: "#11161D"
   elevated: "#161D26"
@@ -90,7 +91,7 @@ components:
     padding: "20px"
   button-primary:
     backgroundColor: "{colors.primary}"
-    textColor: "#001018"
+    textColor: "{colors.onPrimary}"
     rounded: "{rounded.md}"
     padding: "10px"
   button-secondary:
@@ -146,6 +147,24 @@ Three opinions:
 - **Elevated (#161D26)** — modal/popover background, two steps up.
 - **Overlay (#1E2632)** — input background, badge fill, three steps up.
 - **Border (#243042)** — default card/input border. **Always 1px solid.** Never use shadows for separation; the design uses border + surface contrast.
+- **onPrimary (#001018)** — the ONLY foreground allowed on a filled `--primary` / `--plane-*` surface (primary buttons, solid badges, the sidebar mark). Near-black with a blue cast so it reads intentional rather than as pure `#000`. Use `var(--on-primary)`; never re-type the hex.
+
+### Canvas surfaces — the one sanctioned hex exception
+
+Graph views rendered by **Cytoscape.js** and **react-flow** (`/decisions/graph`,
+`/decisions/lineage-v2`, `/decisions/runflow`) style nodes and edges through a
+JavaScript stylesheet drawn to `<canvas>`. Canvas cannot resolve CSS custom
+properties, so those files **must** hard-code hex values. This is the only
+place in the codebase where "tokens or nothing" does not apply.
+
+Rules for that exception:
+
+- Hard-coded values MUST be copied verbatim from the `:root` block in
+  `globals.css` — they are a mirror of the token set, not a new palette.
+- Inventing a value that has no token counterpart is still a violation.
+  (`#1A1520` and `#475569` currently in `lineage-v2` are known drift.)
+- When the palette changes, these files must be updated in the same commit or
+  the graph pages silently keep the old theme.
 
 Light-theme palette is **derived automatically** by inverting the L channel of OKLCH; agents must not hand-author light values.
 
@@ -202,7 +221,8 @@ a code-review block.
 - ✅ Use `<PlaneBadge>`, `<Badge variant="…">`, `<StatusDot status="…">`.
 - ✅ Use tabular-nums on every metric.
 - ✅ Use Geist Mono for any identifier humans copy (run_id, GUID, ledger entry id, bundle ref).
-- ❌ Don't hard-code colors. Tokens or nothing.
+- ❌ Don't hard-code colors. Tokens or nothing. **Exception:** canvas-rendered graph views — see "Canvas surfaces" above.
+- ❌ Don't re-type `#001018`. Use `var(--on-primary)`.
 - ❌ Don't use drop shadows on cards.
 - ❌ Don't use emoji as icons. Lucide React only.
 - ❌ Don't add a hero section, marketing copy, "join the future" CTA, gradient backgrounds, glassmorphism, or generic SaaS card grids. This is an operator dashboard, not a landing page.

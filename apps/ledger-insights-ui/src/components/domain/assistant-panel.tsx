@@ -392,7 +392,7 @@ export function AskAgentButton() {
       className={cn(
         "fixed bottom-5 right-5 z-40 group",
         "flex items-center gap-2 px-4 h-11 rounded-full",
-        "bg-[var(--plane-agenthq)] text-[#001018] font-medium",
+        "bg-[var(--plane-agenthq)] text-[var(--on-primary)] font-medium",
         "shadow-lg hover:shadow-xl hover:scale-105 transition-all",
       )}
       title="Ask the agent for help with this page"
