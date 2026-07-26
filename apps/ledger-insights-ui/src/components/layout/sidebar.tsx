@@ -15,55 +15,47 @@ import {
   Sparkles,
   DollarSign,
   FileSearch,
-  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/* Nav is organized by what an OPERATOR does, not by our four-plane
+ * architecture. Plane colors survive as accents on the items that belong to a
+ * plane, but they no longer dictate the grouping — "I need the Ledger Plane"
+ * is not a thought anyone has. The four Decisions views (table / map /
+ * lineage / run flow) are tabs INSIDE /decisions, not four siblings here. */
 const nav = [
   {
-    section: "Overview",
+    section: "Operate",
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard, plane: null },
-      { href: "/reports", label: "Reports", icon: Sparkles, plane: "ledger" },
-    ],
-  },
-  {
-    section: "Pipeline Plane",
-    plane: "pipeline" as const,
-    items: [
       { href: "/runs", label: "Runs", icon: GitBranch, plane: "pipeline" },
-      { href: "/telemetry", label: "Telemetry", icon: Activity, plane: "pipeline" },
+      { href: "/decisions", label: "Decisions", icon: Scale, plane: "ledger" },
+      { href: "/review-loop", label: "Review Loop", icon: GitMerge, plane: "agenthq" },
     ],
   },
   {
-    section: "Ledger Plane",
-    plane: "ledger" as const,
+    section: "Govern",
     items: [
-      { href: "/decisions", label: "Decisions", icon: Scale, plane: "ledger" },
-      { href: "/decisions/graph", label: "Decision Map", icon: Share2, plane: "ledger" },
-      { href: "/decisions/lineage", label: "Precedent Lineage", icon: GitBranch, plane: "ledger" },
-      { href: "/decisions/runflow", label: "Run Flow", icon: Workflow, plane: "ledger" },
       { href: "/compliance", label: "Compliance", icon: FileSearch, plane: "ledger" },
+      { href: "/bundles", label: "Bundles", icon: Library, plane: "standards" },
+      { href: "/changes", label: "OpenSpec Changes", icon: GitMerge, plane: "standards" },
+      { href: "/phi", label: "PHI Classifier", icon: ShieldCheck, plane: "agenthq" },
+    ],
+  },
+  {
+    section: "Analyze",
+    items: [
+      { href: "/reports", label: "Reports", icon: Sparkles, plane: "ledger" },
+      { href: "/telemetry", label: "Telemetry", icon: Activity, plane: "pipeline" },
       { href: "/economics", label: "Economics", icon: DollarSign, plane: "ledger" },
     ],
   },
   {
-    section: "Standards Plane",
-    plane: "standards" as const,
-    items: [
-      { href: "/changes", label: "OpenSpec Changes", icon: GitMerge, plane: "standards" },
-      { href: "/bundles", label: "Bundles", icon: Library, plane: "standards" },
-      { href: "/prompts", label: "Prompt Library", icon: BookOpen, plane: "standards" },
-    ],
-  },
-  {
-    section: "Agent HQ",
-    plane: "agenthq" as const,
+    section: "Configure",
     items: [
       { href: "/agents", label: "Custom Agents", icon: Bot, plane: "agenthq" },
+      { href: "/prompts", label: "Prompt Library", icon: BookOpen, plane: "standards" },
       { href: "/hooks", label: "Hooks", icon: Workflow, plane: "agenthq" },
-      { href: "/review-loop", label: "Review Loop", icon: GitMerge, plane: "agenthq" },
-      { href: "/phi", label: "PHI Classifier", icon: ShieldCheck, plane: "agenthq" },
     ],
   },
 ];
@@ -95,7 +87,7 @@ export function SidebarBody() {
       <div className="flex h-14 items-center px-4 border-b border-[var(--border-default)]">
         <Link href="/" className="flex items-center gap-2 group">
           <div className="relative h-8 w-8 rounded-md bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center">
-            <span className="text-[10px] font-bold text-[#001018]">LI</span>
+            <span className="text-[10px] font-bold text-[var(--on-primary)]">LI</span>
           </div>
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold text-[var(--text)] group-hover:text-[var(--primary)] transition-colors">
@@ -111,12 +103,6 @@ export function SidebarBody() {
         {nav.map((sec) => (
           <div key={sec.section}>
             <div className="flex items-center gap-1.5 px-2 mb-1.5">
-              {sec.plane && (
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: planeColor[sec.plane] }}
-                />
-              )}
               <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
                 {sec.section}
               </span>
@@ -130,12 +116,25 @@ export function SidebarBody() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
+                      "group/nav relative flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
                       active
                         ? "bg-[var(--overlay)] text-[var(--text)]"
                         : "text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--overlay)]/50",
                     )}
                   >
+                    {/* Plane coding survives the regroup as a per-item accent
+                        rail — the color still means "which plane owns this",
+                        it just no longer dictates the menu structure. */}
+                    {item.plane && (
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-full transition-opacity",
+                          active ? "opacity-100" : "opacity-0 group-hover/nav:opacity-60",
+                        )}
+                        style={{ background: planeColor[item.plane] }}
+                      />
+                    )}
                     <Icon className="h-4 w-4 shrink-0" />
                     <span>{item.label}</span>
                   </Link>
