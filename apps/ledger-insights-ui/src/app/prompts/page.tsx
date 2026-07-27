@@ -294,7 +294,7 @@ function PromptDrawer({ promptId, onClose }: { promptId: string; onClose: () => 
                   >
                     {editing
                       ? <><X className="h-3 w-3 mr-1" /> Close editor</>
-                      : <><Pencil className="h-3 w-3 mr-1" /> Edit · new version</>}
+                      : <><Pencil className="h-3 w-3 mr-1" /> Edit</>}
                   </Button>
                 </div>
                 {editing ? (

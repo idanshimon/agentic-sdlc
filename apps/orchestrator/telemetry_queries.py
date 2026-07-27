@@ -474,6 +474,7 @@ async def query_recent_runs(
                 # narrator had to map cost→model from memory.
                 "model": item.get("model"),
                 "model_slug": item.get("model_slug"),
+                "models_by_stage": item.get("models_by_stage"),
                 "namespace": item.get("namespace"),
                 "source_run_dir": item.get("source_run_dir"),
             }

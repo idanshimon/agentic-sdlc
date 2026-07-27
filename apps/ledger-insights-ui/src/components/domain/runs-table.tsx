@@ -39,12 +39,30 @@ const statusVariant: Record<string, "success" | "warning" | "danger" | "info" | 
 
 function modelLabel(run: RunState): string | null {
   if (run.model) return run.model;
+  // Routing is per-stage, so prefer the model that wrote the CODE — that is
+  // what an operator means by "which model produced this run".
+  const byStage = run.models_by_stage;
+  if (byStage) {
+    const preferred = byStage.codegen ?? byStage.architect;
+    if (preferred) return preferred;
+    const first = Object.values(byStage).find(Boolean);
+    if (first) return first;
+  }
   if (run.model_routing) {
     for (const v of Object.values(run.model_routing)) {
       if (v?.model) return v.model;
     }
   }
   return null;
+}
+
+/** How many DISTINCT models a run used across its stages. A run that used a
+ *  fast model for triage and a strong one for codegen is a cost story worth
+ *  surfacing, not a detail to flatten away. */
+function modelCount(run: RunState): number {
+  const byStage = run.models_by_stage;
+  if (!byStage) return run.model ? 1 : 0;
+  return new Set(Object.values(byStage).filter(Boolean)).size;
 }
 
 /** Strip the verbose provider prefix for table display. */

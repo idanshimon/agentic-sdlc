@@ -191,10 +191,16 @@ export default function EconomicsPage() {
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {/* These two series answer different questions and MUST be
+                      visually distinct. Decisions is total volume; precedent
+                      hits is the subset resolved without a human. The ratio
+                      between them IS the economics argument — rendering both
+                      in green (--plane-ledger and --success are the same hex)
+                      collapsed the chart into one indistinguishable blur. */}
                   <Line
                     type="monotone"
                     dataKey="decisions"
-                    stroke="var(--plane-ledger)"
+                    stroke="var(--text-secondary)"
                     strokeWidth={2}
                     dot={{ r: 3 }}
                     name="Decisions"
@@ -203,7 +209,7 @@ export default function EconomicsPage() {
                     type="monotone"
                     dataKey="precedent_hits"
                     stroke="var(--success)"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     dot={{ r: 3 }}
                     name="Precedent hits"
                   />

@@ -58,6 +58,9 @@ export interface RunState {
   failure_kind?: "policy_block" | "technical" | "unknown" | null;
   failure_stage?: string | null;
   failure_reason?: string | null;
+  /** Model used per pipeline stage, e.g. { codegen: "claude-sonnet-4-6" }.
+   *  Routing is per-stage, so a run has no single model. */
+  models_by_stage?: Record<string, string> | null;
   /** Cited rule ids, e.g. ["security/v0.1.0/PHI-001"]. */
   blocking_rules?: string[];
   blocker_count?: number;

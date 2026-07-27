@@ -592,6 +592,40 @@ async def _drive_from_stage(run_id: str, prd_text: str, start: Stage) -> None:
         await _push(run_id, None)
 
 
+def _record_stage_model(run: Any, stage_name: str) -> None:
+    """Persist the model a stage is about to use onto the run.
+
+    Model routing is PER STAGE, so a run has no single model — it typically
+    uses a fast AOAI model for ingest/assessor/test_plan/review_scan and a
+    stronger Anthropic model for architect/codegen. Recording one "the model"
+    field would be a lie by simplification.
+
+    So we keep both shapes:
+      * models_by_stage — the honest, complete record
+      * model           — the model that wrote the CODE (codegen), because
+                          that is the one an operator means when they ask
+                          "which model produced this?"
+
+    Best-effort: model attribution must never break a run.
+    """
+    try:
+        model = _config.get_model_for_stage(run, stage_name)
+        if not model:
+            return
+        by_stage = getattr(run, "models_by_stage", None)
+        if not isinstance(by_stage, dict):
+            by_stage = {}
+        by_stage[stage_name] = model
+        run.models_by_stage = by_stage
+        # codegen is the headline attribution; fall back to architect.
+        if stage_name == "codegen" or (
+            stage_name == "architect" and not getattr(run, "model", None)
+        ):
+            run.model = model
+    except Exception:  # pragma: no cover - attribution is never load-bearing
+        _logger.debug("could not record model for stage %s", stage_name, exc_info=True)
+
+
 async def _drive(run_id: str, prd_text: str) -> None:
     """Background task: walks the pipeline graph, pausing at gates."""
     run = _runs[run_id]
@@ -638,9 +672,18 @@ async def _drive(run_id: str, prd_text: str) -> None:
             ("deliver", stage_deliver(run)),
         ):
             _logger.info("_drive[%s]: entering stage %s", run_id, stage_name)
+            # Record WHICH model this stage is about to use. Routing is
+            # per-stage (AOAI for ingest/assessor/test_plan/review_scan,
+            # Databricks-Anthropic for architect/codegen), and it was resolved
+            # but never persisted — so the dashboard's Model column rendered
+            # "—" on every row and could not be filtered on. Model attribution
+            # is a governance fact: "which model wrote this code" belongs in
+            # the audit trail alongside which rule allowed it.
+            _record_stage_model(run, stage_name)
             await _push(run_id, StageEvent(
                 run_id=run_id, stage=run.current_stage, status="progress",
                 message=f"[driver] entering {stage_name}",
+                payload={"model": _config.get_model_for_stage(run, stage_name)},
             ))
             try:
                 async for ev in gen:
