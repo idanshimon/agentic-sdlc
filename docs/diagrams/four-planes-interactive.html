@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic SDLC — the four planes</title>
+<script src="vendor/cytoscape.min.js"></script>
+<script src="vendor/dagre.min.js"></script>
+<script src="vendor/cytoscape-dagre.js"></script>
+<style>
+  :root {
+    --bg: #0c0d10;
+    --card: #14161c;
+    --card2: #1a1d26;
+    --fg: #e7e9ee;
+    --dim: #9aa1b2;
+    --faint: #5a6273;
+    --accent: #6fb3ff;
+    --green: #3ddc84;
+    --amber: #ffb74d;
+    --red: #ff6b6b;
+    --violet: #b79cff;
+    --border: #2a2e3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; height:100%; background: var(--bg); overflow:hidden; }
+  body {
+    color: var(--fg);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    display:flex; flex-direction:column;
+  }
+
+  header {
+    padding: 14px 22px 12px; border-bottom:1px solid var(--border);
+    display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; flex-shrink:0;
+  }
+  .kick { color:var(--accent); font-size:11px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; }
+  h1 { font-size:19px; font-weight:600; margin:0; letter-spacing:-.3px; }
+  #tag { color:var(--dim); font-size:13px; margin:0; }
+
+  #crumbs { display:flex; align-items:center; gap:7px; font-size:12.5px; margin-left:auto; }
+  #crumbs a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  #crumbs a:hover { text-decoration:underline; }
+  #crumbs .sep { color:var(--faint); }
+  #crumbs .cur { color:var(--dim); }
+
+  #wrap { flex:1; position:relative; min-height:0; }
+  #cy { position:absolute; inset:0; }
+
+  .panel {
+    position:absolute; bottom:16px; left:16px; z-index:5;
+    background:rgba(20,22,28,.94); border:1px solid var(--border);
+    border-radius:11px; padding:12px 14px; max-width:290px;
+    backdrop-filter:blur(10px);
+  }
+  .panel h4 { margin:0 0 9px; font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--faint); font-weight:700; }
+  .lg { display:flex; align-items:center; gap:8px; margin:5px 0; font-size:12px; color:var(--dim); }
+  .sw { width:13px; height:13px; border-radius:4px; flex-shrink:0; border:1.5px solid; }
+
+  .ctl { position:absolute; top:16px; right:16px; z-index:5; display:flex; gap:6px; }
+  .ctl button {
+    background:rgba(26,29,38,.95); color:var(--fg); border:1px solid var(--border);
+    border-radius:8px; padding:7px 13px; font-size:12.5px; cursor:pointer; font-weight:600;
+    font-family:inherit;
+  }
+  .ctl button:hover { border-color:var(--accent); color:var(--accent); }
+  .ctl button:disabled { opacity:.35; cursor:default; }
+
+  .hint {
+    position:absolute; top:16px; left:16px; z-index:5;
+    color:var(--faint); font-size:12px;
+    background:rgba(20,22,28,.9); border:1px solid var(--border);
+    border-radius:8px; padding:6px 11px;
+  }
+
+  #detail {
+    position:absolute; top:56px; right:16px; z-index:6; width:310px;
+    background:rgba(20,22,28,.97); border:1px solid var(--border);
+    border-radius:12px; padding:16px 18px; display:none;
+    backdrop-filter:blur(12px);
+  }
+  #detail.on { display:block; }
+  #detail .dt { font-size:15px; font-weight:600; margin:0 0 4px; }
+  #detail .dk { font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--faint); font-weight:700; margin-bottom:10px; }
+  #detail .db { color:var(--dim); font-size:13px; margin:0 0 10px; }
+  #detail .dm { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--amber); font-size:11.5px; background:var(--card2); padding:6px 9px; border-radius:6px; display:inline-block; }
+  #detail .dgo { margin-top:12px; color:var(--accent); font-size:12.5px; cursor:pointer; font-weight:600; }
+  #detail .dx { position:absolute; top:12px; right:14px; color:var(--faint); cursor:pointer; font-size:15px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="kick">Architecture</div>
+    <h1 id="title">Four planes</h1>
+    <p id="tag"></p>
+  </div>
+  <div id="crumbs"></div>
+</header>
+
+<div id="wrap">
+  <div id="cy"></div>
+  <div class="hint">Scroll to zoom · drag to pan · click a ▸ node to go inside</div>
+  <div class="ctl">
+    <button id="back" disabled>← Back</button>
+    <button id="fit">Fit</button>
+  </div>
+  <div class="panel">
+    <h4>Legend</h4>
+    <div class="lg"><span class="sw" style="background:#2a1f3d;border-color:#b79cff"></span>Standards — the law</div>
+    <div class="lg"><span class="sw" style="background:#10233b;border-color:#6fb3ff"></span>Agent decides</div>
+    <div class="lg"><span class="sw" style="background:#33280f;border-color:#ffb74d"></span>Human decides</div>
+    <div class="lg"><span class="sw" style="background:#3a1a1a;border-color:#ff6b6b"></span>Refused by policy</div>
+    <div class="lg"><span class="sw" style="background:#0d2417;border-color:#3ddc84"></span>Ledger + learning</div>
+  </div>
+  <div id="detail">
+    <span class="dx" id="dx">✕</span>
+    <div class="dk" id="dk"></div>
+    <div class="dt" id="dt"></div>
+    <p class="db" id="db"></p>
+    <div id="dmwrap"></div>
+    <div class="dgo" id="dgo" style="display:none">Go inside →</div>
+  </div>
+</div>
+
+<script>
+cytoscape.use(cytoscapeDagre);
+
+/* ---------------- data: one mini-graph per level of detail ---------------- */
+var VIEWS = {
+
+  root: {
+    title: 'Four planes',
+    tag: 'Left to right is one run. The two arrows coming back are where the value is.',
+    layout: { name:'preset' },
+    nodes: [
+      { id:'std',  label:'STANDARDS',      sub:'bundles are the law',     cls:'law',    drill:'standards', pos:[120,80],
+        dk:'Plane 1', db:'Versioned rule bundles per department, pinned per team. Injected into every stage — never remembered, never improvised.', dm:'security · privacy · architect · finops' },
+      { id:'pipe', label:'PIPELINE',       sub:'classify before acting',  cls:'agent',  drill:'pipeline',  pos:[480,80],
+        dk:'Plane 2', db:'PRD in, governed PR out. Every stage classifies, cites the rule it applied, and either proceeds, gates to a human, or is refused.', dm:'assess → resolve → build → scan → deliver' },
+      { id:'ledg', label:'LEDGER + DOCTOR',sub:'the audit substrate',     cls:'store',  drill:'ledger',    pos:[480,320],
+        dk:'Plane 3', db:'Every meaningful decision written with its reasoning, actor, cost and the rule that governed it. Precedent accumulates; the doctor watches for drift.', dm:'229 entries · 16 precedent pairs' },
+      { id:'hq',   label:'AGENT HQ',       sub:'coding agent · IDE · chat',cls:'agent', drill:'hq',        pos:[860,80],
+        dk:'Plane 4', db:'The runtime lanes where agents actually work — cloud coding agent, IDE Copilot, chat. Hooks and MCP pull them onto the same governed surface.', dm:'hooks + MCP' }
+    ],
+    edges: [
+      { s:'std',  t:'pipe', label:'injected at every stage\ncited as dept/version/RULE-ID', cls:'e-law fat' },
+      { s:'pipe', t:'ledg', label:'every decision written',                                 cls:'e-store fat' },
+      { s:'ledg', t:'pipe', label:'⚡ FAST LOOP — next run\nthe class earns autonomy',       cls:'e-fast fat' },
+      { s:'ledg', t:'std',  label:'🕰 SLOW LOOP — committee + canary\nv0.1.0 → v0.2.0',      cls:'e-slow dashedE' },
+      { s:'std',  t:'hq',   label:'same law, other lanes',                                  cls:'e-law dashedE' },
+      { s:'hq',   t:'ledg', label:'hooks write here too',                                   cls:'e-store dashedE' }
+    ]
+  },
+
+  standards: {
+    title: 'Standards — bundles are the law',
+    tag: 'The only way a rule changes is a reviewed PR. No agent edits its own law.',
+    layout: { name:'dagre', rankDir:'LR', nodeSep:60, rankSep:110 },
+    nodes: [
+      { id:'sec',  label:'security',  sub:'v0.1.0', cls:'law',  dk:'Bundle', db:'PHI handling, secret management, auth boundaries. Home of the rule that does most of the blocking.', dm:'PHI-001 · severity BLOCK' },
+      { id:'priv', label:'privacy',   sub:'v0.1.0', cls:'law',  dk:'Bundle', db:'Data minimisation and retention rules applied at the assessor stage.' },
+      { id:'arch', label:'architect', sub:'v0.1.0', cls:'law',  dk:'Bundle', db:'Design constraints the architect stage must satisfy.' },
+      { id:'fin',  label:'finops',    sub:'v0.1.0', cls:'law',  dk:'Bundle', db:'Cost ceilings and model-routing economics.' },
+      { id:'pins', label:'PINS.yaml', sub:'team → version', cls:'law', dk:'Pinning', db:'Each team pins a version per department. Orchestrator refuses to start if a pin does not resolve to a real bundle directory.', dm:'defaults + per-team overrides' },
+      { id:'can',  label:'canary',    sub:'one team, 7 days', cls:'store', dk:'Rollout', db:'A new version goes to a subset of teams first. The doctor watches the metrics and opens a PR to promote or revert.' },
+      { id:'inj',  label:'injected into every stage', sub:'[security/v0.1.0/PHI-001]', cls:'agent', dk:'Enforcement', db:'The rule text an agent obeyed is a pinned artifact you can diff, review and roll back — not a prompt it might have ignored.', dm:'dept / version / rule-id' }
+    ],
+    edges: [
+      { s:'sec', t:'pins', cls:'e-law' }, { s:'priv', t:'pins', cls:'e-law' },
+      { s:'arch',t:'pins', cls:'e-law' }, { s:'fin',  t:'pins', cls:'e-law' },
+      { s:'pins',t:'can',  label:'new version', cls:'e-slow dashedE' },
+      { s:'can', t:'inj',  label:'promoted', cls:'e-store' },
+      { s:'pins',t:'inj',  label:'resolved per team', cls:'e-law fat' }
+    ]
+  },
+
+  pipeline: {
+    title: 'Pipeline — classify before acting',
+    tag: 'One run, left to right. Two ways out: delivered, or refused with the rule named.',
+    layout: { name:'dagre', rankDir:'LR', nodeSep:55, rankSep:95 },
+    nodes: [
+      { id:'prd',  label:'PRD',        sub:'the request',          cls:'ext',   dk:'Input',  db:'A product requirement enters the governed lane instead of going straight to an agent.' },
+      { id:'asm',  label:'ASSESS',     sub:'typed ambiguity cards',cls:'agent', dk:'Stage',  db:'The assessor classifies every ambiguity into a typed card before anything is built. Classification happens first, always.', dm:'e.g. 7 cards · 5 gating · 2 auto-deferred' },
+      { id:'res',  label:'RESOLVE',    sub:'gate or autopilot',    cls:'agent', drill:'resolve', dk:'Decision point', db:'Per card: has this class earned autonomy for this team, and is it an invariant? That question routes everything.' },
+      { id:'auto', label:'autopilot',  sub:'precedent + confidence',cls:'agent',dk:'Path A',  db:'The class earned it. The agent decides alone and the decision is still written to the ledger with its reasoning.' },
+      { id:'gate', label:'GATE',       sub:'a human rules',        cls:'human', dk:'Path B',  db:'An invariant class or low confidence. A named human rules, and that ruling becomes precedent for later runs.' },
+      { id:'bld',  label:'ARCHITECT → CODEGEN', sub:'build',       cls:'agent', dk:'Stage',  db:'Architecture is proposed against the resolved decisions, then code is generated against that architecture.' },
+      { id:'scan', label:'REVIEW-SCAN',sub:'fail-hard gate',       cls:'block', dk:'Stage',  db:'Pre-merge review, SBOM, SAST and secret scan. A BLOCK rule here stops delivery outright — server-side, not a UI hint.' },
+      { id:'blk',  label:'blocked by policy', sub:'the guardrail working', cls:'block', dk:'Outcome', db:'12 runs ended here, each naming the rule. Not a failure — a refusal. Retry re-runs the same generator against the same rule and blocks again.', dm:'security/v0.1.0/PHI-001' },
+      { id:'del',  label:'DELIVER',    sub:'PR + decisions.md',    cls:'store', dk:'Outcome', db:'A pull request accompanied by the decision record that produced it.' }
+    ],
+    edges: [
+      { s:'prd', t:'asm', cls:'e-agent' },
+      { s:'asm', t:'res', cls:'e-agent fat' },
+      { s:'res', t:'auto',label:'class earned it', cls:'e-agent' },
+      { s:'res', t:'gate',label:'invariant /\nlow confidence', cls:'e-human fat' },
+      { s:'auto',t:'bld', cls:'e-agent' },
+      { s:'gate',t:'bld', cls:'e-human' },
+      { s:'bld', t:'scan',cls:'e-agent' },
+      { s:'scan',t:'blk', label:'BLOCK rule refuses', cls:'e-block fat' },
+      { s:'scan',t:'del', label:'clean', cls:'e-store' }
+    ]
+  },
+
+  resolve: {
+    title: 'Resolve — the autonomy matrix',
+    tag: 'Per decision class, per team. Some classes can be opened. Two never can.',
+    layout: { name:'dagre', rankDir:'LR', nodeSep:48, rankSep:100 },
+    nodes: [
+      { id:'card', label:'ambiguity card', sub:'typed + classified', cls:'agent', dk:'Input', db:'Every card carries a class. The class — not a vibe — determines who is allowed to decide it.' },
+      { id:'mx',   label:'AUTONOMY MATRIX', sub:'per class, per team', cls:'law', dk:'Policy', db:'Your configuration, not our code. Always gate, autopilot above a threshold, or full autopilot.' },
+      { id:'open', label:'openable classes', sub:'naming · structure · deps', cls:'agent', dk:'Can earn autonomy', db:'These classes earn autopilot through demonstrated agreement over time — never through a confidence number alone.' },
+      { id:'inv',  label:'🔒 INVARIANT CLASSES', sub:'phi-classification · auth', cls:'block', dk:'Locked', db:'The matrix cannot open these. Not with a high confidence score, not with accumulated precedent, not with a configuration change.', dm:'38 PHI decisions · 38 human · 0 agent' },
+      { id:'pa',   label:'agent decides alone', sub:'still fully recorded', cls:'agent', dk:'Outcome', db:'Written to the ledger with actor.kind = agent, its rationale, its cost and the model that decided.' },
+      { id:'ph',   label:'a human rules', sub:'becomes precedent', cls:'human', dk:'Outcome', db:'The ruling is recorded and reused. The next run that hits the same question does not need to ask.' },
+      { id:'dis',  label:'disagreement rate', sub:'was it wrong?', cls:'store', dk:'The honest number', db:'When the agent decided alone, how often did a human later overturn it? Below the sample floor this returns INSUFFICIENT, never 0%. Never-scored decisions return UNSCORED rather than counting as agreement.' }
+    ],
+    edges: [
+      { s:'card', t:'mx',   cls:'e-agent fat' },
+      { s:'mx',   t:'open', cls:'e-law' },
+      { s:'mx',   t:'inv',  label:'cannot open', cls:'e-block fat' },
+      { s:'open', t:'pa',   label:'threshold met', cls:'e-agent' },
+      { s:'open', t:'ph',   label:'below threshold', cls:'e-human dashedE' },
+      { s:'inv',  t:'ph',   label:'always', cls:'e-human fat' },
+      { s:'pa',   t:'dis',  label:'scored later', cls:'e-store dashedE' }
+    ]
+  },
+
+  ledger: {
+    title: 'Ledger + Doctor — the audit substrate',
+    tag: 'What one decision records, and the two loops that come out of it.',
+    layout: { name:'dagre', rankDir:'LR', nodeSep:52, rankSep:100 },
+    nodes: [
+      { id:'ent',  label:'decision ledger entry', sub:'decision · rationale · actor', cls:'store', dk:'The record', db:'Every meaningful decision, written with the reasoning behind it — not just the outcome.', dm:'decision · rationale · actor.kind' },
+      { id:'br',   label:'bundle_refs', sub:'which policy governed it', cls:'law', dk:'Field', db:'The rule that applied, cited as department/version/rule-id. Rule-version binding is live at the enforcement gate today; binding it onto every row is the next increment.' },
+      { id:'pr',   label:'precedent_refs', sub:'whose ruling it reused', cls:'green', dk:'Field', db:'Points at the earlier entry this decision inherited. This field is what turns a log into a learning loop.' },
+      { id:'cost', label:'cost_usd + model_used', sub:'what it cost', cls:'store', dk:'Field', db:'Real spend per decision, and which model produced it.' },
+      { id:'xr',   label:'gh_audit_xref', sub:'ties to GitHub audit', cls:'ext', dk:'Field', db:'Joins the reasoning record back to your existing audit trail rather than replacing it.' },
+      { id:'prc',  label:'precedent accumulates', sub:'16 pairs', cls:'green', dk:'Fast loop', db:'A human ruling becomes something the agent reuses on the next run. One fewer human interruption each time.' },
+      { id:'doc',  label:'doctor detects drift', sub:'opens a change PR', cls:'law', dk:'Slow loop', db:'Watches the rules against reality and proposes a standards change for your committee, canaried on one team for a week.' },
+      { id:'q',    label:'the acceptance query', sub:'PHI decisions, last 30 days', cls:'green', dk:'The point of all of it', db:'Show me every AI decision on PHI-classified data — the rule, the actor, the cost. It returns 38 real rows. Everything else exists to make that query true.', dm:'38 rows · all human · zero agent' }
+    ],
+    edges: [
+      { s:'ent', t:'br',   cls:'e-law' },
+      { s:'ent', t:'pr',   cls:'e-fast fat' },
+      { s:'ent', t:'cost', cls:'e-store' },
+      { s:'ent', t:'xr',   cls:'e-store dashedE' },
+      { s:'pr',  t:'prc',  label:'⚡ fast loop', cls:'e-fast fat' },
+      { s:'br',  t:'doc',  label:'🕰 slow loop', cls:'e-slow dashedE' },
+      { s:'cost',t:'q',    cls:'e-store dashedE' },
+      { s:'br',  t:'q',    cls:'e-store dashedE' },
+      { s:'prc', t:'q',    cls:'e-store dashedE' }
+    ]
+  },
+
+  hq: {
+    title: 'Agent HQ — the runtime lanes',
+    tag: 'Agents work in more than one place. All of it lands on the same governed surface.',
+    layout: { name:'dagre', rankDir:'LR', nodeSep:55, rankSep:105 },
+    nodes: [
+      { id:'ca',  label:'coding agent', sub:'cloud, async', cls:'agent', dk:'Lane', db:'A long-running agent that opens PRs on its own. Un-orchestrated, these bypass both enforcement surfaces — which is precisely why hooks exist.' },
+      { id:'ide', label:'IDE Copilot',  sub:'in the editor', cls:'agent', dk:'Lane', db:'Classification happens at the PreToolUse hook, before the tool call runs — the same "classify before acting" rule the pipeline follows.' },
+      { id:'chat',label:'chat / light lane', sub:'ad hoc', cls:'agent', dk:'Lane', db:'Short interactions that still produce decisions worth recording.' },
+      { id:'hook',label:'hooks + MCP',  sub:'the on-ramp', cls:'law', dk:'Bridge', db:'SessionStart injects the pinned bundle; PreToolUse classifies. The MCP server is how every lane reads standards and writes decisions.' },
+      { id:'gh',  label:'GitHub enforcement', sub:'branch protection · CODEOWNERS', cls:'ext', dk:'Kept, not replaced', db:'Your existing gates still decide what passes. This layer explains why — and which policy version was in force.' },
+      { id:'led2',label:'same ledger',  sub:'one surface', cls:'store', dk:'Convergence', db:'Whichever lane an agent worked in, the decision lands in one queryable record.' }
+    ],
+    edges: [
+      { s:'ca',  t:'hook', cls:'e-agent' },
+      { s:'ide', t:'hook', cls:'e-agent' },
+      { s:'chat',t:'hook', cls:'e-agent dashedE' },
+      { s:'hook',t:'led2', label:'every decision written', cls:'e-store fat' },
+      { s:'hook',t:'gh',   label:'gates still apply', cls:'e-law dashedE' },
+      { s:'gh',  t:'led2', label:'xref', cls:'e-store dashedE' }
+    ]
+  }
+};
+
+/* ---------------- style ---------------- */
+var FILL = { law:'#2a1f3d', agent:'#10233b', human:'#33280f', block:'#3a1a1a', store:'#0d2417', green:'#0d2417', ext:'#1a1d26' };
+var LINE = { law:'#b79cff', agent:'#6fb3ff', human:'#ffb74d', block:'#ff6b6b', store:'#3ddc84', green:'#3ddc84', ext:'#8b93a7' };
+
+var style = [
+  { selector:'node', style:{
+      'shape':'round-rectangle',
+      'background-color':function(n){ return FILL[n.data('cls')] || '#1a1d26'; },
+      'border-color':function(n){ return LINE[n.data('cls')] || '#2a2e3a'; },
+      'border-width':1.8,
+      'width':'label','height':'label',
+      'padding':'16px',
+      'label':'data(label)',
+      'color':'#e7e9ee',
+      'font-size':14,'font-weight':600,
+      'font-family':'-apple-system, BlinkMacSystemFont, Segoe UI, system-ui, sans-serif',
+      'text-valign':'center','text-halign':'center',
+      'text-wrap':'wrap','text-max-width':190,
+      'transition-property':'opacity, border-width','transition-duration':'160ms'
+  }},
+  { selector:'node[sub]', style:{
+      'label':function(n){ return n.data('label') + '\n' + n.data('sub'); },
+      'line-height':1.5
+  }},
+  { selector:'node.drillable', style:{ 'border-width':2.6 }},
+  { selector:'node:selected', style:{ 'border-width':3.4 }},
+  { selector:'node.dim', style:{ 'opacity':0.18 }},
+
+  { selector:'edge', style:{
+      'curve-style':'bezier','width':1.9,
+      'line-color':'#3a3f4d','target-arrow-color':'#3a3f4d',
+      'target-arrow-shape':'triangle','arrow-scale':1.05,
+      'label':'data(label)','font-size':10.5,'color':'#9aa1b2',
+      'font-family':'-apple-system, BlinkMacSystemFont, Segoe UI, system-ui, sans-serif',
+      'text-wrap':'wrap','text-max-width':150,
+      'text-background-color':'#0c0d10','text-background-opacity':0.92,
+      'text-background-padding':3,'text-background-shape':'roundrectangle',
+      'transition-property':'opacity','transition-duration':'160ms'
+  }},
+  { selector:'edge.fat', style:{ 'width':3.4 }},
+  { selector:'edge.dashedE', style:{ 'line-style':'dashed','line-dash-pattern':[7,5] }},
+  { selector:'edge.e-law',   style:{ 'line-color':'#b79cff','target-arrow-color':'#b79cff','color':'#c9b6ff' }},
+  { selector:'edge.e-agent', style:{ 'line-color':'#6fb3ff','target-arrow-color':'#6fb3ff','color':'#a3ceff' }},
+  { selector:'edge.e-human', style:{ 'line-color':'#ffb74d','target-arrow-color':'#ffb74d','color':'#ffcf8a' }},
+  { selector:'edge.e-block', style:{ 'line-color':'#ff6b6b','target-arrow-color':'#ff6b6b','color':'#ff9c9c' }},
+  { selector:'edge.e-store', style:{ 'line-color':'#3ddc84','target-arrow-color':'#3ddc84','color':'#86e8b2' }},
+  { selector:'edge.e-fast',  style:{ 'line-color':'#3ddc84','target-arrow-color':'#3ddc84','color':'#86e8b2' }},
+  { selector:'edge.e-slow',  style:{ 'line-color':'#b79cff','target-arrow-color':'#b79cff','color':'#c9b6ff' }},
+  { selector:'edge.dim', style:{ 'opacity':0.10 }}
+];
+
+var cy = cytoscape({
+  container: document.getElementById('cy'),
+  style: style,
+  minZoom: 0.15, maxZoom: 4.5,
+  wheelSensitivity: 0.28,
+  boxSelectionEnabled: false,
+  autoungrabify: true
+});
+
+/* ---------------- render ---------------- */
+var stack = ['root'];
+var META = {};
+
+function render(viewId, zoomIn) {
+  var v = VIEWS[viewId];
+  var els = [];
+  META = {};
+  v.nodes.forEach(function (n) {
+    META[n.id] = n;
+    var cls = n.cls + (n.drill ? ' drillable' : '');
+    els.push({
+      data: { id:n.id, label: (n.drill ? '▸ ' : '') + n.label, sub:n.sub || null, cls:n.cls, drill:n.drill || null },
+      classes: cls,
+      position: n.pos ? { x:n.pos[0], y:n.pos[1] } : undefined
+    });
+  });
+  v.edges.forEach(function (e) {
+    els.push({ data:{ source:e.s, target:e.t, label:e.label || '' }, classes: e.cls || '' });
+  });
+
+  cy.elements().remove();
+  cy.add(els);
+  cy.layout(Object.assign({ fit:true, padding:60, animate:false }, v.layout)).run();
+
+  document.getElementById('title').textContent = v.title;
+  document.getElementById('tag').textContent = v.tag;
+  document.getElementById('back').disabled = stack.length <= 1;
+  hideDetail();
+  crumbs();
+
+  if (zoomIn) {
+    var z = cy.zoom();
+    cy.zoom(z * 1.9);
+    cy.elements().style('opacity', 0);
+    cy.animate({ zoom:z, fit:{ padding:60 } }, { duration:420, easing:'ease-out' });
+    cy.elements().animate({ style:{ opacity:1 } }, { duration:420 });
+  }
+}
+
+function crumbs() {
+  var el = document.getElementById('crumbs');
+  el.innerHTML = '';
+  stack.forEach(function (vid, i) {
+    if (i > 0) { var s = document.createElement('span'); s.className='sep'; s.textContent='▸'; el.appendChild(s); }
+    if (i === stack.length - 1) {
+      var c = document.createElement('span'); c.className='cur'; c.textContent = VIEWS[vid].title; el.appendChild(c);
+    } else {
+      var a = document.createElement('a'); a.textContent = VIEWS[vid].title;
+      a.onclick = (function (k) { return function () { stack = stack.slice(0, k+1); render(stack[stack.length-1], false); }; })(i);
+      el.appendChild(a);
+    }
+  });
+}
+
+function drill(id) { stack.push(id); render(id, true); }
+function back()  { if (stack.length > 1) { stack.pop(); render(stack[stack.length-1], false); } }
+
+/* ---------------- detail card + focus ---------------- */
+function showDetail(n) {
+  var m = META[n.id()];
+  if (!m) return;
+  document.getElementById('dk').textContent = m.dk || '';
+  document.getElementById('dt').textContent = m.label;
+  document.getElementById('db').textContent = m.db || '';
+  document.getElementById('dmwrap').innerHTML = m.dm ? '<span class="dm">' + m.dm + '</span>' : '';
+  var go = document.getElementById('dgo');
+  if (m.drill) { go.style.display = 'block'; go.onclick = function () { zoomInto(n, m.drill); }; }
+  else go.style.display = 'none';
+  document.getElementById('detail').classList.add('on');
+
+  // focus the neighbourhood
+  var keep = n.closedNeighborhood();
+  cy.elements().addClass('dim');
+  keep.removeClass('dim');
+}
+function hideDetail() {
+  document.getElementById('detail').classList.remove('on');
+  cy.elements().removeClass('dim');
+}
+function zoomInto(n, viewId) {
+  cy.animate({ fit:{ eles:n, padding:200 } }, { duration:300, easing:'ease-in', complete:function(){ drill(viewId); } });
+}
+
+cy.on('tap', 'node', function (e) { showDetail(e.target); });
+cy.on('dbltap', 'node', function (e) {
+  var d = e.target.data('drill');
+  if (d && VIEWS[d]) zoomInto(e.target, d);
+});
+cy.on('tap', function (e) { if (e.target === cy) { hideDetail(); cy.animate({ fit:{ padding:60 } }, { duration:280 }); } });
+
+document.getElementById('dx').onclick = hideDetail;
+document.getElementById('back').onclick = back;
+document.getElementById('fit').onclick = function () { hideDetail(); cy.animate({ fit:{ padding:60 } }, { duration:280 }); };
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { if (document.getElementById('detail').classList.contains('on')) hideDetail(); else back(); }
+});
+
+render('root', false);
+</script>
+</body>
+</html>
