@@ -91,6 +91,26 @@
   .plane.ledger h3 { color: var(--accent-2); }
   .plane.runtime h3 { color: var(--amber); }
 
+  /* Live interactive diagram */
+  .diagramwrap { margin: 24px 0 32px; }
+  iframe.diagram {
+    width: 100%; height: 640px; min-height: 480px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg); display: block;
+  }
+  .diagrambar {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 10px; flex-wrap: wrap;
+  }
+  .dhint { color: var(--fg-faint); font-size: 12.5px; }
+  a.dfull {
+    color: var(--fg-dim); text-decoration: none;
+    background: var(--bg-card-2); border: 1px solid var(--border);
+    border-radius: 7px; padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+    margin-left: auto;
+  }
+  a.dfull:hover { color: var(--accent); border-color: var(--accent); }
+
   .ascii {
     background: var(--bg-card-2);
     border: 1px solid var(--border);
@@ -264,41 +284,15 @@
 </div>
 
 <h2>System diagram</h2>
-<div class="ascii">      <span class="green">STANDARDS BUNDLES</span>                                   <span class="amber">AGENT HQ RUNTIME</span>
-      (per-department, versioned,                       (medium + light lanes)
-       committee-reviewed)
-                                                        &middot; Coding Agent (issue &rarr; PR)
-      architect/v0.1.0/                                  &middot; IDE Copilot (VS Code)
-      security/v0.1.0/                                   &middot; Chat bridges (Slack/Teams/Linear/Boards)
-      privacy/v0.1.0/
-      finops/v0.1.0/                                     5 lifecycle hooks: SessionStart, UserPromptSubmit,
-                          &darr; pinned per team           PreToolUse (BLOCK), PostToolUse, SessionEnd
-                          &darr;
-      &boxur;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
-      &boxv;  <span class="em">PIPELINE</span> (heavy lane &mdash; orchestrator)                       &boxv;
-      &boxv;                                                              &boxv;
-      &boxv;  PRD &rarr; ingest &rarr; assessor &rarr; <span class="amber">resolver*</span> &rarr; architect &rarr;          &boxv;
-      &boxv;       design &rarr; test-plan &rarr; codegen &rarr; review-scan &rarr;          &boxv;
-      &boxv;       <span class="em">deliver (GitHub PR)</span>                                       &boxv;
-      &boxv;                                                              &boxv;
-      &boxv;  * HITL gate via Plan Mode or chat bridges                   &boxv;
-      &boxul;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxur;
-                                  &darr;
-                                  &darr; runtime ledger entries
-                                  &darr;
-      &boxur;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
-      &boxv;  <span class="purple">DECISION LEDGER</span> (Cosmos, team-partitioned)              &boxv;
-      &boxv;  &middot; entry_type: <span class="em">runtime</span> &mdash; pipeline runs, IDE, agent PRs &boxv;
-      &boxv;  &middot; entry_type: <span class="em">meta</span>    &mdash; standards-change merges        &boxv;
-      &boxv;  Exposed: REST API &middot; MCP server &middot; hook payload I/O   &boxv;
-      &boxul;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxur;
-                          &darr;                          &darr;
-                          &darr;                          &darr;
-                /telemetry UI               <span class="amber">PIPELINE DOCTOR</span>
-                (Ledger Insights:           (Foundry agent)
-                 drift, cost, class)        &middot; drift detection (5 signal types)
-                                            &middot; bounded auto-fix (envelope-validated)
-                                            &middot; change-proposal PRs (with ADR)</div>
+<p class="lede" style="font-size:15px;margin-bottom:14px">The four planes, live. Scroll to zoom, drag to pan,
+and click any node marked <span class="em">&#9656;</span> to descend into that plane&rsquo;s own graph.</p>
+<div class="diagramwrap">
+  <iframe class="diagram" src="diagrams/four-planes-interactive.html" title="The four planes &mdash; interactive"></iframe>
+  <div class="diagrambar">
+    <span class="dhint">Standards &middot; Pipeline &middot; Ledger + Doctor &middot; Agent HQ &mdash; five levels of detail</span>
+    <a class="dfull" href="diagrams/four-planes-interactive.html" target="_blank" rel="noopener">Open full screen &#10530;</a>
+  </div>
+</div>
 
 <h2>Hard rules &mdash; cannot be overridden</h2>
 <ul>
