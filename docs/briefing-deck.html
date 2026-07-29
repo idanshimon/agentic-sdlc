@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Governed AI Development — briefing deck</title>
+<style>
+  :root {
+    --bg: #0c0d10;
+    --card: #14161c;
+    --card2: #1a1d26;
+    --fg: #e7e9ee;
+    --dim: #9aa1b2;
+    --faint: #5a6273;
+    --accent: #6fb3ff;
+    --green: #3ddc84;
+    --amber: #ffb74d;
+    --red: #ff6b6b;
+    --violet: #b79cff;
+    --border: #2a2e3a;
+    --nav-h: 52px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); }
+  body {
+    color: var(--fg);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+
+  /* ---------- Topic nav: jump in and out of topics ---------- */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h);
+    background: rgba(12,13,16,0.86);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 20px; z-index: 50;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav .brand {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--faint);
+    margin-right: 14px; white-space: nowrap; flex-shrink: 0;
+  }
+  .nav a {
+    color: var(--dim); text-decoration: none;
+    font-size: 13px; font-weight: 500;
+    padding: 6px 11px; border-radius: 7px;
+    white-space: nowrap; flex-shrink: 0;
+    border: 1px solid transparent;
+    transition: color .15s, background .15s, border-color .15s;
+  }
+  .nav a:hover { color: var(--fg); background: var(--card2); }
+  .nav a.on {
+    color: var(--accent); background: rgba(111,179,255,0.12);
+    border-color: rgba(111,179,255,0.35);
+  }
+  .nav .spacer { flex: 1; }
+  .nav .count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  /* progress hairline under nav */
+  .prog {
+    position: fixed; top: var(--nav-h); left: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--violet));
+    z-index: 51; width: 0%; transition: width .12s linear;
+  }
+
+  /* ---------- Slides ---------- */
+  .deck { scroll-snap-type: y mandatory; overflow-y: scroll; height: 100vh; scroll-behavior: smooth; }
+  section {
+    scroll-snap-align: start;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: calc(var(--nav-h) + 4vh) 8vw 6vh;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .num {
+    position: absolute; top: calc(var(--nav-h) + 2vh); right: 8vw;
+    font-size: 12px; color: var(--faint); letter-spacing: 1px;
+  }
+  h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 600; margin: 0 0 16px; letter-spacing: -1px; }
+  h2 { font-size: clamp(24px, 3.2vw, 38px); font-weight: 600; margin: 0 0 20px; letter-spacing: -0.5px; }
+  .kicker { color: var(--accent); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+  .lede { color: var(--dim); font-size: clamp(17px, 2vw, 21px); max-width: 900px; }
+  p { max-width: 860px; color: var(--dim); }
+  strong { color: var(--fg); }
+  blockquote {
+    margin: 24px 0; padding: 18px 24px;
+    border-left: 3px solid var(--accent);
+    background: var(--card); color: var(--fg);
+    font-size: clamp(17px, 2.1vw, 22px);
+  }
+  code { background: var(--card2); padding: 2px 7px; border-radius: 4px; font-size: 0.88em; color: var(--amber); }
+
+  .stats { display: flex; gap: 20px; flex-wrap: wrap; margin: 28px 0 8px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; min-width: 190px; flex: 1; }
+  .stat .v { font-size: clamp(30px, 4vw, 44px); font-weight: 600; line-height: 1.1; }
+  .stat .l { color: var(--dim); font-size: 13px; margin-top: 6px; }
+  .stat.good .v { color: var(--green); }
+  .stat.warn .v { color: var(--amber); }
+  .stat.hard .v { color: var(--accent); }
+
+  table { border-collapse: collapse; margin: 20px 0; width: 100%; max-width: 960px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 15px; }
+  th { color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  td strong { color: var(--fg); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; max-width: 1000px; }
+  .cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1060px; }
+  @media (max-width: 820px) { .cols, .cols3 { grid-template-columns: 1fr; } }
+  .box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; }
+  .box h3 { margin: 0 0 10px; font-size: 16px; color: var(--fg); }
+  .box.limit { border-color: rgba(255,183,77,0.35); }
+  .box.limit h3 { color: var(--amber); }
+  ul { color: var(--dim); padding-left: 20px; margin: 10px 0; }
+  li { margin: 7px 0; }
+  .note { color: var(--faint); font-size: 13px; margin-top: 22px; }
+  .cite { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--amber); font-size: 0.9em; }
+
+  /* ---------- Figure: click to zoom ---------- */
+  figure.zoom { margin: 8px 0 0; max-width: 1080px; position: relative; cursor: zoom-in; }
+  figure.zoom img {
+    display: block; width: 100%; max-height: 58vh; object-fit: contain;
+    border-radius: 12px; border: 1px solid var(--border);
+    background: #f7f8fa; padding: 14px;
+  }
+  figure.zoom figcaption {
+    color: var(--faint); font-size: 12.5px; margin-top: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .zbadge {
+    border: 1px solid var(--border); background: var(--card2);
+    color: var(--dim); border-radius: 999px; padding: 3px 10px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .4px;
+  }
+  figure.zoom:hover .zbadge { color: var(--accent); border-color: rgba(111,179,255,.4); }
+
+  /* ---------- Live interactive diagram embed ---------- */
+  .livewrap { margin: 6px 0 0; max-width: 1180px; }
+  iframe.live {
+    width: 100%; height: 60vh; min-height: 420px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--bg); display: block;
+  }
+  .livebar { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .livebar button.expand {
+    background: var(--card2); color: var(--dim);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 13px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .livebar button.expand:hover { color: var(--accent); border-color: rgba(111,179,255,.45); }
+
+  /* full-screen overlay for the live diagram */
+  .fs { position: fixed; inset: 0; z-index: 120; background: var(--bg); display: none; }
+  .fs.open { display: block; }
+  .fs iframe { width: 100%; height: 100%; border: 0; }
+  .fs .fsclose {
+    position: absolute; top: 14px; right: 18px; z-index: 2;
+    background: var(--card2); color: var(--dim);
+    border: 1px solid var(--border); border-radius: 9px;
+    padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600;
+    font-family: inherit;
+  }
+  .fs .fsclose:hover { color: var(--fg); border-color: var(--accent); }
+
+  /* lightbox */
+  .lb {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(6,7,9,0.95);
+    display: none; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .lb.open { display: flex; }
+  .lb-stage { width: 100%; height: 100%; cursor: grab; overflow: hidden; }
+  .lb-stage.drag { cursor: grabbing; }
+  .lb-stage img {
+    position: absolute; top: 50%; left: 50%;
+    transform-origin: center center;
+    max-width: none; user-select: none; -webkit-user-drag: none;
+    background: #fff; border-radius: 10px; padding: 18px;
+  }
+  .lb-bar {
+    position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px; align-items: center;
+    background: rgba(20,22,28,0.95); border: 1px solid var(--border);
+    border-radius: 12px; padding: 7px 9px; z-index: 2;
+  }
+  .lb-bar button {
+    background: var(--card2); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+    font-weight: 600;
+  }
+  .lb-bar button:hover { border-color: var(--accent); color: var(--accent); }
+  .lb-bar .lvl { color: var(--faint); font-size: 12px; min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+  .lb-close {
+    position: absolute; top: 18px; right: 22px; z-index: 2;
+    background: var(--card2); color: var(--dim); border: 1px solid var(--border);
+    border-radius: 9px; padding: 7px 13px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .lb-close:hover { color: var(--fg); border-color: var(--accent); }
+  .lb-hint {
+    position: absolute; top: 20px; left: 22px; z-index: 2;
+    color: var(--faint); font-size: 12.5px;
+  }
+
+  /* ---------- Inline SVG figure ---------- */
+  .fig { margin: 22px 0 4px; max-width: 1000px; }
+  .fig svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .fig-cap { color: var(--faint); font-size: 12.5px; margin-top: 10px; }
+  svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .s-lbl { fill: #e7e9ee; font-size: 13px; font-weight: 600; }
+  .s-sub { fill: #9aa1b2; font-size: 11px; }
+  .s-tiny { fill: #5a6273; font-size: 10.5px; letter-spacing: .6px; }
+  .s-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #ffb74d; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<!-- ============ TOPIC NAV ============ -->
+<nav class="nav" id="nav">
+  <span class="brand">Governed AI</span>
+  <a href="#s1"  data-topic>Open</a>
+  <a href="#s2"  data-topic>Problem</a>
+  <a href="#s3"  data-topic>Architecture</a>
+  <a href="#s7"  data-topic>Evidence</a>
+  <a href="#s10" data-topic>Differentiator</a>
+  <a href="#s11" data-topic>Candor</a>
+  <a href="#s13" data-topic>Configure</a>
+  <a href="#s14" data-topic>The test</a>
+  <span class="spacer"></span>
+  <span class="count" id="count">01 / 14</span>
+</nav>
+<div class="prog" id="prog"></div>
+
+<div class="deck" id="deck">
+
+<!-- 1 -->
+<section id="s1" data-topic="Open">
+  <span class="num">01</span>
+  <div class="kicker">Briefing</div>
+  <h1>Governed AI development,<br>as an operating model</h1>
+  <p class="lede">Your standards become versioned code. Every AI decision writes an
+  auditable record bound to the policy that governed it. A human ruling becomes
+  precedent the agent reuses. All of it on your Azure, configured by you.</p>
+  <p class="note">Every figure in this deck was measured on the live system. Nothing is illustrative.</p>
+</section>
+
+<!-- 2 -->
+<section id="s2" data-topic="Problem">
+  <span class="num">02</span>
+  <div class="kicker">The problem</div>
+  <h2>A question your compliance function cannot answer today</h2>
+  <blockquote>"An AI agent made a decision that shipped to production. Which policy
+  governed that decision, who approved it, what did it cost, and can you prove it?"</blockquote>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 208" role="img" aria-label="GitHub, Purview and Foundry each answer what; the why is missing">
+      <!-- three tools that answer WHAT -->
+      <g>
+        <rect x="0"   y="26" width="228" height="86" rx="11" fill="#14161c" stroke="#2a2e3a"/>
+        <text x="20" y="54" class="s-lbl">GitHub audit</text>
+        <text x="20" y="76" class="s-sub">shows the PR, the diff,</text>
+        <text x="20" y="92" class="s-sub">the approver</text>
+        <text x="20" y="112" class="s-tiny" style="fill:#3ddc84">WHAT ✓</text>
+      </g>
+      <g>
+        <rect x="252" y="26" width="228" height="86" rx="11" fill="#14161c" stroke="#2a2e3a"/>
+        <text x="272" y="54" class="s-lbl">Purview</text>
+        <text x="272" y="76" class="s-sub">shows where the data</text>
+        <text x="272" y="92" class="s-sub">travelled</text>
+        <text x="272" y="112" class="s-tiny" style="fill:#3ddc84">WHAT ✓</text>
+      </g>
+      <g>
+        <rect x="504" y="26" width="228" height="86" rx="11" fill="#14161c" stroke="#2a2e3a"/>
+        <text x="524" y="54" class="s-lbl">Foundry</text>
+        <text x="524" y="76" class="s-sub">shows model usage</text>
+        <text x="524" y="92" class="s-sub">and spend</text>
+        <text x="524" y="112" class="s-tiny" style="fill:#3ddc84">WHAT ✓</text>
+      </g>
+      <!-- the gap -->
+      <g>
+        <rect x="756" y="26" width="244" height="86" rx="11" fill="rgba(255,107,107,0.07)"
+              stroke="#ff6b6b" stroke-dasharray="6 5"/>
+        <text x="776" y="54" class="s-lbl" style="fill:#ff6b6b">Why did it choose that?</text>
+        <text x="776" y="76" class="s-sub">bound to the version of</text>
+        <text x="776" y="92" class="s-sub">your policy in force</text>
+        <text x="776" y="112" class="s-tiny" style="fill:#ff6b6b">NOBODY ANSWERS</text>
+      </g>
+      <!-- brace under the three -->
+      <path d="M4 132 L4 146 L728 146 L728 132" fill="none" stroke="#2a2e3a"/>
+      <path d="M366 146 L366 160" stroke="#2a2e3a"/>
+      <text x="366" y="180" class="s-sub" text-anchor="middle">Three systems of record, all answering the same half of the question</text>
+      <path d="M878 146 L878 160" stroke="#ff6b6b" stroke-dasharray="4 4"/>
+      <text x="878" y="180" class="s-sub" text-anchor="middle" style="fill:#ff6b6b">This is where shadow-AI risk lives</text>
+    </svg>
+    <div class="fig-cap">The gap is not observability. It is reasoning, bound to policy version.</div>
+  </div>
+
+  <p>That gap grows with every team that adopts.</p>
+</section>
+
+<!-- 3 -->
+<section id="s3" data-topic="Architecture">
+  <span class="num">03</span>
+  <div class="kicker">Architecture</div>
+  <h2>Four planes</h2>
+  <div class="livewrap">
+    <iframe class="live" src="diagrams/four-planes-interactive.html" title="The four planes — interactive"></iframe>
+    <div class="livebar">
+      <span class="zbadge">⤢ Live diagram · scroll to zoom · click a ▸ node to go inside</span>
+      <button class="expand" data-src="diagrams/four-planes-interactive.html">Open full screen ⤢</button>
+    </div>
+  </div>
+  <p class="note">Left to right is one run. The two arrows coming back are where the
+  value is: the fast loop earns autonomy per run, the slow loop legislates standards
+  over weeks. Click any plane to go inside it.</p>
+</section>
+
+<!-- 4 — NEW architecture detail -->
+<section id="s4" data-topic="Architecture">
+  <span class="num">04</span>
+  <div class="kicker">Architecture · plane 1 + 2</div>
+  <h2>Standards are injected, not remembered</h2>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 250" role="img" aria-label="Bundles pinned per team, injected into every pipeline stage">
+      <!-- bundles -->
+      <rect x="0" y="30" width="196" height="150" rx="11" fill="rgba(183,156,255,0.07)" stroke="#b79cff"/>
+      <text x="18" y="56" class="s-lbl" style="fill:#b79cff">STANDARDS</text>
+      <text x="18" y="76" class="s-sub">bundles are the law</text>
+      <text x="18" y="104" class="s-mono">security/v0.1.0</text>
+      <text x="18" y="122" class="s-mono">privacy/v0.1.0</text>
+      <text x="18" y="140" class="s-mono">architect/v0.1.0</text>
+      <text x="18" y="158" class="s-mono">finops/v0.1.0</text>
+
+      <!-- pins -->
+      <path d="M196 105 L246 105" stroke="#b79cff" stroke-width="2"/>
+      <polygon points="246,105 238,101 238,109" fill="#b79cff"/>
+      <rect x="248" y="66" width="168" height="78" rx="11" fill="#14161c" stroke="#b79cff"/>
+      <text x="266" y="92" class="s-lbl">PINS.yaml</text>
+      <text x="266" y="112" class="s-sub">team → version</text>
+      <text x="266" y="130" class="s-sub">canary a subset for 7 days</text>
+
+      <!-- injection arrow -->
+      <path d="M416 105 L486 105" stroke="#b79cff" stroke-width="2.5"/>
+      <polygon points="488,105 478,100 478,110" fill="#b79cff"/>
+      <text x="452" y="94" class="s-tiny" text-anchor="middle" style="fill:#b79cff">INJECTED</text>
+
+      <!-- stages receiving -->
+      <rect x="492" y="18" width="508" height="174" rx="11" fill="#14161c" stroke="#2a2e3a"/>
+      <text x="512" y="44" class="s-lbl">PIPELINE — every stage receives the pinned bundle</text>
+      <g>
+        <rect x="512" y="60" width="108" height="52" rx="8" fill="#1a1d26" stroke="#2a2e3a"/>
+        <text x="566" y="82" class="s-lbl" text-anchor="middle" font-size="12">ASSESS</text>
+        <text x="566" y="99" class="s-sub" text-anchor="middle" font-size="10">classify first</text>
+      </g>
+      <g>
+        <rect x="632" y="60" width="108" height="52" rx="8" fill="#1a1d26" stroke="#2a2e3a"/>
+        <text x="686" y="82" class="s-lbl" text-anchor="middle" font-size="12">RESOLVE</text>
+        <text x="686" y="99" class="s-sub" text-anchor="middle" font-size="10">gate or autopilot</text>
+      </g>
+      <g>
+        <rect x="752" y="60" width="108" height="52" rx="8" fill="#1a1d26" stroke="#2a2e3a"/>
+        <text x="806" y="82" class="s-lbl" text-anchor="middle" font-size="12">ARCHITECT</text>
+        <text x="806" y="99" class="s-sub" text-anchor="middle" font-size="10">→ codegen</text>
+      </g>
+      <g>
+        <rect x="872" y="60" width="108" height="52" rx="8" fill="rgba(255,107,107,0.09)" stroke="#ff6b6b"/>
+        <text x="926" y="82" class="s-lbl" text-anchor="middle" font-size="12">REVIEW-SCAN</text>
+        <text x="926" y="99" class="s-sub" text-anchor="middle" font-size="10">fail-hard gate</text>
+      </g>
+      <text x="512" y="140" class="s-sub">Each stage cites what it applied, in one format:</text>
+      <text x="512" y="164" class="s-mono" font-size="13">[security/v0.1.0/PHI-001]</text>
+      <text x="700" y="164" class="s-sub" font-size="11">← department / version / rule id</text>
+
+      <text x="0" y="222" class="s-sub">The rule text an agent obeyed is not a prompt it might have ignored — it is a pinned artifact you can diff, review and roll back.</text>
+    </svg>
+    <div class="fig-cap">Bundles change only through a reviewed standards-change PR. No agent edits its own law.</div>
+  </div>
+</section>
+
+<!-- 5 — NEW architecture detail -->
+<section id="s5" data-topic="Architecture">
+  <span class="num">05</span>
+  <div class="kicker">Architecture · plane 3</div>
+  <h2>What one decision actually records</h2>
+  <p>This is the ledger contract every agent and every stage writes against. It is
+  the reason the acceptance-test query on the last slide can return real rows.</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 268" role="img" aria-label="Anatomy of a decision ledger entry">
+      <rect x="0" y="8" width="470" height="252" rx="12" fill="#14161c" stroke="#2a2e3a"/>
+      <text x="22" y="36" class="s-tiny">ONE LEDGER ENTRY</text>
+      <text x="22" y="64"  class="s-mono">decision</text>      <text x="200" y="64"  class="s-sub">one-line summary</text>
+      <text x="22" y="86"  class="s-mono">rationale</text>     <text x="200" y="86"  class="s-sub">full reasoning — the "why"</text>
+      <text x="22" y="108" class="s-mono">actor.kind</text>    <text x="200" y="108" class="s-sub">human | agent</text>
+      <text x="22" y="130" class="s-mono">phi_class</text>     <text x="200" y="130" class="s-sub">none | low | high</text>
+      <text x="22" y="152" class="s-mono">bundle_refs</text>   <text x="200" y="152" class="s-sub">the rule that governed it</text>
+      <text x="22" y="174" class="s-mono">precedent_refs</text><text x="200" y="174" class="s-sub">the earlier ruling reused</text>
+      <text x="22" y="196" class="s-mono">cost_usd</text>      <text x="200" y="196" class="s-sub">real spend, per decision</text>
+      <text x="22" y="218" class="s-mono">model_used</text>    <text x="200" y="218" class="s-sub">which model decided</text>
+      <text x="22" y="240" class="s-mono">gh_audit_xref</text> <text x="200" y="240" class="s-sub">ties back to GitHub audit</text>
+
+      <!-- mapping to the four questions -->
+      <path d="M470 134 L520 134" stroke="#6fb3ff" stroke-width="2"/>
+      <polygon points="522,134 512,129 512,139" fill="#6fb3ff"/>
+
+      <rect x="528" y="8" width="472" height="252" rx="12" fill="rgba(111,179,255,0.06)" stroke="#6fb3ff"/>
+      <text x="550" y="36" class="s-tiny" style="fill:#6fb3ff">ANSWERS THE FOUR-PART QUESTION</text>
+      <text x="550" y="72"  class="s-lbl">Which policy governed it?</text>
+      <text x="550" y="92"  class="s-sub">→ bundle_refs, cited as dept/version/rule</text>
+      <text x="550" y="126" class="s-lbl">Who decided?</text>
+      <text x="550" y="146" class="s-sub">→ actor.kind + identity, human or agent</text>
+      <text x="550" y="180" class="s-lbl">What did it cost?</text>
+      <text x="550" y="200" class="s-sub">→ cost_usd + model_used, per decision</text>
+      <text x="550" y="234" class="s-lbl">Can you prove it?</text>
+      <text x="550" y="254" class="s-sub">→ gh_audit_xref joins to your existing audit trail</text>
+    </svg>
+    <div class="fig-cap">Written per stage decision. Nothing meaningful happens off the ledger.</div>
+  </div>
+</section>
+
+<!-- 6 — NEW architecture detail -->
+<section id="s6" data-topic="Architecture">
+  <span class="num">06</span>
+  <div class="kicker">Architecture · the two loops</div>
+  <h2>Why this compounds instead of plateauing</h2>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 232" role="img" aria-label="Fast loop earns autonomy per run, slow loop legislates standards">
+      <!-- fast loop -->
+      <rect x="0" y="12" width="486" height="200" rx="12" fill="rgba(61,220,132,0.05)" stroke="#3ddc84"/>
+      <text x="22" y="40" class="s-lbl" style="fill:#3ddc84">⚡ FAST LOOP — minutes to days</text>
+      <g>
+        <rect x="22" y="58" width="132" height="48" rx="8" fill="rgba(255,183,77,0.12)" stroke="#ffb74d"/>
+        <text x="88" y="79" class="s-lbl" text-anchor="middle" font-size="12">A human rules</text>
+        <text x="88" y="96" class="s-sub" text-anchor="middle" font-size="10">at the gate</text>
+      </g>
+      <path d="M154 82 L192 82" stroke="#3ddc84" stroke-width="2"/><polygon points="194,82 184,77 184,87" fill="#3ddc84"/>
+      <g>
+        <rect x="196" y="58" width="132" height="48" rx="8" fill="#14161c" stroke="#3ddc84"/>
+        <text x="262" y="79" class="s-lbl" text-anchor="middle" font-size="12">becomes precedent</text>
+        <text x="262" y="96" class="s-sub" text-anchor="middle" font-size="10">on the ledger</text>
+      </g>
+      <path d="M328 82 L366 82" stroke="#3ddc84" stroke-width="2"/><polygon points="368,82 358,77 358,87" fill="#3ddc84"/>
+      <g>
+        <rect x="336" y="58" width="132" height="48" rx="8" fill="rgba(111,179,255,0.12)" stroke="#6fb3ff"/>
+        <text x="402" y="79" class="s-lbl" text-anchor="middle" font-size="12">agent reuses it</text>
+        <text x="402" y="96" class="s-sub" text-anchor="middle" font-size="10">next run</text>
+      </g>
+      <path d="M402 106 L402 132 L88 132 L88 108" fill="none" stroke="#3ddc84" stroke-width="2" stroke-dasharray="5 4"/>
+      <polygon points="88,106 83,116 93,116" fill="#3ddc84"/>
+      <text x="245" y="152" class="s-sub" text-anchor="middle" font-size="11">one fewer human interruption each time</text>
+      <text x="22" y="182" class="s-sub">The class earns autonomy through demonstrated agreement —</text>
+      <text x="22" y="200" class="s-sub">never through a confidence number alone.</text>
+
+      <!-- slow loop -->
+      <rect x="514" y="12" width="486" height="200" rx="12" fill="rgba(183,156,255,0.05)" stroke="#b79cff"/>
+      <text x="536" y="40" class="s-lbl" style="fill:#b79cff">🕰 SLOW LOOP — weeks</text>
+      <g>
+        <rect x="536" y="58" width="126" height="48" rx="8" fill="#14161c" stroke="#b79cff"/>
+        <text x="599" y="79" class="s-lbl" text-anchor="middle" font-size="12">Doctor detects</text>
+        <text x="599" y="96" class="s-sub" text-anchor="middle" font-size="10">drift</text>
+      </g>
+      <path d="M662 82 L698 82" stroke="#b79cff" stroke-width="2"/><polygon points="700,82 690,77 690,87" fill="#b79cff"/>
+      <g>
+        <rect x="702" y="58" width="126" height="48" rx="8" fill="#14161c" stroke="#b79cff"/>
+        <text x="765" y="79" class="s-lbl" text-anchor="middle" font-size="12">committee PR</text>
+        <text x="765" y="96" class="s-sub" text-anchor="middle" font-size="10">your reviewers</text>
+      </g>
+      <path d="M828 82 L862 82" stroke="#b79cff" stroke-width="2"/><polygon points="864,82 854,77 854,87" fill="#b79cff"/>
+      <g>
+        <rect x="866" y="58" width="112" height="48" rx="8" fill="#14161c" stroke="#b79cff"/>
+        <text x="922" y="79" class="s-lbl" text-anchor="middle" font-size="12">canary week</text>
+        <text x="922" y="96" class="s-sub" text-anchor="middle" font-size="10">one team first</text>
+      </g>
+      <path d="M922 106 L922 132 L599 132 L599 108" fill="none" stroke="#b79cff" stroke-width="2" stroke-dasharray="5 4"/>
+      <polygon points="599,106 594,116 604,116" fill="#b79cff"/>
+      <text x="760" y="152" class="s-sub" text-anchor="middle" font-size="11">v0.1.0 → v0.2.0, promoted or reverted on evidence</text>
+      <text x="536" y="182" class="s-sub">Neither loop can quietly relax a PHI rule.</text>
+      <text x="536" y="200" class="s-sub">Invariant classes are outside both.</text>
+    </svg>
+    <div class="fig-cap">The fast loop reduces human load per run. The slow loop changes the law itself.</div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="s7" data-topic="Evidence">
+  <span class="num">07</span>
+  <div class="kicker">Evidence, not assertion</div>
+  <h2>The guardrails bite</h2>
+  <div class="stats">
+    <div class="stat warn"><div class="v">12</div><div class="l">runs refused at the merge gate</div></div>
+    <div class="stat warn"><div class="v">38</div><div class="l">blockers on a single run</div></div>
+    <div class="stat hard"><div class="v">1</div><div class="l">rule doing the work: <span class="cite">PHI-001</span></div></div>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 128" role="img" aria-label="Codegen output stopped at the review-scan gate by PHI-001">
+      <g>
+        <rect x="0" y="26" width="212" height="64" rx="10" fill="rgba(111,179,255,0.1)" stroke="#6fb3ff"/>
+        <text x="106" y="52" class="s-lbl" text-anchor="middle" font-size="12.5">agent writes code</text>
+        <text x="106" y="72" class="s-sub" text-anchor="middle" font-size="10.5">logs a patient identifier</text>
+      </g>
+      <path d="M212 58 L288 58" stroke="#2a2e3a" stroke-width="2"/><polygon points="290,58 280,53 280,63" fill="#2a2e3a"/>
+      <g>
+        <rect x="292" y="18" width="228" height="80" rx="10" fill="rgba(255,107,107,0.1)" stroke="#ff6b6b" stroke-width="2"/>
+        <text x="406" y="46" class="s-lbl" text-anchor="middle" font-size="13" style="fill:#ff6b6b">REVIEW-SCAN refuses</text>
+        <text x="406" y="68" class="s-mono" text-anchor="middle" font-size="11.5">security/v0.1.0/PHI-001</text>
+        <text x="406" y="86" class="s-sub" text-anchor="middle" font-size="10.5">names the rule, stops the merge</text>
+      </g>
+      <!-- blocked path -->
+      <path d="M520 58 L596 58" stroke="#ff6b6b" stroke-width="2"/><polygon points="598,58 588,53 588,63" fill="#ff6b6b"/>
+      <g>
+        <rect x="600" y="26" width="180" height="64" rx="10" fill="#14161c" stroke="#ff6b6b"/>
+        <text x="690" y="52" class="s-lbl" text-anchor="middle" font-size="12.5" style="fill:#ff6b6b">blocked by policy</text>
+        <text x="690" y="72" class="s-sub" text-anchor="middle" font-size="10.5">not "failed"</text>
+      </g>
+      <!-- what did NOT happen -->
+      <path d="M780 58 L856 58" stroke="#2a2e3a" stroke-width="2" stroke-dasharray="5 4"/>
+      <g opacity="0.4">
+        <rect x="860" y="26" width="140" height="64" rx="10" fill="#14161c" stroke="#2a2e3a" stroke-dasharray="5 4"/>
+        <text x="930" y="52" class="s-lbl" text-anchor="middle" font-size="12.5">production</text>
+        <text x="930" y="72" class="s-sub" text-anchor="middle" font-size="10.5">never reached</text>
+      </g>
+      <text x="0" y="122" class="s-sub" font-size="11">Retry is right for a defect and wrong for a policy block — retrying re-runs the same generator against the same rule and blocks again.</text>
+    </svg>
+  </div>
+
+  <blockquote>Those runs did not break. They were <strong>governed</strong>. A pipeline
+  that never blocks anything is not a safe pipeline — it is an unmeasured one.</blockquote>
+</section>
+
+<!-- 8 -->
+<section id="s8" data-topic="Evidence">
+  <span class="num">08</span>
+  <div class="kicker">Evidence, not assertion</div>
+  <h2>The invariant actually holds</h2>
+  <div class="stats">
+    <div class="stat hard"><div class="v">38</div><div class="l">PHI-classified decisions</div></div>
+    <div class="stat good"><div class="v">38</div><div class="l">decided by a human</div></div>
+    <div class="stat good"><div class="v">0</div><div class="l">decided by the agent</div></div>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 150" role="img" aria-label="The autonomy matrix cannot open the PHI class">
+      <text x="0" y="18" class="s-tiny">THE AUTONOMY MATRIX — per decision class, per team</text>
+      <!-- openable classes -->
+      <g>
+        <rect x="0" y="30" width="300" height="46" rx="9" fill="#14161c" stroke="#2a2e3a"/>
+        <text x="18" y="50" class="s-lbl" font-size="12">naming · structure · style</text>
+        <text x="18" y="68" class="s-sub" font-size="10.5">can earn autopilot through precedent</text>
+        <circle cx="272" cy="53" r="9" fill="rgba(61,220,132,0.15)" stroke="#3ddc84"/>
+        <text x="272" y="57" text-anchor="middle" font-size="10" fill="#3ddc84">↑</text>
+      </g>
+      <g>
+        <rect x="0" y="84" width="300" height="46" rx="9" fill="#14161c" stroke="#2a2e3a"/>
+        <text x="18" y="104" class="s-lbl" font-size="12">dependency · perf budget</text>
+        <text x="18" y="122" class="s-sub" font-size="10.5">gated until the class earns it</text>
+        <circle cx="272" cy="107" r="9" fill="rgba(61,220,132,0.15)" stroke="#3ddc84"/>
+        <text x="272" y="111" text-anchor="middle" font-size="10" fill="#3ddc84">↑</text>
+      </g>
+      <!-- locked -->
+      <g>
+        <rect x="336" y="30" width="330" height="100" rx="9" fill="rgba(255,107,107,0.08)" stroke="#ff6b6b" stroke-width="2"/>
+        <text x="356" y="56" class="s-lbl" font-size="13" style="fill:#ff6b6b">🔒 phi-classification</text>
+        <text x="356" y="78" class="s-sub" font-size="11">INVARIANT CLASS — always a human</text>
+        <text x="356" y="100" class="s-sub" font-size="11">auth boundaries are locked the same way</text>
+        <text x="356" y="120" class="s-tiny" style="fill:#ff6b6b">THE MATRIX CANNOT OPEN THIS</text>
+      </g>
+      <!-- what does not unlock it -->
+      <g>
+        <rect x="702" y="30" width="298" height="100" rx="9" fill="#14161c" stroke="#2a2e3a" stroke-dasharray="5 4"/>
+        <text x="722" y="54" class="s-tiny">DOES NOT UNLOCK IT</text>
+        <text x="722" y="78" class="s-sub" font-size="11">✕ a high confidence score</text>
+        <text x="722" y="98" class="s-sub" font-size="11">✕ accumulated precedent</text>
+        <text x="722" y="118" class="s-sub" font-size="11">✕ a configuration change</text>
+      </g>
+    </svg>
+  </div>
+
+  <p>Not because the agent was unavailable — because <code>phi-classification</code> is an
+  invariant class the autonomy matrix <strong>cannot open</strong>. That is the difference
+  between a policy you assert and a policy that holds.</p>
+</section>
+
+<!-- 9 -->
+<section id="s9" data-topic="Evidence">
+  <span class="num">09</span>
+  <div class="kicker">Evidence, not assertion</div>
+  <h2>The system learns from the human</h2>
+  <div class="stats">
+    <div class="stat good"><div class="v">16</div><div class="l">precedent pairs</div></div>
+    <div class="stat"><div class="v">229</div><div class="l">ledger entries</div></div>
+    <div class="stat"><div class="v">216</div><div class="l">cite the autonomy policy that governed them</div></div>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 168" role="img" aria-label="A human ruling becomes precedent an agent reuses on a later run">
+      <text x="0" y="16" class="s-tiny">ONE PRECEDENT PAIR ON THE LINEAGE GRAPH</text>
+      <!-- run 1 -->
+      <text x="0" y="44" class="s-sub" font-size="11">RUN 1 · a human is asked</text>
+      <g>
+        <rect x="0" y="54" width="330" height="72" rx="10" fill="rgba(255,183,77,0.12)" stroke="#ffb74d" stroke-width="2"/>
+        <circle cx="28" cy="80" r="10" fill="rgba(255,183,77,0.3)" stroke="#ffb74d"/>
+        <text x="28" y="84" text-anchor="middle" font-size="10" fill="#ffb74d">H</text>
+        <text x="50" y="78" class="s-lbl" font-size="12.5">"All MRNs must be exactly 8 digits"</text>
+        <text x="50" y="98" class="s-sub" font-size="10.5">actor.kind = human · ruled at the gate</text>
+        <text x="50" y="116" class="s-sub" font-size="10.5">written to the ledger with its rationale</text>
+      </g>
+      <!-- edge -->
+      <path d="M330 90 L470 90" stroke="#3ddc84" stroke-width="2.5"/>
+      <polygon points="472,90 461,84 461,96" fill="#3ddc84"/>
+      <text x="400" y="80" class="s-tiny" text-anchor="middle" style="fill:#3ddc84">precedent_refs</text>
+      <text x="400" y="110" class="s-sub" text-anchor="middle" font-size="10.5">the edge is the product</text>
+      <!-- run 2 -->
+      <text x="476" y="44" class="s-sub" font-size="11">RUN 2 · days later, nobody is asked</text>
+      <g>
+        <rect x="476" y="54" width="330" height="72" rx="10" fill="rgba(111,179,255,0.12)" stroke="#6fb3ff" stroke-width="2"/>
+        <circle cx="504" cy="80" r="10" fill="rgba(111,179,255,0.3)" stroke="#6fb3ff"/>
+        <text x="504" y="84" text-anchor="middle" font-size="10" fill="#6fb3ff">A</text>
+        <text x="526" y="78" class="s-lbl" font-size="12.5">same question, agent applies the ruling</text>
+        <text x="526" y="98" class="s-sub" font-size="10.5">actor.kind = agent · cites the human entry</text>
+        <text x="526" y="116" class="s-sub" font-size="10.5">no gate, no interruption</text>
+      </g>
+      <!-- outcome -->
+      <path d="M806 90 L860 90" stroke="#2a2e3a" stroke-width="2"/><polygon points="862,90 852,85 852,95" fill="#2a2e3a"/>
+      <g>
+        <rect x="866" y="58" width="134" height="64" rx="10" fill="#14161c" stroke="#3ddc84"/>
+        <text x="933" y="84" class="s-lbl" text-anchor="middle" font-size="12" style="fill:#3ddc84">one fewer</text>
+        <text x="933" y="102" class="s-sub" text-anchor="middle" font-size="10.5">human interruption</text>
+      </g>
+      <text x="0" y="160" class="s-sub" font-size="11">Both rows are auditable, and the second one shows exactly whose judgement it inherited.</text>
+    </svg>
+  </div>
+
+  <p><strong>The audit log is a byproduct. The loop is the product.</strong></p>
+</section>
+
+<!-- 10 -->
+<section id="s10" data-topic="Differentiator">
+  <span class="num">10</span>
+  <div class="kicker">The differentiator</div>
+  <h2>Ask every vendor this follow-up</h2>
+  <blockquote>"When your agent decided alone, <strong>how often was it wrong?</strong>"</blockquote>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 150" role="img" aria-label="Autonomy rate alone is not a safety signal without the disagreement rate">
+      <!-- what everyone shows -->
+      <rect x="0" y="14" width="470" height="122" rx="11" fill="#14161c" stroke="#2a2e3a"/>
+      <text x="22" y="40" class="s-tiny">WHAT EVERY VENDOR SHOWS</text>
+      <text x="22" y="76" class="s-lbl" font-size="30" style="fill:#6fb3ff">45%</text>
+      <text x="120" y="70" class="s-sub" font-size="12">autonomy — how much the agent</text>
+      <text x="120" y="88" class="s-sub" font-size="12">was <tspan font-style="italic">allowed</tspan> to do</text>
+      <text x="22" y="118" class="s-sub" font-size="11" style="fill:#ff6b6b">Rising alongside a rising error rate still looks like success.</text>
+
+      <!-- what we add -->
+      <rect x="500" y="14" width="500" height="122" rx="11" fill="rgba(61,220,132,0.05)" stroke="#3ddc84"/>
+      <text x="522" y="40" class="s-tiny" style="fill:#3ddc84">THE NUMBER THAT MAKES IT MEAN SOMETHING</text>
+      <text x="522" y="68" class="s-lbl" font-size="13">disagreement rate — when it decided alone,</text>
+      <text x="522" y="86" class="s-lbl" font-size="13">how often did a human later overturn it?</text>
+      <g>
+        <rect x="522" y="98" width="216" height="30" rx="7" fill="#14161c" stroke="#2a2e3a"/>
+        <text x="536" y="118" class="s-sub" font-size="10.5">below sample floor → <tspan class="s-mono">INSUFFICIENT</tspan></text>
+      </g>
+      <g>
+        <rect x="750" y="98" width="230" height="30" rx="7" fill="#14161c" stroke="#2a2e3a"/>
+        <text x="764" y="118" class="s-sub" font-size="10.5">never scored → <tspan class="s-mono">UNSCORED</tspan></text>
+      </g>
+    </svg>
+    <div class="fig-cap">Never <code>0%</code>. A rate computed from too few samples is not a weak signal — it is a false one.</div>
+  </div>
+
+  <div class="cols">
+    <div class="box">
+      <h3>We refuse to report</h3>
+      <p style="margin:0">Below the sample floor a class returns <code>INSUFFICIENT</code>,
+      never 0%.</p>
+    </div>
+    <div class="box">
+      <h3>Unknown is never agreement</h3>
+      <p style="margin:0">Decisions never scored return <code>UNSCORED</code> and are
+      excluded, rather than quietly counted as the agent having been right.</p>
+    </div>
+  </div>
+  <p class="note">Thresholds live in your versioned bundles, not our code. Changing what
+  counts as acceptable divergence is a governed standards change with a canary week — not a redeploy by us.</p>
+</section>
+
+<!-- 11 -->
+<section id="s11" data-topic="Candor">
+  <span class="num">11</span>
+  <div class="kicker">Credibility</div>
+  <h2>What we got wrong</h2>
+  <blockquote>We shipped a rule marked <strong>BLOCK</strong> with no scanner behind it.
+  <span class="cite">SBOM-001</span> reported clean because nothing was ever scanned.</blockquote>
+
+  <div class="fig">
+    <svg viewBox="0 0 1000 122" role="img" aria-label="A BLOCK rule with no enforcing mechanism reports clean">
+      <!-- the defect -->
+      <rect x="0" y="10" width="470" height="100" rx="11" fill="rgba(255,107,107,0.07)" stroke="#ff6b6b" stroke-dasharray="6 5"/>
+      <text x="22" y="36" class="s-tiny" style="fill:#ff6b6b">THE DEFECT</text>
+      <text x="22" y="62" class="s-mono" font-size="12">SBOM-001 · severity: BLOCK</text>
+      <text x="22" y="84" class="s-sub" font-size="11.5">mechanism: <tspan style="fill:#ff6b6b">— none —</tspan></text>
+      <text x="22" y="102" class="s-sub" font-size="11.5">result: reports clean, forever</text>
+
+      <path d="M470 60 L524 60" stroke="#3ddc84" stroke-width="2"/><polygon points="526,60 516,55 516,65" fill="#3ddc84"/>
+
+      <!-- the fix -->
+      <rect x="530" y="10" width="470" height="100" rx="11" fill="rgba(61,220,132,0.05)" stroke="#3ddc84"/>
+      <text x="552" y="36" class="s-tiny" style="fill:#3ddc84">THE STRUCTURAL FIX</text>
+      <text x="552" y="62" class="s-lbl" font-size="13">A BLOCK rule must declare</text>
+      <text x="552" y="82" class="s-lbl" font-size="13">the mechanism that enforces it</text>
+      <text x="552" y="102" class="s-sub" font-size="11">— now required by the bundle schema, so the class of error cannot recur</text>
+    </svg>
+  </div>
+
+  <p style="font-size:19px;color:var(--fg)"><strong>An audit artifact pretending to be a
+  control</strong> is the failure mode to watch for — in our product and in everyone else's.</p>
+  <p class="note">If a vendor cannot name the mechanism behind a control, they have a
+  spreadsheet of intentions.</p>
+</section>
+
+<!-- 12 -->
+<section id="s12" data-topic="Candor">
+  <span class="num">12</span>
+  <div class="kicker">Honest limits</div>
+  <h2>Find them here, not in a pilot</h2>
+  <div class="cols">
+    <div class="box limit">
+      <h3>Identity not enforced end-to-end</h3>
+      <p style="margin:0"><code>AUTH_MODE=entra</code> refuses to run rather than fake JWT
+      validation, and app auth is off on the demo. Team boundaries are advisory until closed.</p>
+    </div>
+    <div class="box limit">
+      <h3>Delivery not wired for every path</h3>
+      <p style="margin:0">Some runs end at <em>"Delivery blocked — synthetic provider
+      output."</em> The governance story is real; full autonomous delivery is not the claim.</p>
+    </div>
+    <div class="box limit">
+      <h3>Precedent is thin</h3>
+      <p style="margin:0">16 pairs. The learning loop is demonstrably <em>working</em>,
+      not demonstrably <em>mature</em>.</p>
+    </div>
+    <div class="box limit">
+      <h3>Rule binding is at the gate</h3>
+      <p style="margin:0">Ledger rows cite the autonomy policy; binding each row to the
+      bundle rule version is the next increment, not a shipped claim.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 13 -->
+<section id="s13" data-topic="Configure">
+  <span class="num">13</span>
+  <div class="kicker">What you configure</div>
+  <h2>This is the product</h2>
+  <table>
+    <tr><th>Surface</th><th>What you set</th></tr>
+    <tr><td><strong>Your organization</strong></td><td>Departments, teams, cost centers, reviewer rosters, mapped to your Entra identities</td></tr>
+    <tr><td><strong>Your standards</strong></td><td>Author and version rules per department; pin versions per team; canary before you go wide</td></tr>
+    <tr><td><strong>Your autonomy policy</strong></td><td>Per decision class, per team: always gate, autopilot above a threshold, or full autopilot — with PHI and auth locked</td></tr>
+    <tr><td><strong>Your model policy</strong></td><td>Which models are approved, banned, or cleared for PHI-adjacent work; routing per stage; cost ceilings</td></tr>
+  </table>
+  <p>That matrix <strong>is</strong> your AI-adoption strategy, expressed as configuration
+  rather than as a slide.</p>
+</section>
+
+<!-- 14 -->
+<section id="s14" data-topic="The test">
+  <span class="num">14</span>
+  <div class="kicker">The acceptance test</div>
+  <h2>Judge us on one query</h2>
+  <blockquote>"Show me every AI decision made on PHI-classified data in the last 30 days —
+  the rule that governed each one, whether a human or an agent decided, and what it cost."</blockquote>
+  <p>If that returns complete, real rows, you have a governed AI operating model.
+  If it can't, you have a demo.</p>
+  <div class="stats">
+    <div class="stat good"><div class="v">38 rows</div><div class="l">returned on the live system — all human, zero agent</div></div>
+  </div>
+  <p class="note">Everything else in this system exists to make that query true.</p>
+</section>
+
+</div>
+
+<!-- ============ ZOOM LIGHTBOX ============ -->
+<div class="lb" id="lb">
+  <div class="lb-hint" id="lbHint">scroll to zoom · drag to pan · double-click to reset</div>
+  <button class="lb-close" id="lbClose">Close ✕</button>
+  <div class="lb-stage" id="lbStage"><img id="lbImg" alt=""></div>
+  <div class="lb-bar">
+    <button id="zOut">−</button>
+    <span class="lvl" id="zLvl">100%</span>
+    <button id="zIn">+</button>
+    <button id="zFit">Fit</button>
+  </div>
+</div>
+
+<!-- ============ FULL-SCREEN LIVE DIAGRAM ============ -->
+<div class="fs" id="fs">
+  <button class="fsclose" id="fsClose">Close ✕</button>
+  <iframe id="fsFrame" title="Architecture — full screen"></iframe>
+</div>
+
+<script>
+(function () {
+  var deck = document.getElementById('deck');
+  var sections = Array.prototype.slice.call(deck.querySelectorAll('section'));
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a[data-topic]'));
+  var prog = document.getElementById('prog');
+  var count = document.getElementById('count');
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  // ---- nav: smooth jump into a topic
+  links.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var el = document.querySelector(a.getAttribute('href'));
+      if (el) deck.scrollTo({ top: el.offsetTop, behavior: 'smooth' });
+    });
+  });
+
+  // ---- active topic + progress
+  function sync() {
+    var y = deck.scrollTop, h = deck.clientHeight;
+    var idx = Math.round(y / h);
+    if (idx < 0) idx = 0;
+    if (idx > sections.length - 1) idx = sections.length - 1;
+    var topic = sections[idx].getAttribute('data-topic');
+    links.forEach(function (a) {
+      var t = a.textContent.trim();
+      a.classList.toggle('on', t === topic);
+    });
+    count.textContent = pad(idx + 1) + ' / ' + pad(sections.length);
+    var max = deck.scrollHeight - h;
+    prog.style.width = (max > 0 ? (y / max) * 100 : 0) + '%';
+  }
+  deck.addEventListener('scroll', sync, { passive: true });
+  window.addEventListener('resize', sync);
+  sync();
+
+  // ---- keyboard: next/prev slide, and topic hop with [ ]
+  document.addEventListener('keydown', function (e) {
+    if (fs.classList.contains('open')) { if (e.key === 'Escape') fsClose(); return; }
+    if (lb.classList.contains('open')) return;
+    var h = deck.clientHeight, idx = Math.round(deck.scrollTop / h);
+    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault(); go(idx + 1);
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault(); go(idx - 1);
+    } else if (e.key === ']') {
+      e.preventDefault(); hopTopic(idx, 1);
+    } else if (e.key === '[') {
+      e.preventDefault(); hopTopic(idx, -1);
+    } else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(sections.length - 1); }
+  });
+  function go(i) {
+    i = Math.max(0, Math.min(sections.length - 1, i));
+    deck.scrollTo({ top: sections[i].offsetTop, behavior: 'smooth' });
+  }
+  function hopTopic(idx, dir) {
+    var cur = sections[idx].getAttribute('data-topic');
+    for (var i = idx + dir; i >= 0 && i < sections.length; i += dir) {
+      if (sections[i].getAttribute('data-topic') !== cur) {
+        // land on the FIRST slide of that topic when going forward
+        if (dir < 0) {
+          var t = sections[i].getAttribute('data-topic');
+          while (i - 1 >= 0 && sections[i - 1].getAttribute('data-topic') === t) i--;
+        }
+        return go(i);
+      }
+    }
+  }
+
+  // ---- full-screen live diagram
+  var fs = document.getElementById('fs');
+  var fsFrame = document.getElementById('fsFrame');
+  function fsOpen(src) {
+    fsFrame.src = src; fs.classList.add('open');
+  }
+  function fsClose() { fs.classList.remove('open'); fsFrame.src = 'about:blank'; }
+  document.querySelectorAll('button.expand').forEach(function (b) {
+    b.addEventListener('click', function () { fsOpen(b.getAttribute('data-src')); });
+  });
+  document.getElementById('fsClose').addEventListener('click', fsClose);
+
+  // ---- lightbox with wheel zoom + drag pan
+  var lb = document.getElementById('lb');
+  var lbImg = document.getElementById('lbImg');
+  var lbStage = document.getElementById('lbStage');
+  var zLvl = document.getElementById('zLvl');
+  var scale = 1, tx = 0, ty = 0, fitScale = 1;
+  var dragging = false, sx = 0, sy = 0;
+
+  function apply() {
+    lbImg.style.transform =
+      'translate(-50%,-50%) translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+    zLvl.textContent = Math.round((scale / fitScale) * 100) + '%';
+  }
+  function fit() {
+    var nw = lbImg.naturalWidth || 1200, nh = lbImg.naturalHeight || 800;
+    var availW = window.innerWidth * 0.92, availH = window.innerHeight * 0.82;
+    lbImg.style.width = nw + 'px';
+    lbImg.style.height = nh + 'px';
+    fitScale = Math.min(availW / nw, availH / nh);
+    scale = fitScale; tx = 0; ty = 0;
+    apply();
+  }
+  function open(src, title) {
+    lbImg.src = src; lbImg.alt = title || '';
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    if (lbImg.complete && lbImg.naturalWidth) fit();
+    else lbImg.onload = fit;
+  }
+  function close() {
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('figure.zoom').forEach(function (f) {
+    f.addEventListener('click', function () {
+      open(f.getAttribute('data-src'), f.getAttribute('data-title'));
+    });
+  });
+  document.getElementById('lbClose').addEventListener('click', close);
+  lb.addEventListener('click', function (e) { if (e.target === lb) close(); });
+  document.addEventListener('keydown', function (e) {
+    if (!lb.classList.contains('open')) return;
+    if (e.key === 'Escape') close();
+    if (e.key === '+' || e.key === '=') { scale *= 1.25; apply(); }
+    if (e.key === '-') { scale /= 1.25; apply(); }
+    if (e.key === '0') fit();
+  });
+  document.getElementById('zIn').addEventListener('click', function (e) { e.stopPropagation(); scale *= 1.25; apply(); });
+  document.getElementById('zOut').addEventListener('click', function (e) { e.stopPropagation(); scale /= 1.25; apply(); });
+  document.getElementById('zFit').addEventListener('click', function (e) { e.stopPropagation(); fit(); });
+
+  lbStage.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var prev = scale;
+    scale *= (e.deltaY < 0 ? 1.12 : 1 / 1.12);
+    scale = Math.max(fitScale * 0.4, Math.min(fitScale * 14, scale));
+    // zoom toward cursor
+    var rect = lbStage.getBoundingClientRect();
+    var cx = e.clientX - rect.left - rect.width / 2;
+    var cy = e.clientY - rect.top - rect.height / 2;
+    var k = scale / prev;
+    tx = cx - (cx - tx) * k;
+    ty = cy - (cy - ty) * k;
+    apply();
+  }, { passive: false });
+
+  lbStage.addEventListener('mousedown', function (e) {
+    dragging = true; sx = e.clientX - tx; sy = e.clientY - ty;
+    lbStage.classList.add('drag'); e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!dragging) return;
+    tx = e.clientX - sx; ty = e.clientY - sy; apply();
+  });
+  window.addEventListener('mouseup', function () {
+    dragging = false; lbStage.classList.remove('drag');
+  });
+  lbStage.addEventListener('dblclick', fit);
+  window.addEventListener('resize', function () { if (lb.classList.contains('open')) fit(); });
+})();
+</script>
+</body>
+</html>
