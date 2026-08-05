@@ -7,7 +7,7 @@
 
 ## Why
 
-The v0.6 (HCA Nashville) deployment ran on `vnet-agentic-sdlc 10.40.0.0/16` with private endpoints on Cosmos and Storage and `publicNetworkAccess: Disabled` everywhere. That posture matched the customer's compliance bar.
+The v0.6 deployment ran on `vnet-agentic-sdlc 10.40.0.0/16` with private endpoints on Cosmos and Storage and `publicNetworkAccess: Disabled` everywhere. That posture matched a regulated-industry compliance bar.
 
 The v0.7 deployment in `rg-agentic-sdlc-v07-eastus2` regressed:
 

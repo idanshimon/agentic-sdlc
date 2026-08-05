@@ -168,7 +168,8 @@ rather than a wholesale rewrite.
 
 - **Long-term drift correction.** "Spec → Code drift detection by Pipeline
   Doctor" is the next experiment. Out of scope here.
-- **Cross-customer reuse.** Capability sharing across HCA / Cigna is a 6-month
+- **Cross-organization reuse.** Capability sharing across separate business
+  units is a 6-month
   hypothesis, not a 6-hour one.
 - **Plan Mode-as-Resolver.** Different axis entirely.
 - **Workshop-day demo polish.** Both phases get judged on artifact substance,

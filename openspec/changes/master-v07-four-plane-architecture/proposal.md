@@ -13,7 +13,7 @@ differentiator, not codegen quality.** A Decision Ledger captured every pipeline
 stage decision; HITL gates intercepted ambiguity classes; cost-per-decision
 replaced cost-per-token guesswork.
 
-Two limits became visible during the HCA Nashville workshop (May 27-28, 2026):
+Two limits became visible once v0.6 was exercised end to end:
 
 1. **Coverage gap.** The Ledger only saw orchestrator pipeline runs. ~80% of an
    organization's agentic activity (engineer IDE sessions, coding-agent issue→PR

@@ -18,7 +18,7 @@
 
 ## Why
 
-v0.6's deliver stage targeted Azure DevOps because HCA Nashville's reference
+v0.6's deliver stage targeted Azure DevOps because its reference
 deployment lived in ADO. v0.7 makes GitHub the default delivery target,
 matching the rest of the agent-hq-integration story (issues from chat
 bridges land as GH Issues, coding agent opens GH PRs, etc.).

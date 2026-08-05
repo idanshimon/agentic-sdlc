@@ -312,7 +312,7 @@ The four-plane architecture cut from v0.6 lessons.
 - MIT LICENSE
 
 ### Background
-v0.6 (HCA Nashville workshop reference, line `0.6.7` `bfae9d9`) proved that
+v0.6 (the prior reference line `0.6.7` `bfae9d9`) proved that
 **governance is the differentiator**: Decision Ledger as audit spine, HITL
 gates at ambiguity classes, cost-per-decision dashboards. The two limits that
 drove v0.7:

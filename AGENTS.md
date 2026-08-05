@@ -59,7 +59,7 @@ example/sample data are fine — see the NEVER rule below.)
   messages. This is a customer-neutral production system: motivate every change
   by the *architectural* need (e.g. "un-orchestrated agent PRs bypass both
   enforcement surfaces"), never by who asked. **Public company names (payers,
-  providers, vendors — Humana, Aetna, HCA, etc.) as generic example/sample data
+  providers, vendors) as generic example/sample data
   are FINE** — that is public knowledge and reveals no engagement. The line is
   named-live-engagement vs. public-example, not "no company names."
 - **Never write raw PHI** (MRN, full DOB, SSN, full name + DOB, biometric IDs, treatment notes)

@@ -10,9 +10,9 @@ decision is auditable, every standards change is committee-approved, and every
 runtime — orchestrator pipeline, GitHub Coding Agent, IDE Copilot — feeds the
 same Decision Ledger.
 
-> v0.7 succeeds [v0.6.x](https://github.com/idanshimon/agentic-sdlc-reference)
-> (the HCA Nashville workshop reference). The v0.6 line proved governance is
-> the differentiator. v0.7 makes it cover **all** agentic activity, not just
+> v0.7 succeeds [v0.6.x](https://github.com/idanshimon/agentic-sdlc-reference).
+> The v0.6 line proved governance is the differentiator. v0.7 makes it cover
+> **all** agentic activity, not just
 > the orchestrator's pipeline runs, and adds a committee-reviewed **standards
 > bundle** plane so departments (Architect, Security, Privacy, FinOps) own
 > their rules as versioned PRs, not tribal knowledge.
