@@ -10,6 +10,7 @@ import { useAssistantContext } from "@/lib/assist/context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CopyButton } from "@/components/ui/copy-button";
 import { StagePill } from "@/components/domain/stage-pill";
 import { StatusDot } from "@/components/domain/status-dot";
 import { ResolverGate } from "@/components/domain/resolver-gate";
@@ -330,8 +331,12 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
                             !(e.payload as { pr_url?: string }).pr_url &&
                             (e.payload as { delivery_status?: string }).delivery_status !== "not_delivered" && (
                               <details className="mt-1.5">
-                                <summary className="text-[10px] text-[var(--text-tertiary)] cursor-pointer hover:text-[var(--text-secondary)]">
-                                  Payload
+                                <summary className="text-[10px] text-[var(--text-tertiary)] cursor-pointer hover:text-[var(--text-secondary)] flex items-center gap-2">
+                                  <span>Payload</span>
+                                  <CopyButton
+                                    value={JSON.stringify(e.payload, null, 2)}
+                                    title="Copy this event payload as JSON"
+                                  />
                                 </summary>
                                 <pre className="mono text-[10px] mt-1 bg-[var(--bg)] p-2 rounded border border-[var(--border-muted)] overflow-x-auto">
                                   {JSON.stringify(e.payload, null, 2)}
