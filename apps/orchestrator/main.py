@@ -48,6 +48,7 @@ from .models import (
     Stage, StageEvent,
 )
 from .agent_bundles import bundles_for_stage
+from .decision_record import classify_gate_reason, collect_rejected_options
 from .stages import (
     stage_architect, stage_assessor, stage_codegen, stage_deliver,
     stage_ingest, stage_review_scan, stage_test_plan,
@@ -1238,17 +1239,45 @@ async def get_pins() -> dict:
 async def reload_config() -> dict:
     """Hot-reload the running orchestrator's agent-bundle + prompt caches so an
     edit takes effect in THIS session without redeploy. Prompts/agents only —
-    bundles are PR-only. The durable source of truth is still the merged PR."""
-    from .agent_bundles import reload_agent_bundles
-    reload_agent_bundles()
-    reloaded = ["agent_bundles"]
+    bundles are PR-only. The durable source of truth is still the merged PR.
+
+    Reports per-subsystem status. A subsystem that fails to reload is reported
+    as failed with its error — never swallowed. (Before govern-agent-lane-prompts
+    this endpoint imported a `reload_prompt_catalog` symbol that never existed,
+    caught the ImportError with a bare `except: pass`, and returned ok:true while
+    the prompt catalog stayed stale until process restart.)
+    """
+    reloaded: list[str] = []
+    failed: dict[str, str] = {}
+
     try:
-        from .prompt_library_v2 import reload_prompt_catalog  # type: ignore
-        reload_prompt_catalog()
+        from .agent_bundles import reload_agent_bundles
+        reload_agent_bundles()
+        reloaded.append("agent_bundles")
+    except Exception as exc:  # noqa: BLE001
+        failed["agent_bundles"] = str(exc)
+        _logger.warning("agent bundle reload failed: %s", exc)
+
+    # Drop the lazily-loaded catalog singleton, then eagerly re-resolve it so a
+    # malformed prompt YAML surfaces HERE rather than on the next pipeline run.
+    try:
+        from ._pipeline_stages import get_prompt_catalog, reset_prompt_catalog
+        reset_prompt_catalog()
+        get_prompt_catalog()
         reloaded.append("prompt_catalog")
-    except Exception:
-        pass  # prompt catalog reload is best-effort
-    return {"ok": True, "reloaded": reloaded}
+    except Exception as exc:  # noqa: BLE001
+        failed["prompt_catalog"] = str(exc)
+        _logger.warning("prompt catalog reload failed: %s", exc)
+
+    try:
+        from .agent_catalog import reset_agent_catalog
+        reset_agent_catalog()
+        reloaded.append("agent_catalog")
+    except Exception as exc:  # noqa: BLE001
+        failed["agent_catalog"] = str(exc)
+        _logger.warning("agent catalog reload failed: %s", exc)
+
+    return {"ok": not failed, "reloaded": reloaded, "failed": failed}
 
 
 @app.post("/api/run", tags=["Runs"])
@@ -1889,6 +1918,16 @@ async def approve(run_id: str, decision: GateDecision, request: Request) -> dict
                 # so a human decision is governed-attributed to the same bundles.
                 bundle_refs=bundles_for_stage("assessor"),
                 autonomy_ref=gate_ref,
+                # adopt-github-native-execution-substrate: persist the options
+                # that were weighed but NOT chosen, so the record can answer
+                # "why not the other option?", and classify WHY this needed a
+                # human as a typed queryable value.
+                rejected_options=collect_rejected_options(
+                    card.options, decision.option_index, final_text,
+                ),
+                gate_reason=classify_gate_reason(
+                    card.ambiguity_class, autonomy_says_gate=True,
+                ),
                 # Phase 2.6: same as the autopilot path — the assessor's
                 # resolved prompt chain is the audit trail for which prompt
                 # produced the ambiguity card the operator just decided on.
