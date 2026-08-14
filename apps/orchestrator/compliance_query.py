@@ -77,6 +77,17 @@ def _row(entry: dict) -> dict:
         # WHY — governing autonomy rule + bundle rule version(s)
         "autonomy_ref": entry.get("autonomy_ref") or "",
         "bundle_refs": list(entry.get("bundle_refs") or []),
+        # WHY it stopped, and WHAT ELSE was on the table
+        # (adopt-github-native-execution-substrate). `gate_reason` is the typed
+        # classification complementing `autonomy_ref`'s specific rule citation.
+        # `rejected_options` is what lets an auditor ask "why not the other
+        # option?" — the alternatives were previously discarded at persist time.
+        # `decision_confidence` is RECORDED EVIDENCE ONLY and is deliberately
+        # NOT part of _is_complete(): a decision is not less auditable for
+        # having been made by a human who reported no confidence score.
+        "gate_reason": entry.get("gate_reason"),
+        "rejected_options": list(entry.get("rejected_options") or []),
+        "decision_confidence": entry.get("decision_confidence"),
         # WHO
         "actor_kind": actor_kind,
         "actor_id": actor_id,
@@ -109,6 +120,7 @@ def build_compliance_rows(
     until_iso: Optional[str] = None,
     actor_kind: Optional[str] = None,
     team_id: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> list[dict]:
     """Pure builder: normalize + filter ledger dicts into compliance rows,
     sorted newest-first. All filters are AND-combined; None = no filter.
@@ -131,6 +143,10 @@ def build_compliance_rows(
         if actor_kind and row["actor_kind"] != actor_kind:
             continue
         if team_id and row["team_id"] != team_id:
+            continue
+        # run_id was projected onto every row but was not filterable, so
+        # "show me the decisions for THIS run" silently returned nothing.
+        if run_id and row["run_id"] != run_id:
             continue
         row["complete"] = _is_complete(row)
         rows.append(row)
@@ -181,6 +197,7 @@ async def query_compliance(
     until_iso: Optional[str] = None,
     actor_kind: Optional[str] = None,
     team_id: Optional[str] = None,
+    run_id: Optional[str] = None,
     limit: int = 500,
 ) -> dict:
     """Cosmos-backed compliance query. Pulls decision-ledger entries (team-
@@ -205,6 +222,9 @@ async def query_compliance(
     if until_iso:
         clauses.append("c.created_at<=@u")
         params.append({"name": "@u", "value": until_iso})
+    if run_id:
+        clauses.append("c.run_id=@r")
+        params.append({"name": "@r", "value": run_id})
     # ORDER BY only when single-partition (team_id given); a cross-partition
     # ORDER BY needs a composite index and can throw. build_compliance_rows
     # re-sorts newest-first regardless, so `limit` stays correct either way.
@@ -227,7 +247,7 @@ async def query_compliance(
     # actor_kind is applied in the pure builder (it's a derived field).
     rows = build_compliance_rows(
         entries, phi_class=phi_class, since_iso=since_iso, until_iso=until_iso,
-        actor_kind=actor_kind, team_id=team_id,
+        actor_kind=actor_kind, team_id=team_id, run_id=run_id,
     )
     return {
         "rows": rows,

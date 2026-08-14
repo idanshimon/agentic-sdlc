@@ -2480,6 +2480,7 @@ async def compliance_decisions(
     phi_class: str | None = None,
     actor_kind: str | None = None,
     team_id: str | None = None,
+    run_id: str | None = None,
     window: str | None = None,
     since: str | None = None,
     until: str | None = None,
@@ -2517,12 +2518,12 @@ async def compliance_decisions(
             "summary": completeness_summary([]),
             "filters": {
                 "phi_class": phi_class, "since": since_iso, "until": until,
-                "actor_kind": actor_kind, "team_id": team_id,
+                "actor_kind": actor_kind, "team_id": team_id, "run_id": run_id,
             },
         }
     return await query_compliance(
         _ledger, phi_class=phi_class, since_iso=since_iso, until_iso=until,
-        actor_kind=actor_kind, team_id=team_id, limit=limit,
+        actor_kind=actor_kind, team_id=team_id, run_id=run_id, limit=limit,
     )
 
 
