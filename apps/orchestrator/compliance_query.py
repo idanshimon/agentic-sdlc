@@ -254,6 +254,6 @@ async def query_compliance(
         "summary": completeness_summary(rows),
         "filters": {
             "phi_class": phi_class, "since": since_iso, "until": until_iso,
-            "actor_kind": actor_kind, "team_id": team_id,
+            "actor_kind": actor_kind, "team_id": team_id, "run_id": run_id,
         },
     }

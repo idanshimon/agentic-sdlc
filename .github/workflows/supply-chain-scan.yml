@@ -68,8 +68,33 @@ jobs:
           fail-build: false
           output-format: sarif
 
+      # Validate the SARIF before anything consumes it. `steps.grype.outputs.sarif`
+      # is a PATH, so it is non-empty even when the scan produced a truncated or
+      # empty file — the old `!= ''` guard could never catch that. The observed
+      # failure was "Invalid SARIF. JSON syntax error: Unexpected end of JSON
+      # input" followed by an opaque exit 2, which looks like a CVE block but is
+      # a broken artifact. A supply-chain gate that fails for a reason other than
+      # a CVE is exactly the "paperwork of assurance without the substance" this
+      # workflow exists to prevent, so say which it is.
+      - name: Validate SARIF artifact
+        id: sarif
+        if: always()
+        run: |
+          f="${{ steps.grype.outputs.sarif }}"
+          if [ -z "$f" ] || [ ! -s "$f" ]; then
+            echo "::error::grype produced no SARIF (path='$f'). Scan did not run to completion."
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f"; then
+            echo "::error::grype SARIF at '$f' is not valid JSON — truncated or malformed output."
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+
       - name: Upload results to the Security tab
-        if: always() && steps.grype.outputs.sarif != ''
+        if: always() && steps.sarif.outputs.valid == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
@@ -78,7 +103,7 @@ jobs:
       # The gate. Counts critical/high findings and fails explicitly, so the log
       # states which rule blocked and why rather than an opaque action failure.
       - name: Enforce SUPPLY-001
-        if: always()
+        if: always() && steps.sarif.outputs.valid == 'true'
         run: |
           python3 scripts/enforce_supply_chain.py \
             --sarif "${{ steps.grype.outputs.sarif }}" \
