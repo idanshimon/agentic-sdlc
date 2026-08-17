@@ -109,6 +109,18 @@ jobs:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: supply-chain
 
+      # Retain the SARIF as a build artifact. The Security tab shows the
+      # findings but not the exact document the gate reasoned over, so a
+      # disputed block previously could not be re-adjudicated after the fact.
+      # An audit gate whose evidence is unreachable is not auditable.
+      - name: Retain SARIF for audit
+        if: always() && steps.sarif.outputs.valid == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-sarif
+          path: ${{ steps.grype.outputs.sarif }}
+          retention-days: 30
+
       # The gate. Counts critical/high findings and fails explicitly, so the log
       # states which rule blocked and why rather than an opaque action failure.
       - name: Enforce SUPPLY-001
