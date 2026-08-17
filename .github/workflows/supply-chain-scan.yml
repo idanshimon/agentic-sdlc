@@ -59,14 +59,23 @@ jobs:
       # fail-build is deliberately false: the action's own failure mode is
       # coarse, and the SARIF should reach the Security tab even on a failing
       # scan. The explicit gate below decides pass/fail.
+      #
+      # Pinned to @v7, NOT @v3. v3 pins grype v0.74.4, whose embedded
+      # vulnerability-DB listing is long dead: grype refuses to load a DB older
+      # than 5 days and aborts with "db could not be loaded: the vulnerability
+      # database was built 22 weeks ago". It then writes NO SARIF while the
+      # action still emits ##[warning]Failed minimum severity level — an
+      # infrastructure failure wearing a CVE-finding's clothes. A stale-DB abort
+      # means the scan never ran, so SUPPLY-001 was not actually enforced.
       - name: Scan SBOM for vulnerabilities
         id: grype
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v7
         with:
           sbom: sbom.spdx.json
           severity-cutoff: high
           fail-build: false
           output-format: sarif
+          cache-db: true
 
       # Validate the SARIF before anything consumes it. `steps.grype.outputs.sarif`
       # is a PATH, so it is non-empty even when the scan produced a truncated or
