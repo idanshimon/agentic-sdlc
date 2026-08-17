@@ -61,7 +61,7 @@ describe("LedgerQueryInputSchema", () => {
 describe("RuntimeEntrySchema teaching signals", () => {
   const base = {
     team_id: "team-x",
-    actor: { kind: "human" as const, id: "ravi@hca.com" },
+    actor: { kind: "human" as const, id: "reviewer-b@example.org" },
     decision: "flagging this",
     agent_session_id: "sess-1",
   };

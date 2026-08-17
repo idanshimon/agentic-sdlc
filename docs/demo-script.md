@@ -1,251 +1,275 @@
-# v0.7 demo script — pipeline-centric walkthrough
+# Demo script — governed agentic SDLC
 
-> **Assistant:** customer-visible reading layer over the ledger, available on every tab via the floating Sparkles button or ⌘K.
-> **Audience:** architects + engineering leaders evaluating governed agentic SDLC.
-> **Time:** 10 minutes click-by-click + 5 minutes Q&A.
-> **Pre-req:** all four planes deployed; URLs filled in at the bottom of this doc.
+**Mode:** live submit against the deployed v0.7 stack.
+**Verified:** 2026-08-17 by driving the full cycle end to end via the live API.
+**Reference run:** `f4e744c0-16a3-41bd-aabd-4687f5b129fd` (team `team-cardiology`).
 
-This script is **pipeline-centric, not speaker-centric**. It works with any room composition.
-
----
-
-## Step 0 — Tabs to open before you start
-
-Three tabs, in this order:
-
-1. **Tab A — Ledger Insights UI** (the demo run): `<LEDGER_UI_URL>/`
-2. **Tab B — Telemetry view** (cost-per-decision + class drift): `<LEDGER_UI_URL>/telemetry`
-3. **Tab C — explainer** (offline backup, dark theme, 4-plane diagram): open `docs/explainer.html` locally as a file:// URL
-
-Optional Tab D for Q&A: standards-bundles directory in GitHub (`https://github.com/idanshimon/agentic-sdlc/tree/main/standards-bundles`).
-
-The AgentAssistant slide-over (floating Sparkles button, or ⌘K) is wired on every tab in Tab A and Tab B. It reads whatever page you are on and answers from real run state. See Step 9.
+Every number below was observed on the deployed system, not estimated. If you
+re-run live, the numbers will differ — narrate what is on screen, not what is
+written here.
 
 ---
 
-## Step 1 — Frame the problem in 60 seconds
+## What this demo proves
 
-**Action:** Don't click anything. Talk over Tab C's hero diagram.
+A PRD enters. Every consequential decision is classified, gated, attributed to a
+named actor, recorded with the alternatives that were rejected, and cited back to
+a standards bundle. Code that violates a bundle rule does not ship.
 
-**Verbal:**
-
-> Most engineers don't live in VS Code. They work in Slack, Teams, Linear,
-> Boards, or a portal. A few do work in VS Code and want IDE Copilot. Both
-> populations need to ship governed code. The hard problem is that today's
-> AI agents are invisible to compliance. We see what landed in main; we
-> don't see *why* the agent picked a path.
->
-> v0.7 of the agentic SDLC reference design closes that gap with four
-> planes. Standards bundles author the rules. The pipeline runs heavy
-> work — PRD-to-PR. Agent HQ runtime lanes — coding agent, IDE Copilot,
-> chat bridges — handle the medium and light lanes. Everything writes to
-> a single Decision Ledger. The Pipeline Doctor reads it back to detect
-> drift and propose changes.
+The demo's strongest moment is a **failure**: the pipeline generates working code
+and then blocks its own delivery on a PHI rule. That is the product.
 
 ---
 
-## Step 2 — Drop a PRD into the orchestrator
+## Pre-flight (do this before the room)
 
-**Action:** Tab A. Click "New Run". Drop `samples/prds/patient-vitals-streaming.txt` (in repo). Choose mode = **autopilot**.
+```bash
+B=https://ca-orchestrator-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io
+U=https://ca-ledger-ui-vnet.thankfulflower-0a94d0d3.eastus2.azurecontainerapps.io
 
-**Verbal:**
-
-> This is a vitals-streaming PRD asking for a Patient Vitals Streaming API.
-> It mentions PHI without classification, and mentions third-party SaaS
-> bedside-monitoring vendors with TBD egress policy. Two specific traps.
-
----
-
-## Step 3 — Watch the 9 stages fire
-
-**Action:** Stay on Tab A. The pipeline graph animates.
-
-**Verbal (point as each stage completes):**
-
-- **Ingest** — parse the PRD. Cost ~$0.001.
-- **Assessor** — surface ambiguities as typed cards. Cost ~$0.027. ~6-7 cards.
-- **Resolver** — gate. In autopilot mode, the gate uses Decision Ledger
-  precedent + a confidence threshold per ambiguity class. PHI cards never
-  autopilot — they always gate to a human.
-- **Architect** — propose service topology + data flows + auth model.
-- **Design Review** — gate 2 (auto + escalate).
-- **Test Plan** — TDD scaffolding.
-- **CodeGen** — write code. Cost ~$0.50 per stage on average. By far the
-  most expensive stage.
-- **Review-Scan** — gate 3, fail-hard. SBOM, SAST, secret scan, PHI scan.
-- **Deliver** — open a GH PR with `decisions.md` in the body.
-
----
-
-## Step 4 — The decision card pattern
-
-**Action:** Click on the auth-policy card.
-
-**Verbal:**
-
-> This card surfaces the third-party SaaS / Grammarly-style egress problem
-> in clinical clothing. The Assessor gives two options each citing
-> `security/v0.1.0/AUTH-001`. The recommended option is OAuth2 with a
-> Vendor Registry. Hit Accept-Recommended, the decision lands in the ledger
-> immediately, attributed to the user's M365 identity, with bundle_refs
-> populated.
-
----
-
-## Step 5 — Show the Ledger Insights view (Tab B)
-
-**Action:** Switch to Tab B (`/telemetry`). Three sub-views.
-
-**Verbal:**
-
-- **Decision Ledger feed (left)** — every entry from this run. Note the
-  `bundle_refs` chips: each decision is grounded in a specific rule. This
-  is the audit substrate compliance reads.
-- **Cost dashboard (middle)** — per-stage cost, apportioned to teams.
-  Token spend = hard savings line. Cost-per-decision blast radius =
-  cost-avoidance line. Map directly to your CFO's IT spend categorization.
-- **Class drift (right)** — distribution of ambiguity classes over time.
-  Watch for spikes in unexplored classes — that's where the next bundle
-  rule needs to be written.
-
----
-
-## Step 6 — The fourth plane — Pipeline Doctor
-
-**Action:** Show Tab C's "Pipeline Doctor" pane. No live click — explain.
-
-**Verbal:**
-
-> Pipeline Doctor runs hourly in a Container Job. It reads the ledger and
-> detects five kinds of drift: autopilot rejection rate climbing, cost
-> per decision climbing, class drift unprecedented, bundle rules unused,
-> PHI class violations.
->
-> For each signal it does ONE of two things:
-> A) Apply an auto-fix WITHIN the bundle's declared envelope. Writes a
->    runtime ledger entry of kind `auto_fix`. Notifies a Teams channel.
-> B) Open a PR on `standards-bundles/<dept>` with an Architecture
->    Decision Record. The committee decides; the Doctor never decides
->    rule changes alone.
->
-> PHI rules are NEVER auto-fixed. Hard-coded in the validator.
-> Defense in depth: even if a bundle's envelope.yaml is mis-edited to
-> permit it, the validator refuses.
-
----
-
-## Step 7 — The Agent HQ runtime lane
-
-**Action:** Show Tab C's hooks pane.
-
-**Verbal:**
-
-> Engineers who don't use the orchestrator pipeline still write to the
-> ledger. Five lifecycle hooks fire in every Copilot session — cloud
-> agent, CLI, VS Code. The pre-tool-use hook runs the same PHI classifier
-> the orchestrator's review-scan stage uses. Local fast-path catches
-> raw MRN even when the MCP server is down.
->
-> Same ledger, three writers, one query surface for compliance.
-
----
-
-## Step 8 — Standards-change loop
-
-**Action:** Open Tab D (GitHub). Show `standards-bundles/security/v0.1.0/`.
-
-**Verbal:**
-
-> Every department owns its bundle. Privacy DPO + Security Lead + Legal
-> are required reviewers for any HIGH-blast change. Architect can't
-> unilaterally relax a PHI rule. The standards-change-agent triages
-> the PR, drafts an ADR, assigns reviewers, blocks merge until quorum.
-> Five percent canary rollout for seven days; auto-revert if metrics
-> regress. Every merge writes a `meta` ledger entry.
-
----
-
-## Step 9 — Context-aware AgentAssistant
-
-**Action:** Stay on Tab A's run-detail page. There should be 5 awaiting-gate decision cards on screen. Click the floating Sparkles button at the bottom-right, or hit ⌘K. A slide-over opens.
-
-**Verbal:**
-
-> Notice the chip suggestions at the top of the panel. They are not static. Because this run is awaiting gate, the first chip reads `What do you recommend for these cards?`. If I had opened the assistant from the dashboard, the chip would instead read `N runs awaiting gate, what should I clear first?` with N counted from the actual portfolio.
-
-**Action:** Click the recommendation chip, or type `what do you recommend`. The reply appears.
-
-**Verbal (point to the reply text):**
-
-> The reply quotes this run's actual run id. Each of the 5 awaiting-gate decisions is listed verbatim with its `bundle_refs` chips, the same chips you saw in the cards. The cost so far is summed from the real ledger entries for this run. PHI-high count is from the same source. Nothing here is a template; the assistant read the run state and the run-scoped ledger entries and composed the reply from those.
-
-**Action:** Switch to Tab A's dashboard. Open the assistant again. Type `summarize the portfolio`.
-
-**Verbal:**
-
-> Now the same assistant is reading a different shape: total runs, by_status breakdown, total cost across the portfolio, and citation density across the ledger. Same component, different context, different data source.
-
-**Talking point:**
-
-> This is grounded in real data, not pre-canned. The function that gathers context for the demo is `gatherContext()`. In production, that same snapshot is the system prompt sent to the orchestrator's chat agent; the LLM composes the reply. In v0.7 the demo is deterministic, so the composer is local. The contract is identical.
-
-> v0.7 ships the deterministic stand-in. Live LLM integration is not promised in this release.
-
----
-
-## Close — three sentences
-
-> One: governance is the differentiator, not codegen quality. Two: every
-> agent decision lands on the same audit substrate, regardless of
-> runtime. Three: rules are versioned PRs with committee review, not
-> tribal knowledge.
-
-Ledger feed is the single source of truth. Everything else is a view of it.
-
----
-
-## Q&A defenses
-
-**"What if the engineer bypasses the hooks?"**
-> Hooks are a client-side fast-path. Server-side review-scan stage in the
-> orchestrator is the authoritative gate. If the engineer's hook config is
-> tampered, code still passes through review-scan before merge.
-
-**"Can Pipeline Doctor relax a PHI rule?"**
-> No. Hard-coded in the validator. Even if you mis-edit an envelope.yaml
-> to permit it, the validator refuses. The only path to relax a PHI rule
-> is a committee-reviewed PR.
-
-**"What about cross-runtime audit?"**
-> GitHub's enterprise audit log captures `actor:Copilot` events with
-> `agent_session_id`. We capture the same `agent_session_id` on every
-> ledger entry from Agent HQ runtimes. Cross-reference is a SQL join.
-
-**"What's the cost story?"**
-> Token spend (hard savings) + blast-radius cost-avoidance per ambiguity.
-> Categorize it into your CFO's existing IT spend buckets — don't import
-> our value-deck vocabulary onto their P&L.
-
-**"How much of this is real vs aspirational?"**
-> All four planes have working code (62 unit tests passing, 0 failing).
-> Decision Ledger writes are real. Pipeline Doctor envelope validator
-> is real. PHI hook block is real. The pieces deliberately not-built-yet
-> are documented in the openspec proposals so you can read what's coming.
-
----
-
-## Demo URLs cheat strip
-
-```
-ORCH:    https://<orchestrator-fqdn>
-UI:      https://<ledger-ui-fqdn>
-MCP:     https://<ledger-mcp-fqdn>
-COSMOS:  cosmos-agentic-<suffix>.documents.azure.com
-ACR:     acragenticsdlc<suffix>.azurecr.io
-RG:      rg-agentic-sdlc-v07-eastus2
-SUB:     b3a032cf-f672-4071-b7c8-2bcbe087bbd0
-GITHUB:  https://github.com/idanshimon/agentic-sdlc
+curl -s -o /dev/null -w "orchestrator %{http_code}\n" "$B/api/runs"
+curl -s -o /dev/null -w "ui           %{http_code}\n" "$U/decisions"
 ```
 
-URLs auto-fill on successful deploy via `deploy/scripts/01-*.sh` outputs.
-Cross-check `/tmp/agentic-v07-deploy.json` for live values.
+Both must return `200`. The orchestrator has no `/health` route — `/api/runs` is
+the liveness check that actually exercises Cosmos.
+
+**Known state as of 2026-08-17:** 50 prior runs, 311 decision rows.
+
+---
+
+## Act 1 — Submit a PRD (~1 min)
+
+`prd` is a **file upload**, not a string. A string returns HTTP 422.
+
+```bash
+cat > /tmp/demo_prd.md <<'EOF'
+# Patient Appointment Reminder Service
+
+## Goal
+Reduce no-show rates by reminding patients ahead of scheduled appointments.
+
+## Requirements
+- Send an SMS reminder 24 hours before each appointment.
+- Log delivery status (sent, failed, opted-out) for operational reporting.
+- Expose a REST endpoint to schedule and cancel reminders.
+- Reminder content must not include diagnosis or treatment details.
+- Retain delivery logs for operational auditing.
+EOF
+
+curl -s -X POST "$B/api/run" \
+  -F "prd=@/tmp/demo_prd.md;type=text/markdown" \
+  -F "team_id=team-cardiology" \
+  -F "mode=manual"
+```
+
+**Observed:** run_id returned in **0.8 s**.
+
+> Say: "That PRD is deliberately ordinary. Nobody wrote HIPAA in it. Watch what
+> the system notices anyway."
+
+---
+
+## Act 2 — The assessor finds what the PRD left ambiguous (~30 s)
+
+Poll `GET $B/api/runs/$R` until `status` is `awaiting_gate`.
+
+**Observed:** `running → assessor → awaiting_gate` at the resolver in ~20 s,
+**2,071 tokens, $0.0258**, and `contains_synthetic_output: false` — real model
+output, not a stub.
+
+Six cards, five gating:
+
+| Class | Title |
+|---|---|
+| `phi-classification` | PHI Classification of Delivery Logs |
+| `data-retention` | Delivery Log Retention Period |
+| `auth-policy` | Opt-Out Handling Policy |
+| `sla-binding` | SLA for SMS Delivery Attempt |
+| `identifier-format` | Identifier Format for Patients |
+| `naming-convention` | REST Endpoint Naming Convention (auto-deferred) |
+
+Open the PHI card. It carries:
+
+- `detail` — "It is unclear whether delivery logs contain PHI and must be handled per HIPAA §164.502."
+- `prd_quote` — "Retain delivery logs for operational auditing."
+- two options, each with `resolution`, `rationale`, `downstream_impact`, `recommended`
+- `blast_radius_cost_usd: 350.00` vs `re_run_cost_usd: 0.0258`
+- **`is_hard_gated: true`**
+
+> Say: "Three hundred and fifty dollars to get this wrong downstream. Two and a
+> half cents to re-run it now. That ratio is the whole argument."
+
+> Say: "This card is hard-gated. Not because a human flagged it — because
+> `phi-classification` is an invariant class. Autopilot cannot self-approve it."
+
+---
+
+## Act 3 — A human decides, and the record remembers why (~2 min)
+
+```bash
+curl -s -X POST "$B/api/runs/$R/approve" -H 'Content-Type: application/json' -d '{
+  "card_id":"<phi card id>",
+  "decision_kind":"accept",
+  "option_index":0,
+  "actor":"<your.name@example.org>",
+  "confidence_source":"human",
+  "approval_path":"individual"
+}'
+```
+
+`decision_kind` must be one of `accept` | `swap` | `reject` | `auto-deferred`.
+
+Resolve all six, then close the gate:
+
+```bash
+curl -s -X POST "$B/api/runs/$R/finalize" -H 'Content-Type: application/json' \
+  -d '{"actor":"<your.name@example.org>","expected_gate_version":1}'
+```
+
+**Observed:** `gate_closed: true`, `decisions_count: 6`, `next_stage: architect`.
+
+Now show the audit record:
+
+```bash
+curl -s "$B/api/compliance/decisions?team_id=team-cardiology&run_id=$R"
+```
+
+Each row carries the decision, the **`rejected_options` with their rationale**,
+the actor and `actor_kind`, and a `gate_reason` that discriminates correctly:
+
+- `phi-classification` → `invariant_class`
+- `auth-policy` → `invariant_class`
+- `data-retention`, `sla-binding`, `identifier-format` → `autonomy_tier`
+
+> Say: "Six months from now, 'why did we pick MRN over phone number?' is
+> answerable from the record — including the option we rejected and why."
+
+---
+
+## Act 4 — The pipeline builds, then blocks itself (~3 min)
+
+After the gate closes the run proceeds unattended. It pauses once more at
+**Gate 2 (Design Review)** — close it the same way with the current
+`expected_gate_version` (read it from `pending_gate.version`; it was `3`).
+
+**Observed stage progression, with real spend at each step:**
+
+| Stage | Event | Cumulative |
+|---|---|---|
+| ingest | Spec-package built (449 chars) | — |
+| assessor | 6 cards (5 gating, 1 auto-deferred) | 2,071 tok / $0.0258 |
+| resolver | Gate open — awaiting human decisions | — |
+| architect | Architecture drafted | 2,920 tok / $0.0364 |
+| design_review | Gate 2 — human review | — |
+| test_plan | Test plan ready | 5,092 tok / $0.0384 |
+| codegen | **Code generated: app=12,950 chars, tests=13,076 chars** | 17,994 tok / $0.1663 |
+| review_scan | **Policy gate FAILED — 3 blockers: `security/v0.1.0/PHI-001`** | — |
+
+Final status: **`failed` at codegen**, `contains_synthetic_output: false`.
+
+> Say: "It wrote thirteen thousand characters of working application code and
+> thirteen thousand of tests. Then its own review scan refused to let it
+> through, and told you exactly which rule: `security/v0.1.0/PHI-001`."
+
+> Say: "This is the demo. Not that the AI wrote code — everyone's seen that.
+> That the AI could not ship code that violated a standard, and the block is
+> attributable to a versioned, committee-owned rule."
+
+**Do not describe this as a bug or apologise for the red status.** It is the
+enforcement surface doing its job.
+
+---
+
+## Act 5 — Artifact integrity (~1 min)
+
+```bash
+curl -s "$B/api/runs/$R" | python3 -c "import json,sys; d=json.load(sys.stdin); \
+print(d['input_sha256']); print(json.dumps(d['reviewed_artifact_manifest'],indent=1))"
+```
+
+**Observed:** input `sha256 b0502f40…`, plus a per-artifact manifest —
+`decisions.md`, `docs/architecture.md`, `docs/test-plan.md`, `src/main.py`, each
+with its own SHA256.
+
+> Say: "The reviewer signed off on exactly these bytes. If any artifact changes
+> after review, the hash no longer matches and the approval no longer applies."
+
+---
+
+## Act 6 — The supply-chain gate (optional, ~2 min)
+
+Open the latest `supply-chain-scan` run on PR #11. It is **red**, on purpose.
+
+```
+[security/v0.2.0/SUPPLY-001] scanned SBOM — 102 finding(s): 33 high, 46 medium, 23 low
+[security/v0.2.0/SUPPLY-001] BLOCKED — 33 finding(s) at or above 'high'
+```
+
+The honest story, which is stronger than a green check:
+
+1. This gate was **silently dead for 22 weeks.** `anchore/scan-action@v3` pins
+   grype v0.74.4, whose embedded DB listing had expired. grype aborted with
+   `db could not be loaded: the vulnerability database was built 22 weeks ago`,
+   wrote no SARIF, and the action still emitted "Failed minimum severity level" —
+   an infrastructure failure indistinguishable from a real CVE block.
+2. SUPPLY-001 was therefore **not being enforced**. The gate was producing the
+   paperwork of assurance without the substance.
+3. Our own audit found it, and the fix is in the record with the evidence
+   retained as a build artifact.
+
+> Say: "We are showing you a control that failed, how we detected it, and what
+> we changed. A governance system nobody has ever caught failing is a system
+> nobody has really tested."
+
+The 33 findings are dispositioned via a standards-change proposal — the
+enforcer's own message says so explicitly: *"If a finding is a false positive,
+it must be dispositioned in the bundle via a standards-change proposal — not
+silenced in this workflow."*
+
+---
+
+## Questions you should expect
+
+**"Is the AI making these decisions or is a human?"**
+Both, and the record distinguishes them. `actor_kind` is `human` or `agent`, and
+`gate_reason` says why a human was required — `invariant_class` means the class
+is never self-approvable; `autonomy_tier` means the agent had not yet earned
+autonomy for that class on that team.
+
+**"What stops someone approving everything blindly?"**
+Nothing stops it, and that is deliberate — the system records who did it, when,
+and what they rejected. Governance is accountability, not obstruction.
+
+**"Does this work outside healthcare?"**
+Yes. `phi-classification` is one ambiguity class in one bundle. The invariant
+mechanism is domain-neutral; the bundle contents are not.
+
+**"Is any of this mocked?"**
+No. `contains_synthetic_output` is `false` on this run, and the delivery stage
+refuses to open a PR on any run where it is `true`. That flag exists precisely so
+this question has a checkable answer.
+
+---
+
+## Known rough edges (say these before someone finds them)
+
+- **Cards report `resolved: false` after a successful approval.** All six
+  approvals returned HTTP 200 and wrote six ledger decisions, but the card flag
+  does not flip. Decision state and card state are tracked separately. Cosmetic
+  in the API; verify the UI before relying on it on screen.
+- **The `GateDecision.actor` field defaults to a customer-named value.** Always
+  pass `actor` explicitly. Do not let the default appear on screen.
+- **`accuracy_score` is not surfaced** by the compliance API. Do not promise a
+  retrospective accuracy metric.
+- **Delivery cannot complete** on this deploy: `DELIVER_GH_TOKEN` and
+  `DELIVER_TARGET_REPO` are unset, so no real PR is opened. The run ends at
+  review_scan. Do not promise a merged PR.
+
+---
+
+## If the live run misbehaves
+
+Fall back to an existing completed run rather than debugging on stage. Fifty runs
+are already in the system. Narrate the same story from the record — but say
+plainly that you are showing a previous run, never call it live telemetry.

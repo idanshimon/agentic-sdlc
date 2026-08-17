@@ -245,7 +245,7 @@ class GateDecision(BaseModel):
     resolution_text: str = ""
     option_index: Optional[int] = None
     gate: Optional[str] = None
-    actor: str = "demo-user@hca"
+    actor: str = "demo-user@example.org"
     confidence_source: Literal["human", "autopilot"] = "human"
     # Tier-2 governance (hard-gate): how this decision reached the server.
     # "individual" = operator explicitly decided this one card.
