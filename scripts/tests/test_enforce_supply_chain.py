@@ -9,6 +9,7 @@ different provenance and legitimately disagree.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,7 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from enforce_supply_chain import _severity_of, main  # noqa: E402
+from enforce_supply_chain import _DESC_SEVERITY, _severity_of, main  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[1] / "enforce_supply_chain.py"
 
@@ -177,3 +178,63 @@ def test_citation_format_matches_agents_md(tmp_path):
     doc = _sarif([_rule("R", "high", "8.0")], [_result("R", "error", "m")])
     proc = _run(_write(tmp_path, doc))
     assert "[security/v0.2.0/SUPPLY-001]" in proc.stdout
+
+
+# --- real-artifact guard -------------------------------------------------
+#
+# Synthetic fixtures alone once let a stale copy of this script pass all
+# tests: the edit silently failed to land on disk, pytest imported the OLD
+# module, and the hand-written cases happened to exercise paths that passed
+# either way. CI then reported an unchanged 36-finding block while the suite
+# was green. These tests run against a trimmed slice of an ACTUAL grype
+# v0.110.0 SARIF pulled from a real CI run, so they fail loudly if the
+# severity precedence regresses.
+
+REAL_SARIF = Path(__file__).parent / "fixtures" / "grype_real_excerpt.sarif"
+
+
+def test_real_grype_artifact_severities_match_grypes_own_words():
+    """Every result must be classified as the word grype itself printed."""
+    doc = json.loads(REAL_SARIF.read_text())
+    run = doc["runs"][0]
+    rules = {r["id"]: r for r in run["tool"]["driver"]["rules"]}
+
+    seen = []
+    for result in run["results"]:
+        text = result["message"]["text"]
+        stated = _DESC_SEVERITY.search(text).group(1).lower()
+        assert _severity_of(result, rules) == stated, (
+            f"{result['ruleId']}: gate said "
+            f"{_severity_of(result, rules)!r} but grype's own message says "
+            f"{stated!r} — the citation would contradict the evidence"
+        )
+        seen.append(stated)
+
+    # Guard the guard: the fixture must actually contain the disagreement
+    # case (a medium advisory carrying a high CVSS), or this proves nothing.
+    assert "medium" in seen and "high" in seen
+
+
+def test_real_grype_artifact_blocks_only_the_true_highs():
+    """CVSS-first mapping blocked 4/4 here; grype's own labels block 2/4."""
+    proc = _run(REAL_SARIF)
+    assert proc.returncode == 1, proc.stdout
+    assert "2 finding(s) at or above 'high'" in proc.stdout
+    # The two medium aiohttp advisories must not appear as blockers.
+    assert "GHSA-27mf-ghqm-j3j8" not in proc.stdout
+    assert "GHSA-m5qp-6w8w-w647" not in proc.stdout
+
+
+def test_no_blocking_line_contradicts_its_own_message(tmp_path):
+    """No printed line may read '[HIGH] ... A medium vulnerability'."""
+    proc = _run(REAL_SARIF)
+    for line in proc.stdout.splitlines():
+        match = re.match(r"\s*\[\s*(\w+)\]", line)
+        if not match:
+            continue
+        stated = _DESC_SEVERITY.search(line)
+        if stated:
+            assert match.group(1).lower() == stated.group(1).lower(), (
+                f"citation/evidence mismatch on: {line.strip()}"
+            )
+
