@@ -345,9 +345,9 @@ export default function LineageV2Page() {
                     </button>
                   </div>
                   <div className="mb-2.5 flex flex-wrap gap-1.5">
-                    {panel.isRoot && <span className="rounded-full bg-[var(--success)]/15 px-2 py-0.5 text-[10px] text-[var(--success)]">human precedent</span>}
-                    {panel.flagged && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-2 py-0.5 text-[10px] text-[var(--danger)]"><Flag className="h-2.5 w-2.5" /> flagged</span>}
-                    {panel.phiHigh && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-2 py-0.5 text-[10px] text-[var(--danger)]"><ShieldAlert className="h-2.5 w-2.5" /> PHI high</span>}
+                    {panel.isRoot && <span className="rounded-full bg-[color-mix(in_srgb,var(--success)_var(--tint),transparent)] px-2 py-0.5 text-[10px] text-[var(--success)]">human precedent</span>}
+                    {panel.flagged && <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] px-2 py-0.5 text-[10px] text-[var(--danger)]"><Flag className="h-2.5 w-2.5" /> flagged</span>}
+                    {panel.phiHigh && <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] px-2 py-0.5 text-[10px] text-[var(--danger)]"><ShieldAlert className="h-2.5 w-2.5" /> PHI high</span>}
                   </div>
                   <p className="mb-3 text-[15px] font-medium leading-snug text-[var(--text)]">{panel.full || panel.label}</p>
                   <div className="mb-4 flex flex-wrap gap-1.5">

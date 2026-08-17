@@ -63,6 +63,27 @@
      button.tsx, sidebar.tsx, assistant-panel.tsx and teaching-signal-bar.tsx. */
   --on-primary: #001018;
 
+  /* Tint strength for accent-on-surface fills (diff rows, badge pills, callout
+     backgrounds). On a DARK surface a luminous accent at 10-15% alpha reads
+     clearly. On a LIGHT surface the accents are darkened (see .light) and the
+     same 10% alpha washes out to near-invisible — highlighted code lines were
+     effectively unreadable in light theme. Themes override this so call sites
+     can say `bg-[color-mix(in_srgb,var(--success)_var(--tint-strong),transparent)]`
+     once and get the right weight in both. */
+  --tint-weak: 8%;
+  --tint: 12%;
+  --tint-strong: 16%;
+
+  /* Syntax ramp for the artifact/code viewer. Kept as tokens rather than
+     Tailwind `text-blue-500 dark:text-blue-300` pairs: the mid-tone Tailwind
+     stops fail contrast on white, and a `dark:` variant does not fire here
+     because this app themes via a `.light` class, not `dark:`. */
+  --code-keyword: #C4B5FD;
+  --code-string: #86EFAC;
+  --code-comment: var(--text-tertiary);
+  --code-heading: #93C5FD;
+  --code-marker: #6EE7B7;
+
   /* Plane palette */
   --plane-standards: #A78BFA;
   --plane-pipeline: #0EA5E9;
@@ -115,6 +136,21 @@
      itself is dark. */
   --on-primary: #FFFFFF;
 
+  /* Darkened accents need MORE alpha to register as a fill on white, not less.
+     At the dark-theme 8-12% these tints were effectively invisible — which is
+     what made highlighted lines in code snippets unreadable in light theme. */
+  --tint-weak: 12%;
+  --tint: 18%;
+  --tint-strong: 24%;
+
+  /* Syntax ramp shifted down the L channel to clear 4.5:1 on #FFF. The
+     dark-theme values (#C4B5FD, #86EFAC, #93C5FD) sit around 1.6-2.2:1 here. */
+  --code-keyword: #6D28D9;
+  --code-string: #047857;
+  --code-comment: var(--text-tertiary);
+  --code-heading: #1D4ED8;
+  --code-marker: #047857;
+
   --plane-standards: #6D28D9;
   --plane-pipeline: #0369A1;
   --plane-ledger: #047857;
@@ -163,6 +199,27 @@ body {
 .mono {
   font-family: var(--font-mono), ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
   font-size: 0.8125rem;
+}
+
+/* Diff / highlighted code rows.
+   Previously written inline as `bg-[var(--success)]/10`, which bakes a
+   dark-theme alpha into the markup. Light theme darkens the accents, so 10%
+   of an already-dark green on white is almost no fill at all — the highlighted
+   lines in a code snippet were invisible. These classes read the theme-aware
+   --tint tokens instead, and add a left rail so the row is still legible for
+   red/green colour-blind readers and at low contrast ratios. */
+.diff-added {
+  background: color-mix(in srgb, var(--success) var(--tint), transparent);
+  box-shadow: inset 2px 0 0 0 var(--success);
+}
+.diff-removed {
+  background: color-mix(in srgb, var(--danger) var(--tint), transparent);
+  box-shadow: inset 2px 0 0 0 var(--danger);
+}
+/* A line called out for review/attention (not an add/remove). */
+.code-highlight {
+  background: color-mix(in srgb, var(--warning) var(--tint), transparent);
+  box-shadow: inset 2px 0 0 0 var(--warning);
 }
 
 /* Subtle scrollbars to match the calm aesthetic. */

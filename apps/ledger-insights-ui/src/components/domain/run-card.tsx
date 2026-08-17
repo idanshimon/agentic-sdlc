@@ -99,7 +99,7 @@ export function RunCard({ run }: { run: RunState }) {
             tell a working guardrail from a broken pipeline, and will assume
             the worse of the two. */}
         {run.status === "failed" && run.failure_kind === "policy_block" && (
-          <div className="mt-2 rounded-md border border-[var(--warning)]/35 bg-[var(--warning)]/10 px-2.5 py-1.5">
+          <div className="mt-2 rounded-md border border-[var(--warning)]/35 bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] px-2.5 py-1.5">
             <div className="text-[11px] font-medium text-[var(--warning)]">
               Blocked by policy
               {run.blocker_count ? ` — ${run.blocker_count} blocker${run.blocker_count === 1 ? "" : "s"}` : ""}
@@ -119,7 +119,7 @@ export function RunCard({ run }: { run: RunState }) {
           </div>
         )}
         {run.status === "failed" && run.failure_kind === "technical" && run.failure_reason && (
-          <div className="mt-2 rounded-md border border-[var(--danger)]/35 bg-[var(--danger)]/10 px-2.5 py-1.5">
+          <div className="mt-2 rounded-md border border-[var(--danger)]/35 bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] px-2.5 py-1.5">
             <div className="text-[11px] font-medium text-[var(--danger)]">Technical failure</div>
             <div className="mt-0.5 truncate text-[11px] text-[var(--text-secondary)]">
               {run.failure_reason}

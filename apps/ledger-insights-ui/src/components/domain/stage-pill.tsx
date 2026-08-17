@@ -51,10 +51,10 @@ export function StagePill({
     ?? fallbackMeta(String(stage));
   const statusStyles: Record<string, string> = {
     idle: "bg-[var(--overlay)] text-[var(--text-tertiary)] border-[var(--border-default)]",
-    running: "bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30",
-    completed: "bg-[var(--success)]/15 text-[var(--success)] border-[var(--success)]/30",
-    failed: "bg-[var(--danger)]/15 text-[var(--danger)] border-[var(--danger)]/30",
-    awaiting_gate: "bg-[var(--warning)]/15 text-[var(--warning)] border-[var(--warning)]/30",
+    running: "bg-[color-mix(in_srgb,var(--info)_var(--tint),transparent)] text-[var(--info)] border-[var(--info)]/30",
+    completed: "bg-[color-mix(in_srgb,var(--success)_var(--tint),transparent)] text-[var(--success)] border-[var(--success)]/30",
+    failed: "bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] text-[var(--danger)] border-[var(--danger)]/30",
+    awaiting_gate: "bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] text-[var(--warning)] border-[var(--warning)]/30",
   };
   return (
     <span

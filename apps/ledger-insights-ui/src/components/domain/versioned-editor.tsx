@@ -566,8 +566,8 @@ function DiffView({
                 key={i}
                 className={cn(
                   "px-3 py-0.5 flex gap-3",
-                  line.type === "added" && "bg-[var(--success)]/10",
-                  line.type === "removed" && "bg-[var(--danger)]/10",
+                  line.type === "added" && "diff-added",
+                  line.type === "removed" && "diff-removed",
                 )}
               >
                 <span className="text-[var(--text-tertiary)] tabular w-10 shrink-0 text-right select-none">

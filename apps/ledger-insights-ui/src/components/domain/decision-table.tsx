@@ -503,9 +503,9 @@ function LineageCell({ lineage }: { lineage?: LineageInfo }) {
   const badge = lineage ? lineageBadge(lineage) : null;
   if (!badge) return <span className="text-[var(--text-tertiary)] text-[11px]">—</span>;
   const toneClass: Record<string, string> = {
-    success: "bg-[var(--success)]/15 text-[var(--success)]",
-    info: "bg-[var(--secondary)]/15 text-[var(--secondary)]",
-    warning: "bg-[var(--warning)]/15 text-[var(--warning)]",
+    success: "bg-[color-mix(in_srgb,var(--success)_var(--tint),transparent)] text-[var(--success)]",
+    info: "bg-[color-mix(in_srgb,var(--secondary)_var(--tint),transparent)] text-[var(--secondary)]",
+    warning: "bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] text-[var(--warning)]",
     secondary: "bg-[var(--overlay)] text-[var(--text-secondary)]",
   };
   return (
@@ -614,7 +614,7 @@ function DecisionRow({
             {TKindIcon && <TKindIcon className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />}
             {teachingSignals.length > 0 && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--warning)]/15 text-[var(--warning)] tabular"
+                className="text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] text-[var(--warning)] tabular"
                 title={`${teachingSignals.length} teaching signal${teachingSignals.length === 1 ? "" : "s"} reference this entry`}
               >
                 {teachingSignals.length}

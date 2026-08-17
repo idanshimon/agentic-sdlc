@@ -74,7 +74,7 @@ function LineageNode({ data }: NodeProps) {
         <span className="flex items-center gap-1 shrink-0">
           {d.phiHigh && <ShieldAlert className="h-3.5 w-3.5" style={{ color: "var(--danger)" }} aria-label="PHI high" />}
           {d.flagged && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-1.5 py-0.5 text-[9px] font-medium text-[var(--danger)]">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--danger)]">
               <Flag className="h-2.5 w-2.5" /> flagged
             </span>
           )}
@@ -144,12 +144,12 @@ function LaneHeaderNode({ data }: NodeProps) {
           Applied <b className="text-[var(--text)]">{d.applied}×</b>
         </span>
         {d.endorsed > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--success)]/15 px-2 py-0.5 text-[10px] text-[var(--success)]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--success)_var(--tint),transparent)] px-2 py-0.5 text-[10px] text-[var(--success)]">
             <ThumbsUp className="h-2.5 w-2.5" /> {d.endorsed} endorsed
           </span>
         )}
         {d.blocked > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger)]/15 px-2 py-0.5 text-[10px] text-[var(--danger)]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] px-2 py-0.5 text-[10px] text-[var(--danger)]">
             <Flag className="h-2.5 w-2.5" /> {d.blocked} blocked
           </span>
         )}

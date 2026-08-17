@@ -76,7 +76,7 @@ function BundleCard({ dept, version, icon: Icon, label, desc }: typeof bundles[n
 
       {editing ? (
         <div className="space-y-2">
-          <div className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1.5 p-2 rounded bg-[var(--warning)]/10 border border-[var(--warning)]/20">
+          <div className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1.5 p-2 rounded bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] border border-[var(--warning)]/20">
             <Lock className="h-3 w-3 text-[var(--warning)]" />
             Bundles are governed: saving opens a PR for committee review. The
             standard changes only after the PR is merged — never live.

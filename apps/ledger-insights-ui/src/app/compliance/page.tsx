@@ -141,8 +141,8 @@ function CompletenessBanner({
       className={cn(
         "flex items-center gap-3 rounded-lg border px-4 py-3",
         clean
-          ? "border-[var(--success)]/30 bg-[var(--success)]/5"
-          : "border-[var(--warning)]/30 bg-[var(--warning)]/5",
+          ? "border-[var(--success)]/30 bg-[color-mix(in_srgb,var(--success)_var(--tint-weak),transparent)]"
+          : "border-[var(--warning)]/30 bg-[color-mix(in_srgb,var(--warning)_var(--tint-weak),transparent)]",
       )}
     >
       {clean ? (
@@ -262,8 +262,8 @@ function Missing() {
 }
 function PhiBadge({ cls }: { cls: string }) {
   const map: Record<string, string> = {
-    high: "text-[var(--danger)] border-[var(--danger)]/40 bg-[var(--danger)]/10",
-    low: "text-[var(--warning)] border-[var(--warning)]/40 bg-[var(--warning)]/10",
+    high: "text-[var(--danger)] border-[var(--danger)]/40 bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)]",
+    low: "text-[var(--warning)] border-[var(--warning)]/40 bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)]",
     none: "text-[var(--text-tertiary)] border-[var(--border-default)]",
   };
   return (
