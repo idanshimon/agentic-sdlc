@@ -4,7 +4,7 @@
  * Same buildRunFlow() output the react-flow view uses, mapped to Cytoscape
  * elements with a dagre left→right layout: a stage spine (blue stage nodes in
  * canonical order) with decision cards hanging under each stage. Distinct
- * silhouettes for stage vs human vs agent decision, matching lineage-v2.
+ * silhouettes for stage vs human vs agent decision, matching lineage.
  *
  * DOM-free and pure.
  */

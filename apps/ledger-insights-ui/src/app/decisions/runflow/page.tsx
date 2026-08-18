@@ -1,6 +1,6 @@
 "use client";
 /**
- * Run Flow — per-run stage timeline, Cytoscape rendering (matches lineage-v2).
+ * Run Flow — per-run stage timeline, Cytoscape rendering (matches lineage).
  * Pick a run; a blue stage spine lays out left→right with decision cards under
  * each stage. Click a decision → quick-view modal. Click background → reset.
  * Nodes locked (audit view). The /decisions table is never touched.
@@ -16,6 +16,7 @@ import { buildRunFlow } from "@/lib/graph/build-runflow";
 import { buildRunOptions, filterRunOptions } from "@/lib/run-options";
 import { runFlowToCyElements } from "@/lib/graph/cy-runflow";
 import { useCanvasTheme, type CanvasTheme } from "@/lib/graph/canvas-theme";
+import { GraphLegend } from "@/components/domain/graph-legend";
 
 if (typeof cytoscape === "function" && !(cytoscape as unknown as { _dagre?: boolean })._dagre) {
   cytoscape.use(dagre);
@@ -181,6 +182,14 @@ export default function RunFlowPage() {
       padding: 40,
     } as cytoscape.LayoutOptions).run();
 
+    // dagre's `fit` runs before positions settle; re-fit after and cap zoom so a
+    // single-decision run doesn't render one enormous node floating off-centre.
+    cy.fit(undefined, 48);
+    if (cy.zoom() > 1.15) {
+      cy.zoom({ level: 1.15, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+      cy.center();
+    }
+
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
       cy.animate({ fit: { eles: cy.elements(), padding: 40 }, duration: 250 });
@@ -266,7 +275,7 @@ export default function RunFlowPage() {
         )}
       </div>
 
-      <div className="relative h-[70vh] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg)]">
+      <div className="relative h-[70vh] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg)]">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>
         ) : !runId || elements.length === 0 ? (
@@ -276,11 +285,11 @@ export default function RunFlowPage() {
         ) : (
           <>
             <div ref={containerRef} className="h-full w-full" />
-            <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Stage / agent</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--success)]" /> Human decision</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--danger)]" /> Flagged</span>
-            </div>
+            <GraphLegend
+              nodeKinds={["stage", "decision", "precedent", "flagged"]}
+              edgeKinds={["of_class", "in_run"]}
+              sizeHint="Spine = pipeline stage order. Decisions with no stage collect under 'unstaged'."
+            />
             {panel && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-6" onClick={closeModal}>
                 <div className="w-[440px] max-w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface)] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>

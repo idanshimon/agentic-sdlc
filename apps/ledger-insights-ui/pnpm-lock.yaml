@@ -63,9 +63,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.95.1
         version: 5.101.0(react@19.2.4)
-      '@xyflow/react':
-        specifier: ^12.11.2
-        version: 12.11.2(@types/react-dom@19.2.3(@types/react@19.2.16))(@types/react@19.2.16)(immer@11.1.8)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1358,9 +1355,6 @@ packages:
   '@types/d3-color@3.1.3':
     resolution: {integrity: sha1-NoyWGhjech2oIA6AvzlD+1MTavI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-color/-/d3-color-3.1.3.tgz}
 
-  '@types/d3-drag@3.0.7':
-    resolution: {integrity: sha1-sTq6iyRCtAaMmp5tHYL4vOp3/AI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-drag/-/d3-drag-3.0.7.tgz}
-
   '@types/d3-ease@3.0.2':
     resolution: {integrity: sha1-4o2xv7+mFwdvd3DdHZpI6qO2xRs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-ease/-/d3-ease-3.0.2.tgz}
 
@@ -1373,9 +1367,6 @@ packages:
   '@types/d3-scale@4.0.9':
     resolution: {integrity: sha1-V6L3ByQub+Hega17/Myq9gYXmvs=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-scale/-/d3-scale-4.0.9.tgz}
 
-  '@types/d3-selection@3.0.11':
-    resolution: {integrity: sha1-vXpF/AqMMWemMWdeYbwsorBY1KM=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-selection/-/d3-selection-3.0.11.tgz}
-
   '@types/d3-shape@3.1.8':
     resolution: {integrity: sha1-0VFsxQh1O+BoUs0GdY47tUoisOM=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-shape/-/d3-shape-3.1.8.tgz}
 
@@ -1384,12 +1375,6 @@ packages:
 
   '@types/d3-timer@3.0.2':
     resolution: {integrity: sha1-cLvad9wjqnJ0E+IuIUr6Pw6FL3A=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-timer/-/d3-timer-3.0.2.tgz}
-
-  '@types/d3-transition@3.0.9':
-    resolution: {integrity: sha1-ETa8V+nds8OQ3MybX/O30rjZRwY=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-transition/-/d3-transition-3.0.9.tgz}
-
-  '@types/d3-zoom@3.0.8':
-    resolution: {integrity: sha1-3Msy0cVrHhxuDxGA2ZSJbwOLxAs=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-zoom/-/d3-zoom-3.0.8.tgz}
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha1-M0MRlx06BxIefrkbaEpgXn7qnL0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/deep-eql/-/deep-eql-4.0.2.tgz}
@@ -1634,22 +1619,6 @@ packages:
   '@vitest/utils@4.1.8':
     resolution: {integrity: sha1-CZ6lJVzsCHNUEM9wftq6LBWMWtk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/utils/-/utils-4.1.8.tgz}
 
-  '@xyflow/react@12.11.2':
-    resolution: {integrity: sha1-HEksftZUSjP+yAFIYunmYqwgCE4=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@xyflow/react/-/react-12.11.2.tgz}
-    peerDependencies:
-      '@types/react': '>=17'
-      '@types/react-dom': '>=17'
-      react: '>=17'
-      react-dom: '>=17'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      '@types/react-dom':
-        optional: true
-
-  '@xyflow/system@0.0.79':
-    resolution: {integrity: sha1-NFmgs2V3b0pXnfVJYuQuIBVnwZI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@xyflow/system/-/system-0.0.79.tgz}
-
   acorn-jsx@5.3.2:
     resolution: {integrity: sha1-ftW7VZCLOy8bxVxq8WU7rafweTc=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/acorn-jsx/-/acorn-jsx-5.3.2.tgz}
     peerDependencies:
@@ -1797,9 +1766,6 @@ packages:
   class-variance-authority@0.7.1:
     resolution: {integrity: sha1-QAinmKDkVTp4GlesUXfJ+10EN4c=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/class-variance-authority/-/class-variance-authority-0.7.1.tgz}
 
-  classcat@5.0.5:
-    resolution: {integrity: sha1-jCCfNZqTrDAkBKEBYbUB66nAnHc=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/classcat/-/classcat-5.0.5.tgz}
-
   client-only@0.0.1:
     resolution: {integrity: sha1-OLul1APEGrFQv/ZKlchQE89zvKE=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/client-only/-/client-only-0.0.1.tgz}
 
@@ -1862,14 +1828,6 @@ packages:
     resolution: {integrity: sha1-OVsoM9+scVB/EqwvevI7+BneJOI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-color/-/d3-color-3.1.0.tgz}
     engines: {node: '>=12'}
 
-  d3-dispatch@3.0.1:
-    resolution: {integrity: sha1-X8dShOnCN1w2yDlBGgz1UMv8TV4=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-dispatch/-/d3-dispatch-3.0.1.tgz}
-    engines: {node: '>=12'}
-
-  d3-drag@3.0.0:
-    resolution: {integrity: sha1-mUqunNI8cZ9TteEOOgphCMaWB7o=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-drag/-/d3-drag-3.0.0.tgz}
-    engines: {node: '>=12'}
-
   d3-ease@3.0.1:
     resolution: {integrity: sha1-llisOKIUDVnTRhYPH2ww/aC9EvQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-ease/-/d3-ease-3.0.1.tgz}
     engines: {node: '>=12'}
@@ -1890,10 +1848,6 @@ packages:
     resolution: {integrity: sha1-grOOjo/3CAdk+Nzsd71L45Nok5Y=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-scale/-/d3-scale-4.0.2.tgz}
     engines: {node: '>=12'}
 
-  d3-selection@3.0.0:
-    resolution: {integrity: sha1-wlM4IH76csxbm9FFihpBkB8eGzE=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-selection/-/d3-selection-3.0.0.tgz}
-    engines: {node: '>=12'}
-
   d3-shape@3.2.0:
     resolution: {integrity: sha1-oag5y9m6RfKGdMadf4Vbz5HfxqU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-shape/-/d3-shape-3.2.0.tgz}
     engines: {node: '>=12'}
@@ -1908,16 +1862,6 @@ packages:
 
   d3-timer@3.0.1:
     resolution: {integrity: sha1-YoTSonCChbGrt+IB7aQ4CvNeY7A=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-timer/-/d3-timer-3.0.1.tgz}
-    engines: {node: '>=12'}
-
-  d3-transition@3.0.1:
-    resolution: {integrity: sha1-aGn93hRIhoB3/dWYkgDLYbKhZF8=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-transition/-/d3-transition-3.0.1.tgz}
-    engines: {node: '>=12'}
-    peerDependencies:
-      d3-selection: 2 - 3
-
-  d3-zoom@3.0.0:
-    resolution: {integrity: sha1-0T9BZccyF//qpUKVzWlps+eu6PM=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-zoom/-/d3-zoom-3.0.0.tgz}
     engines: {node: '>=12'}
 
   damerau-levenshtein@1.0.8:
@@ -3428,21 +3372,6 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha1-toDxcohdGLvr8hqDTqJeVaG781Y=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.4.3.tgz}
 
-  zustand@4.5.7:
-    resolution: {integrity: sha1-fWuyAmoUJBXdi+iJHXhw5tvmX1U=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zustand/-/zustand-4.5.7.tgz}
-    engines: {node: '>=12.7.0'}
-    peerDependencies:
-      '@types/react': '>=16.8'
-      immer: '>=9.0.6'
-      react: '>=16.8'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      immer:
-        optional: true
-      react:
-        optional: true
-
   zustand@5.0.14:
     resolution: {integrity: sha1-GCFsJPy5gM82iY+cV1IOZ7H3eFU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zustand/-/zustand-5.0.14.tgz}
     engines: {node: '>=12.20.0'}
@@ -4523,10 +4452,6 @@ snapshots:
 
   '@types/d3-color@3.1.3': {}
 
-  '@types/d3-drag@3.0.7':
-    dependencies:
-      '@types/d3-selection': 3.0.11
-
   '@types/d3-ease@3.0.2': {}
 
   '@types/d3-interpolate@3.0.4':
@@ -4539,8 +4464,6 @@ snapshots:
     dependencies:
       '@types/d3-time': 3.0.4
 
-  '@types/d3-selection@3.0.11': {}
-
   '@types/d3-shape@3.1.8':
     dependencies:
       '@types/d3-path': 3.1.1
@@ -4548,15 +4471,6 @@ snapshots:
   '@types/d3-time@3.0.4': {}
 
   '@types/d3-timer@3.0.2': {}
-
-  '@types/d3-transition@3.0.9':
-    dependencies:
-      '@types/d3-selection': 3.0.11
-
-  '@types/d3-zoom@3.0.8':
-    dependencies:
-      '@types/d3-interpolate': 3.0.4
-      '@types/d3-selection': 3.0.11
 
   '@types/deep-eql@4.0.2': {}
 
@@ -4796,31 +4710,6 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@xyflow/react@12.11.2(@types/react-dom@19.2.3(@types/react@19.2.16))(@types/react@19.2.16)(immer@11.1.8)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@xyflow/system': 0.0.79
-      classcat: 5.0.5
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-      zustand: 4.5.7(@types/react@19.2.16)(immer@11.1.8)(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.16
-      '@types/react-dom': 19.2.3(@types/react@19.2.16)
-    transitivePeerDependencies:
-      - immer
-
-  '@xyflow/system@0.0.79':
-    dependencies:
-      '@types/d3-drag': 3.0.7
-      '@types/d3-interpolate': 3.0.4
-      '@types/d3-selection': 3.0.11
-      '@types/d3-transition': 3.0.9
-      '@types/d3-zoom': 3.0.8
-      d3-drag: 3.0.0
-      d3-interpolate: 3.0.1
-      d3-selection: 3.0.0
-      d3-zoom: 3.0.0
-
   acorn-jsx@5.3.2(acorn@8.16.0):
     dependencies:
       acorn: 8.16.0
@@ -4996,8 +4885,6 @@ snapshots:
     dependencies:
       clsx: 2.1.1
 
-  classcat@5.0.5: {}
-
   client-only@0.0.1: {}
 
   clsx@2.1.1: {}
@@ -5058,13 +4945,6 @@ snapshots:
 
   d3-color@3.1.0: {}
 
-  d3-dispatch@3.0.1: {}
-
-  d3-drag@3.0.0:
-    dependencies:
-      d3-dispatch: 3.0.1
-      d3-selection: 3.0.0
-
   d3-ease@3.0.1: {}
 
   d3-format@3.1.2: {}
@@ -5083,8 +4963,6 @@ snapshots:
       d3-time: 3.1.0
       d3-time-format: 4.1.0
 
-  d3-selection@3.0.0: {}
-
   d3-shape@3.2.0:
     dependencies:
       d3-path: 3.1.0
@@ -5098,23 +4976,6 @@ snapshots:
       d3-array: 3.2.4
 
   d3-timer@3.0.1: {}
-
-  d3-transition@3.0.1(d3-selection@3.0.0):
-    dependencies:
-      d3-color: 3.1.0
-      d3-dispatch: 3.0.1
-      d3-ease: 3.0.1
-      d3-interpolate: 3.0.1
-      d3-selection: 3.0.0
-      d3-timer: 3.0.1
-
-  d3-zoom@3.0.0:
-    dependencies:
-      d3-dispatch: 3.0.1
-      d3-drag: 3.0.0
-      d3-interpolate: 3.0.1
-      d3-selection: 3.0.0
-      d3-transition: 3.0.1(d3-selection@3.0.0)
 
   damerau-levenshtein@1.0.8: {}
 
@@ -6830,14 +6691,6 @@ snapshots:
       zod: 4.4.3
 
   zod@4.4.3: {}
-
-  zustand@4.5.7(@types/react@19.2.16)(immer@11.1.8)(react@19.2.4):
-    dependencies:
-      use-sync-external-store: 1.6.0(react@19.2.4)
-    optionalDependencies:
-      '@types/react': 19.2.16
-      immer: 11.1.8
-      react: 19.2.4
 
   zustand@5.0.14(@types/react@19.2.16)(immer@11.1.8)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)):
     optionalDependencies:

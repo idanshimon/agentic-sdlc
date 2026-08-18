@@ -600,3 +600,18 @@ export function approveDemoRun(runId: string) {
     });
   }, at(t.deliver ?? 1200));
 }
+
+/* ───────────────────────── ledger fallback ───────────────────────── */
+
+/**
+ * Ledger entries for the decision-graph surfaces when the live ledger API is
+ * unreachable (no Cosmos credentials on a demo machine → 401).
+ *
+ * Without this, /decisions/{graph,lineage,runflow} render an empty canvas and
+ * the legend never mounts, because it is gated behind having graph data. These
+ * are the same real Phase-A pipeline rows the demo runs replay from — not
+ * synthetic filler.
+ */
+export function demoLedgerEntries() {
+  return VITALS_LEDGER as unknown as import("@/lib/types").LedgerEntry[];
+}

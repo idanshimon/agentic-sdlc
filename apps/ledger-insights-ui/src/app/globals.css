@@ -42,6 +42,10 @@
   --overlay: #1E2632;
   --border-default: #243042;
   --border-muted: #1B232E;
+  /* Load-bearing boundaries: floating panels, legends, cards over canvas.
+   * --border-default is ~1.4:1 on --surface, which reads as "no border" on a
+   * dark canvas. This is the tier for edges that must actually be seen. */
+  --border-strong: #4A5D78;
 
   /* Text */
   --text: #E6EDF3;
@@ -120,6 +124,7 @@
   --overlay: #F3F4F6;
   --border-default: #E5E7EB;
   --border-muted: #F3F4F6;
+  --border-strong: #9CA3AF;
   --text: #0B0F14;
   --text-secondary: #4B5563;
   --text-tertiary: #6B7280;

@@ -16,6 +16,7 @@ import { useCanvasTheme, type CanvasTheme } from "@/lib/graph/canvas-theme";
 import { buildGovernanceNetwork, type GraphEdgeKind } from "@/lib/graph/build-graph";
 import { applyMapFilters, defaultMapFilters } from "@/lib/graph/map-filters";
 import { mapToCyElements } from "@/lib/graph/cy-map";
+import { GraphLegend } from "@/components/domain/graph-legend";
 
 if (typeof cytoscape === "function" && !(cytoscape as unknown as { _fcose?: boolean })._fcose) {
   cytoscape.use(fcose);
@@ -154,6 +155,16 @@ export default function DecisionsMapPage() {
       padding: 40,
     } as cytoscape.LayoutOptions).run();
 
+    // fcose's own `fit` runs mid-layout, before the final node positions settle,
+    // which left the graph clustered to one side with nodes clipped at the
+    // container edge. Re-fit once the layout has stopped, and cap the zoom so a
+    // sparse graph (2-3 nodes) doesn't balloon to fill the canvas.
+    cy.fit(undefined, 48);
+    if (cy.zoom() > 1.15) {
+      cy.zoom({ level: 1.15, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+      cy.center();
+    }
+
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
       cy.animate({ fit: { eles: cy.elements(), padding: 40 }, duration: 250 });
@@ -255,7 +266,7 @@ export default function DecisionsMapPage() {
         </p>
       </div>
 
-      <div className="relative h-[70vh] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg)]">
+      <div className="relative h-[70vh] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg)]">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>
         ) : graph.nodes.length === 0 ? (
@@ -265,12 +276,11 @@ export default function DecisionsMapPage() {
         ) : (
           <>
             <div ref={containerRef} className="h-full w-full" />
-            <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rotate-45 border-2 border-[var(--warning)]" /> Rule hub</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Ambiguity class</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--success)]" /> Decision</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--danger)]" /> Flagged</span>
-            </div>
+            <GraphLegend
+              nodeKinds={["bundle", "class", "decision", "flagged", "teaching"]}
+              edgeKinds={["reuses", "teaches", "grounded_in", "same_slot", "in_run", "of_class"]}
+              sizeHint="Node size = how often that decision was reused."
+            />
             {panel && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-6" onClick={closeModal}>
                 <div className="w-[440px] max-w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface)] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>

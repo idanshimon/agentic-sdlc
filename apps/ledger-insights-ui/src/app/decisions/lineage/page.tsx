@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useCanvasTheme, type CanvasTheme } from "@/lib/graph/canvas-theme";
 import { buildPrecedentLineage } from "@/lib/graph/build-lineage";
 import { lineageToCyElements } from "@/lib/graph/cy-lineage";
+import { GraphLegend } from "@/components/domain/graph-legend";
 
 if (typeof cytoscape === "function" && !(cytoscape as unknown as { _dagre?: boolean })._dagre) {
   cytoscape.use(dagre);
@@ -311,7 +312,7 @@ export default function LineageV2Page() {
         description="Where the agent's answers came from. Each hub is a human ruling; the fan below it is every later decision the agent resolved the same way. Click any node to focus its learning loop — the precedent above it and the reuse below — and open the ledger record."
       />
 
-      <div className="relative h-[74vh] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg)]">
+      <div className="relative h-[74vh] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg)]">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>
         ) : empty ? (
@@ -319,12 +320,12 @@ export default function LineageV2Page() {
         ) : (
           <>
             <div ref={containerRef} className="h-full w-full" />
-            {/* legend */}
-            <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--success)]" /> Human precedent</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Agent decision</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--danger)]" /> Flagged</span>
-            </div>
+            {/* Legend generated from graph-grammar — cannot drift from canvas. */}
+            <GraphLegend
+              nodeKinds={["precedent", "decision", "flagged"]}
+              edgeKinds={["reuses", "teaches"]}
+              sizeHint="Hubs are human rulings; the fan below each is every later reuse."
+            />
             {/* quick-view modal — centered, dims graph behind it */}
             {panel && (
               <div

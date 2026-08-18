@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { orchestrator } from "@/lib/api/orchestrator";
 import { ledgerMcp } from "@/lib/api/ledger-mcp";
-import { isDemoMode, isDemoRun } from "@/lib/demo";
+import { isDemoMode, isDemoRun, demoLedgerEntries } from "@/lib/demo";
 
 export function useHealth() {
   return useQuery({
@@ -127,7 +127,22 @@ export function useDecisions(filter?: { team_id?: string; run_id?: string; limit
   return useQuery({
     queryKey: ["decisions", filter],
     queryFn: async () => {
-      const res = await ledgerMcp.query({ limit: 50, ...filter });
+      // Demo mode: the ledger API needs live Cosmos credentials, which a demo
+      // machine does not have — it answers 401 and every graph surface renders
+      // empty. The runs surfaces already fall back to fixtures; the ledger
+      // query did not, so /decisions/{graph,lineage,runflow} were blank
+      // wherever the backend was unreachable. Fall back to the same fixture
+      // the demo runs replay from, and only when the live call actually fails.
+      let res: Awaited<ReturnType<typeof ledgerMcp.query>>;
+      try {
+        res = await ledgerMcp.query({ limit: 50, ...filter });
+        if (isDemoMode() && (res.entries ?? []).length === 0) {
+          res = { ...res, entries: demoLedgerEntries() };
+        }
+      } catch (err) {
+        if (!isDemoMode()) throw err;
+        res = { entries: demoLedgerEntries() } as typeof res;
+      }
       // Live Cosmos rows store actor as flat actor_kind/actor_id and null out
       // decision/rationale/model_used/phi_class. Normalize once here so every
       // downstream consumer (cards, insights, lifecycle panel, lineage) sees a
