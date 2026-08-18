@@ -59,26 +59,93 @@ jobs:
       # fail-build is deliberately false: the action's own failure mode is
       # coarse, and the SARIF should reach the Security tab even on a failing
       # scan. The explicit gate below decides pass/fail.
+      #
+      # Pinned to @v7, NOT @v3. v3 pins grype v0.74.4, whose embedded
+      # vulnerability-DB listing is long dead: grype refuses to load a DB older
+      # than 5 days and aborts with "db could not be loaded: the vulnerability
+      # database was built 22 weeks ago". It then writes NO SARIF while the
+      # action still emits ##[warning]Failed minimum severity level — an
+      # infrastructure failure wearing a CVE-finding's clothes. A stale-DB abort
+      # means the scan never ran, so SUPPLY-001 was not actually enforced.
       - name: Scan SBOM for vulnerabilities
         id: grype
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v7
         with:
           sbom: sbom.spdx.json
           severity-cutoff: high
           fail-build: false
           output-format: sarif
+          cache-db: true
+
+      # Validate the SARIF before anything consumes it. `steps.grype.outputs.sarif`
+      # is a PATH, so it is non-empty even when the scan produced a truncated or
+      # empty file — the old `!= ''` guard could never catch that. The observed
+      # failure was "Invalid SARIF. JSON syntax error: Unexpected end of JSON
+      # input" followed by an opaque exit 2, which looks like a CVE block but is
+      # a broken artifact. A supply-chain gate that fails for a reason other than
+      # a CVE is exactly the "paperwork of assurance without the substance" this
+      # workflow exists to prevent, so say which it is.
+      - name: Validate SARIF artifact
+        id: sarif
+        if: always()
+        run: |
+          f="${{ steps.grype.outputs.sarif }}"
+          if [ -z "$f" ] || [ ! -s "$f" ]; then
+            echo "::error::grype produced no SARIF (path='$f'). Scan did not run to completion."
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f"; then
+            echo "::error::grype SARIF at '$f' is not valid JSON — truncated or malformed output."
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+
+      # Grype scanning an SBOM has no on-disk path per finding, so it writes
+      # `artifactLocation.uri: ""` on every result. That is well-formed SARIF —
+      # it parses, and the gate below reads it correctly — but Code Scanning
+      # rejects it with `locationFromSarifResult: expected artifact location`
+      # and fails the whole upload (JOB_STATUS_CONFIGURATION_ERROR). The result
+      # was a gate that blocked on 33 real high findings while none of that
+      # evidence ever reached the Security tab: a verdict nobody can audit,
+      # which is the same failure class SUPPLY-001 exists to prevent.
+      #
+      # Normalization writes to a SEPARATE file. The gate must reason over
+      # exactly what grype produced, so the blocking decision and the published
+      # evidence are never derived from different documents.
+      - name: Normalize SARIF for Code Scanning
+        id: normalize
+        if: always() && steps.sarif.outputs.valid == 'true'
+        run: |
+          python3 scripts/normalize_grype_sarif.py \
+            --sarif "${{ steps.grype.outputs.sarif }}" \
+            --out ./results.normalized.sarif \
+            --fallback-uri sbom.spdx.json
 
       - name: Upload results to the Security tab
-        if: always() && steps.grype.outputs.sarif != ''
+        if: always() && steps.sarif.outputs.valid == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ steps.grype.outputs.sarif }}
+          sarif_file: ./results.normalized.sarif
           category: supply-chain
+
+      # Retain the SARIF as a build artifact. The Security tab shows the
+      # findings but not the exact document the gate reasoned over, so a
+      # disputed block previously could not be re-adjudicated after the fact.
+      # An audit gate whose evidence is unreachable is not auditable.
+      - name: Retain SARIF for audit
+        if: always() && steps.sarif.outputs.valid == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-sarif
+          path: ${{ steps.grype.outputs.sarif }}
+          retention-days: 30
 
       # The gate. Counts critical/high findings and fails explicitly, so the log
       # states which rule blocked and why rather than an opaque action failure.
       - name: Enforce SUPPLY-001
-        if: always()
+        if: always() && steps.sarif.outputs.valid == 'true'
         run: |
           python3 scripts/enforce_supply_chain.py \
             --sarif "${{ steps.grype.outputs.sarif }}" \

@@ -1,3 +1,45 @@
+allowBuilds:
+  unrs-resolver: set this to true or false
+
+# pnpm workspace configuration for ledger-insights-ui.
+#
+# `onlyBuiltDependencies` predates this file's other contents. unrs-resolver
+# carries an install script that pnpm blocks by default and is required for the
+# Next.js build. sharp is retained in the list defensively: at 0.35.3 it ships
+# prebuilt binaries and no longer runs an install script (which is why it left
+# pnpm's ignored-builds warning after the bump below), but the entry costs
+# nothing and keeps the build working if a future release reverts to compiling.
+#
+# The `overrides` block exists for ONE reason: since pnpm v10, `pnpm.overrides`
+# in package.json is IGNORED. Overrides must be declared here or they silently do
+# nothing — `pnpm install` exits 0, prints no warning, and resolves the old
+# versions. The tell is that the regenerated pnpm-lock.yaml contains no
+# `overrides:` key at all.
+#
+# Every override below pins a TRANSITIVE dependency that grype flagged at high
+# severity under security/v0.2.0/SUPPLY-001. None are direct dependencies, so
+# they cannot be bumped from the dependency list.
+#
+# Each range stays WITHIN the currently-resolved major. `npm view <pkg> version`
+# reports the latest overall, which for several of these is a major jump
+# (undici 7 -> 8, nanoid 3 -> 6, js-yaml 4 -> 5). Forcing a major on a
+# transitive dependency is how a lockfile update turns into a broken build, and
+# every one of these had a patched release inside its existing major.
 onlyBuiltDependencies:
   - sharp
   - unrs-resolver
+
+overrides:
+  undici: ">=7.29.0 <8"
+  nanoid: ">=3.3.18 <4"
+  postcss: ">=8.5.26 <9"
+  js-yaml: ">=4.3.1 <5"
+  fast-uri: ">=3.1.5 <4"
+  # brace-expansion resolves at two majors in this tree; both were flagged.
+  brace-expansion@1: ">=1.1.18 <2"
+  brace-expansion@5: ">=5.0.9 <6"
+  # sharp inherits four libvips CVEs (GHSA-f88m-g3jw-g9cj) below 0.35.0. It is
+  # pulled in transitively by next for image optimization and is listed in
+  # onlyBuiltDependencies above, so it compiles at install time — this bump is
+  # verified by a real build, not by the lockfile alone.
+  sharp: ">=0.35.3 <0.36"

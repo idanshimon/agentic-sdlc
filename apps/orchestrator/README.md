@@ -52,7 +52,7 @@ curl -N http://localhost:8000/api/runs/<run_id>/stream
 # approve the Resolver gate:
 curl -X POST http://localhost:8000/api/runs/<run_id>/approve \
   -H 'Content-Type: application/json' \
-  -d '{"card_id":"<card>","decision_kind":"accept","resolution_text":"care-team scope","actor":"alice@hca"}'
+  -d '{"card_id":"<card>","decision_kind":"accept","resolution_text":"care-team scope","actor":"alice@example.org"}'
 ```
 
 ## Deploy (Azure Container Apps)

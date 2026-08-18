@@ -251,7 +251,7 @@ function ChatBubble({
   if (turn.role === "user") {
     return (
       <div className="flex items-start gap-2 justify-end">
-        <div className="max-w-[80%] rounded-lg bg-[var(--primary)]/10 border border-[var(--primary)]/20 px-3 py-2">
+        <div className="max-w-[80%] rounded-lg bg-[color-mix(in_srgb,var(--primary)_var(--tint),transparent)] border border-[var(--primary)]/20 px-3 py-2">
           <p className="text-xs leading-relaxed">{turn.text}</p>
         </div>
         <div className="h-6 w-6 rounded-full bg-[var(--overlay)] flex items-center justify-center shrink-0 mt-0.5">
@@ -327,7 +327,7 @@ function ActionRow({
 }) {
   if (status === "applied") {
     return (
-      <div className="rounded-md border border-[var(--success)]/30 bg-[var(--success)]/5 px-3 py-2 flex items-center gap-2">
+      <div className="rounded-md border border-[var(--success)]/30 bg-[color-mix(in_srgb,var(--success)_var(--tint-weak),transparent)] px-3 py-2 flex items-center gap-2">
         <CheckCircle2 className="h-3.5 w-3.5 text-[var(--success)]" />
         <span className="text-[11px] text-[var(--text-secondary)] flex-1 truncate">
           {action.description}
@@ -353,8 +353,8 @@ function ActionRow({
       className={cn(
         "rounded-md border px-3 py-2 flex items-start gap-2",
         isNav
-          ? "border-[var(--primary)]/30 bg-[var(--primary)]/5"
-          : "border-[var(--warning)]/30 bg-[var(--warning)]/5",
+          ? "border-[var(--primary)]/30 bg-[color-mix(in_srgb,var(--primary)_var(--tint-weak),transparent)]"
+          : "border-[var(--warning)]/30 bg-[color-mix(in_srgb,var(--warning)_var(--tint-weak),transparent)]",
       )}
     >
       <div className="flex-1 min-w-0">

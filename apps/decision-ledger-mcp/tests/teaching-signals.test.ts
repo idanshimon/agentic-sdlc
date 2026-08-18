@@ -32,7 +32,7 @@ import * as cosmos from "../src/cosmos-client.js";
 
 const mockedWrite = cosmos.writeRuntimeEntry as ReturnType<typeof vi.fn>;
 const TEAM = "team-cardiology";
-const HUMAN = { kind: "human" as const, id: "ravi@hca.com" };
+const HUMAN = { kind: "human" as const, id: "reviewer-b@example.org" };
 
 beforeEach(() => {
   vi.clearAllMocks();

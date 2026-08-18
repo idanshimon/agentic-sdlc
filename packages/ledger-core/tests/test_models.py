@@ -234,14 +234,14 @@ def test_v06_entry_promotes_to_runtime_default():
         "decision_kind": "accept",
         "status": "suggest",
         "created_at": "2026-05-01T00:00:00Z",
-        "created_by": "demo-user@hca",
+        "created_by": "demo-user@example.org",
         "confidence_source": "human",
     }
     e = from_legacy_v06_dict(legacy)
     assert e.entry_type == "runtime"
     assert e.runtime_kind == "stage_decision"
     assert e.actor.kind == "human"
-    assert e.actor.id == "demo-user@hca"
+    assert e.actor.id == "demo-user@example.org"
     assert e.decision  # was synthesized from resolution_text
     assert e.bundle_refs == []  # backfilled by Doctor
 

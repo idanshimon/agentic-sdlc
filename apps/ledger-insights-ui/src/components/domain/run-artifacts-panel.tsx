@@ -256,12 +256,12 @@ function ArtifactView({ content, kind }: { content: string; kind: "md" | "py" })
       return highlightPython(line);
     }
     if (kind === "md") {
-      if (line.startsWith("# ")) return <span className="text-blue-500 dark:text-blue-300 font-semibold">{line}</span>;
-      if (line.startsWith("## ")) return <span className="text-blue-500 dark:text-blue-300">{line}</span>;
-      if (line.startsWith("### ")) return <span className="text-blue-500 dark:text-blue-300 opacity-80">{line}</span>;
+      if (line.startsWith("# ")) return <span className="text-[var(--code-heading)] font-semibold">{line}</span>;
+      if (line.startsWith("## ")) return <span className="text-[var(--code-heading)]">{line}</span>;
+      if (line.startsWith("### ")) return <span className="text-[var(--code-heading)] opacity-80">{line}</span>;
       if (line.startsWith("> ")) return <span className="text-[var(--text-tertiary)] italic">{line}</span>;
       if (line.startsWith("- ") || line.startsWith("* ") || /^\d+\.\s/.test(line)) {
-        return <><span className="text-[var(--success)]">{line.slice(0, line.indexOf(" ") + 1)}</span>{line.slice(line.indexOf(" ") + 1)}</>;
+        return <><span className="text-[var(--code-marker)]">{line.slice(0, line.indexOf(" ") + 1)}</span>{line.slice(line.indexOf(" ") + 1)}</>;
       }
     }
     return line || " "; // empty lines need a space to keep row height
@@ -272,11 +272,11 @@ function ArtifactView({ content, kind }: { content: string; kind: "md" | "py" })
     const tokens = text.split(/(\s+|[(){}[\],:;.])/);
     return tokens.map((t, i) => {
       if (PYTHON_KEYWORDS.has(t)) {
-        return <span key={i} className="text-purple-500 dark:text-purple-300">{t}</span>;
+        return <span key={i} className="text-[var(--code-keyword)]">{t}</span>;
       }
       // String literals (very rough)
       if (/^["'].*["']$/.test(t)) {
-        return <span key={i} className="text-green-500 dark:text-green-300">{t}</span>;
+        return <span key={i} className="text-[var(--code-string)]">{t}</span>;
       }
       // Decorators
       if (t.startsWith("@") && t.length > 1 && /[a-zA-Z]/.test(t[1])) {

@@ -32,6 +32,14 @@ from .models import INVARIANT_CLASSES
 
 _logger = logging.getLogger("orchestrator.telemetry_queries")
 
+# Upper bound on how many run documents query_recent_runs will pull from Cosmos
+# in order to sort them newest-first. Cross-partition ORDER BY needs a composite
+# index we do not have, so the sort happens client-side — which means the query
+# must fetch a WIDER window than the caller's `limit` or the newest runs can
+# never surface (see the note in query_recent_runs). Bounded so this stays one
+# predictable query rather than a full scan as the container grows.
+_RECENT_RUNS_SCAN_CAP = 500
+
 # Relative cost weights per stage — used to apportion run.total_cost_usd across
 # the stages that fired during a run. Derived from observed token usage profiles
 # in stages.py (codegen + architect are the heavy LLM calls; review_scan/deliver
@@ -438,8 +446,22 @@ async def query_recent_runs(
     # Cosmos requires TOP to be a literal int, not parameterized.
     # ORDER BY removed: cross-partition ORDER BY needs a composite index.
     # SELECT * to avoid projection issues on missing fields. Sort + slim client-side.
+    #
+    # CRITICAL: TOP without ORDER BY is applied by Cosmos BEFORE any sort, so
+    # `TOP {limit}` returned an ARBITRARY {limit} runs and the client-side sort
+    # below could only order that arbitrary slice. Once the container held more
+    # than `limit` runs, the newest run became structurally unreachable — it was
+    # fetchable by ID but absent from /api/runs, so the dashboard silently
+    # stopped showing new activity while looking perfectly healthy.
+    #
+    # Fix: over-fetch a bounded window, sort it, THEN trim to `limit`. The
+    # window is capped so this stays a single bounded query rather than turning
+    # into an unbounded scan as the container grows. When the container exceeds
+    # the window, `truncated` is reported so the caller can tell "these are the
+    # newest N" from "this is everything".
+    fetch_cap = max(limit, min(_RECENT_RUNS_SCAN_CAP, limit * 10))
     query = (
-        f"SELECT TOP {limit} * FROM c WHERE {' AND '.join(clauses)}"
+        f"SELECT TOP {fetch_cap} * FROM c WHERE {' AND '.join(clauses)}"
     )
     out: list[dict] = []
     try:
@@ -488,6 +510,8 @@ async def query_recent_runs(
             out.append(summary)
         # Sort newest-first client-side (Cosmos ORDER BY cross-partition needs index).
         out.sort(key=lambda r: r.get("updated_at") or r.get("created_at") or "", reverse=True)
+        # Trim AFTER sorting. Sorting a pre-truncated slice is what hid new runs.
+        out = out[:limit]
     except Exception as exc:
         _logger.warning("query_recent_runs failed (returning empty): %s :: query=%r params=%r", exc, query, params)
         return []

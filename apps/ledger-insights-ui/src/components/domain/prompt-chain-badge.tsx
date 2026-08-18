@@ -30,13 +30,20 @@ type ChainStep = {
   owner_persona?: string;
 };
 
+// Persona colours as theme-aware tokens, not Tailwind `text-x-500 dark:text-x-300`
+// pairs. Two problems with the pair form: the 500 mid-tones fail 4.5:1 on the
+// light theme's white surfaces, and the `dark:` variant is dead weight here —
+// next-themes is configured with attribute="class", so the app toggles a
+// `.light` class and the token indirection in globals.css is what actually
+// re-themes. Each token below resolves to a luminous hue on dark and a
+// darkened one on light.
 const PERSONA_COLORS: Record<string, string> = {
-  pm: "text-blue-500 dark:text-blue-300",
-  architect: "text-purple-500 dark:text-purple-300",
-  qa: "text-green-500 dark:text-green-300",
-  sre: "text-orange-500 dark:text-orange-300",
-  seceng: "text-red-500 dark:text-red-300",
-  compliance: "text-indigo-500 dark:text-indigo-300",
+  pm: "text-[var(--code-heading)]",
+  architect: "text-[var(--plane-standards)]",
+  qa: "text-[var(--success)]",
+  sre: "text-[var(--warning)]",
+  seceng: "text-[var(--danger)]",
+  compliance: "text-[var(--secondary)]",
 };
 
 interface Props {
@@ -156,7 +163,7 @@ export function PromptChainBadge({ chain, variant = "card", className }: Props) 
             className={cn(
               "inline-flex items-center gap-1.5 rounded px-2 py-0.5 ring-1 ring-inset",
               step.matched
-                ? "bg-[var(--success)]/10 ring-[var(--success)]/30 text-[var(--text-primary)] font-medium"
+                ? "bg-[color-mix(in_srgb,var(--success)_var(--tint),transparent)] ring-[var(--success)]/30 text-[var(--text-primary)] font-medium"
                 : "bg-[var(--surface-2)] ring-[var(--border-muted)] text-[var(--text-tertiary)]",
             )}
           >

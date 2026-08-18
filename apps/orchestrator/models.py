@@ -8,6 +8,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+# Reuse ledger-core's RejectedOption rather than redeclaring it. The two
+# LedgerEntry models drifting is a documented failure class in this repo
+# (see the class docstring below); sharing the sub-model means this one field
+# cannot drift by construction.
+from ledger_core import RejectedOption
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -156,6 +162,19 @@ class LedgerEntry(BaseModel):
     # before this wiring; the Phase 5 compliance query filters on it. Closes the
     # "why this was autopilot vs gated" audit gap.
     autonomy_ref: str = ""
+    # adopt-github-native-execution-substrate: mirrors the same three fields on
+    # ledger-core's LedgerEntry. Kept in lockstep deliberately — the two-model
+    # drift documented above is a recurring failure class, so a field added to
+    # one model MUST be added to the other in the same change.
+    #
+    # rejected_options: the alternatives weighed but not chosen. Empty is
+    #   legitimate (single-option card), not missing data.
+    # decision_confidence: RECORDED EVIDENCE ONLY. Never consulted by a gate —
+    #   classification decides, confidence does not.
+    # gate_reason: typed queryable classification of WHY a gate opened.
+    rejected_options: list[RejectedOption] = Field(default_factory=list)
+    decision_confidence: Optional[float] = None
+    gate_reason: Optional[str] = None
     # with runtime_kind in {heal_proposed, heal_decided, heal_executed} and a
     # shared heal_id tying the chain. These are optional so non-heal entries are
     # unaffected.
@@ -226,7 +245,7 @@ class GateDecision(BaseModel):
     resolution_text: str = ""
     option_index: Optional[int] = None
     gate: Optional[str] = None
-    actor: str = "demo-user@hca"
+    actor: str = "demo-user@example.org"
     confidence_source: Literal["human", "autopilot"] = "human"
     # Tier-2 governance (hard-gate): how this decision reached the server.
     # "individual" = operator explicitly decided this one card.

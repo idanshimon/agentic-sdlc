@@ -8,11 +8,11 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-[var(--overlay)] text-[var(--text-secondary)]",
-        success: "bg-[var(--success)]/15 text-[var(--success)]",
-        warning: "bg-[var(--warning)]/15 text-[var(--warning)]",
-        danger: "bg-[var(--danger)]/15 text-[var(--danger)]",
-        info: "bg-[var(--info)]/15 text-[var(--info)]",
-        secondary: "bg-[var(--secondary)]/15 text-[var(--secondary)]",
+        success: "bg-[color-mix(in_srgb,var(--success)_var(--tint),transparent)] text-[var(--success)]",
+        warning: "bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] text-[var(--warning)]",
+        danger: "bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] text-[var(--danger)]",
+        info: "bg-[color-mix(in_srgb,var(--info)_var(--tint),transparent)] text-[var(--info)]",
+        secondary: "bg-[color-mix(in_srgb,var(--secondary)_var(--tint),transparent)] text-[var(--secondary)]",
         outline: "border border-[var(--border-default)] text-[var(--text-secondary)]",
       },
     },

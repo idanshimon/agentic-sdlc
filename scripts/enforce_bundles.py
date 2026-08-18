@@ -43,6 +43,100 @@ class BundleLoadError(Exception):
     """
 
 
+def _is_inside_string_literal(line: str, index: int) -> bool:
+    """True iff ``index`` falls inside a quoted string literal on ``line``.
+
+    This is the DESCRIBES-vs-COMMITS distinction, and it is the narrowest claim
+    a line-oriented scanner can make honestly:
+
+        `logger.info(f"patient {MRN} updated")`   <- COMMITS. index is bare code.
+        `text: 'logger.info(f"patient {MRN}")'`   <- DESCRIBES. index is inside ''.
+
+    The second is inert data — a classifier fixture, a test case, a docstring, a
+    UI placeholder teaching operators what a violation looks like. Flagging it
+    is a false positive, and a rule whose own test-suite fixtures trip it (as
+    PHI-001's did) trains people to route around the gate.
+
+    Deliberately conservative:
+
+    * A match that STARTS outside any quote is never exempt, even if a quote
+      appears later on the line. Only the match position is considered.
+    * Escaped quotes (\\" \\') do not open or close a literal.
+    * An UNTERMINATED literal returns False (not exempt). A line ending mid-string
+      means either a multiline construct this scanner cannot reason about, or
+      quote-stuffing to evade the gate; both must fail closed.
+
+    This is NOT a proof of runtime safety — a literal can still reach eval() or a
+    dynamic sink. It asserts only that this line is not itself a logging call.
+    Rules opt in via `quoted_literal_exempt: true`; it is off by default, so a
+    rule's blast radius never changes without an explicit bundle edit.
+    """
+    quote: Optional[str] = None
+    escaped = False
+    for position, char in enumerate(line):
+        if position >= index:
+            # Reached the match: it is inside a literal iff one is still open.
+            return quote is not None
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if quote is None:
+            if char in "\"'`":
+                quote = char
+        elif char == quote:
+            quote = None
+    return False
+
+
+def _describes_rather_than_commits(
+    line: str,
+    ctx: "Optional[re.Pattern[str]]",
+    rx: "re.Pattern[str]",  # noqa: ARG001 - kept for signature stability
+) -> bool:
+    """True iff the line DESCRIBES a violation rather than COMMITTING one.
+
+    The load-bearing subtlety, learned from a failing test that caught a real
+    hole in the first implementation:
+
+    Asking "is the matched PHI token inside quotes?" is the WRONG question. In a
+    genuine leak the token is nearly always inside the quoted format string:
+
+        `logger.info(f"patient {MRN} updated")`
+                               ^^^ inside quotes, yet this is a REAL leak
+
+    The right question is whether the LOGGING SINK is quoted. The sink is what
+    makes a line an act rather than a description:
+
+        `logger.info(f"patient {MRN} updated")`    sink bare      -> COMMITS
+        `text: 'logger.info(f"patient {MRN}")'`    sink quoted    -> DESCRIBES
+
+    So: exempt only when EVERY occurrence of the context (sink) pattern sits
+    inside a string literal. If any sink appears as bare code, the line executes
+    logging and must block regardless of how the PHI token itself is quoted.
+
+    Fails closed by construction:
+      * No context_pattern (rule isn't sink-scoped) -> never exempt; we cannot
+        identify an "act" to quote-check, so we do not guess.
+      * No sink found at all -> not exempt.
+      * ANY bare sink -> not exempt. This is decisive on its own: once a real
+        logging call is on the line, nothing about how the PHI token is quoted
+        can make the line safe. An earlier draft additionally required the token
+        to be quoted, which INVERTED the verdict on
+        `logger.info(patient_id)  # see 'the docs'` — the stray apostrophe left
+        the token "quoted" and exempted a real leak. Tests caught it; the token
+        check is gone.
+    """
+    if ctx is None:
+        return False
+    sinks = list(ctx.finditer(line))
+    if not sinks:
+        return False
+    return all(_is_inside_string_literal(line, s.start()) for s in sinks)
+
+
 @dataclasses.dataclass(frozen=True)
 class CIRule:
     """A single CI-enforceable rule: a compiled regex + its bundle citation.
@@ -68,6 +162,7 @@ class CIRule:
     phi: bool = False
     context_pattern: Optional[str] = None
     safe_wrapper_pattern: Optional[str] = None
+    quoted_literal_exempt: bool = False
 
     @property
     def citation(self) -> str:
@@ -110,13 +205,18 @@ class CIRule:
         Pass pre-compiled patterns to avoid recompiling per line.
         """
         rx = _rx or self.compiled()
-        if not rx.search(line):
+        m = rx.search(line)
+        if not m:
             return False
         ctx = _ctx if _ctx is not None else self.compiled_context()
         if ctx is not None and not ctx.search(line):
             return False
         safe = _safe if _safe is not None else self.compiled_safe_wrapper()
         if safe is not None and safe.search(line):
+            return False
+        if self.quoted_literal_exempt and _describes_rather_than_commits(
+            line, ctx, rx
+        ):
             return False
         return True
 
@@ -211,6 +311,7 @@ def select_ci_rules_from_file(
                              if rule.get("context_pattern") else None),
             safe_wrapper_pattern=(str(rule["safe_wrapper_pattern"])
                                   if rule.get("safe_wrapper_pattern") else None),
+            quoted_literal_exempt=bool(rule.get("quoted_literal_exempt", False)),
         ))
     return out
 

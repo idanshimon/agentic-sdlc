@@ -1,0 +1,200 @@
+{
+ "version": "2.1.0",
+ "runs": [
+  {
+   "tool": {
+    "driver": {
+     "name": "Grype",
+     "rules": [
+      {
+       "id": "GHSA-27mf-ghqm-j3j8-aiohttp",
+       "name": "PythonMatcherExactDirectMatch",
+       "shortDescription": {
+        "text": "GHSA-27mf-ghqm-j3j8 medium vulnerability for aiohttp package"
+       },
+       "fullDescription": {
+        "text": "aiohttp has a memory leak when middleware is enabled when requesting a resource with a non-allowed method"
+       },
+       "helpUri": "https://github.com/anchore/grype",
+       "help": {
+        "text": "Vulnerability GHSA-27mf-ghqm-j3j8\nSeverity: medium\nPackage: aiohttp\nVersion: 3.10.10\nFix Version: 3.10.11\nType: python\nLocation: \nData Namespace: github:language:python\nLink: [GHSA-27mf-ghqm-j3j8](https://github.com/advisories/GHSA-27mf-ghqm-j3j8)",
+        "markdown": "**Vulnerability GHSA-27mf-ghqm-j3j8**\n| Severity | Package | Version | Fix Version | Type | Location | Data Namespace | Link |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| medium  | aiohttp  | 3.10.10  | 3.10.11  | python  |   | github:language:python  | [GHSA-27mf-ghqm-j3j8](https://github.com/advisories/GHSA-27mf-ghqm-j3j8)  |\n"
+       },
+       "properties": {
+        "purls": [
+         "pkg:pypi/aiohttp@3.10.10"
+        ],
+        "security-severity": "7.5"
+       }
+      },
+      {
+       "id": "GHSA-m5qp-6w8w-w647-aiohttp",
+       "name": "PythonMatcherExactDirectMatch",
+       "shortDescription": {
+        "text": "GHSA-m5qp-6w8w-w647 medium vulnerability for aiohttp package"
+       },
+       "fullDescription": {
+        "text": "AIOHTTP has a Multipart Header Size Bypass"
+       },
+       "helpUri": "https://github.com/anchore/grype",
+       "help": {
+        "text": "Vulnerability GHSA-m5qp-6w8w-w647\nSeverity: medium\nPackage: aiohttp\nVersion: 3.10.10\nFix Version: 3.13.4\nType: python\nLocation: \nData Namespace: github:language:python\nLink: [GHSA-m5qp-6w8w-w647](https://github.com/advisories/GHSA-m5qp-6w8w-w647)",
+        "markdown": "**Vulnerability GHSA-m5qp-6w8w-w647**\n| Severity | Package | Version | Fix Version | Type | Location | Data Namespace | Link |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| medium  | aiohttp  | 3.10.10  | 3.13.4  | python  |   | github:language:python  | [GHSA-m5qp-6w8w-w647](https://github.com/advisories/GHSA-m5qp-6w8w-w647)  |\n"
+       },
+       "properties": {
+        "purls": [
+         "pkg:pypi/aiohttp@3.10.10"
+        ],
+        "security-severity": "7.5"
+       }
+      },
+      {
+       "id": "GHSA-6mq8-rvhq-8wgg-aiohttp",
+       "name": "PythonMatcherExactDirectMatch",
+       "shortDescription": {
+        "text": "GHSA-6mq8-rvhq-8wgg high vulnerability for aiohttp package"
+       },
+       "fullDescription": {
+        "text": "AIOHTTP's HTTP Parser auto_decompress feature is vulnerable to zip bomb"
+       },
+       "helpUri": "https://github.com/anchore/grype",
+       "help": {
+        "text": "Vulnerability GHSA-6mq8-rvhq-8wgg\nSeverity: high\nPackage: aiohttp\nVersion: 3.10.10\nFix Version: 3.13.3\nType: python\nLocation: \nData Namespace: github:language:python\nLink: [GHSA-6mq8-rvhq-8wgg](https://github.com/advisories/GHSA-6mq8-rvhq-8wgg)",
+        "markdown": "**Vulnerability GHSA-6mq8-rvhq-8wgg**\n| Severity | Package | Version | Fix Version | Type | Location | Data Namespace | Link |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| high  | aiohttp  | 3.10.10  | 3.13.3  | python  |   | github:language:python  | [GHSA-6mq8-rvhq-8wgg](https://github.com/advisories/GHSA-6mq8-rvhq-8wgg)  |\n"
+       },
+       "properties": {
+        "purls": [
+         "pkg:pypi/aiohttp@3.10.10"
+        ],
+        "security-severity": "7.5"
+       }
+      },
+      {
+       "id": "GHSA-m99w-x7hq-7vfj-next",
+       "name": "JavascriptMatcherExactDirectMatch",
+       "shortDescription": {
+        "text": "GHSA-m99w-x7hq-7vfj high vulnerability for next package"
+       },
+       "fullDescription": {
+        "text": "Next.js: Denial of Service in App Router using Server Actions"
+       },
+       "helpUri": "https://github.com/anchore/grype",
+       "help": {
+        "text": "Vulnerability GHSA-m99w-x7hq-7vfj\nSeverity: high\nPackage: next\nVersion: 16.2.7\nFix Version: 16.2.11\nType: npm\nLocation: \nData Namespace: github:language:javascript\nLink: [GHSA-m99w-x7hq-7vfj](https://github.com/advisories/GHSA-m99w-x7hq-7vfj)",
+        "markdown": "**Vulnerability GHSA-m99w-x7hq-7vfj**\n| Severity | Package | Version | Fix Version | Type | Location | Data Namespace | Link |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| high  | next  | 16.2.7  | 16.2.11  | npm  |   | github:language:javascript  | [GHSA-m99w-x7hq-7vfj](https://github.com/advisories/GHSA-m99w-x7hq-7vfj)  |\n"
+       },
+       "properties": {
+        "purls": [
+         "pkg:npm/next@16.2.7"
+        ],
+        "security-severity": "8.2"
+       }
+      }
+     ]
+    }
+   },
+   "results": [
+    {
+     "ruleId": "GHSA-m99w-x7hq-7vfj-next",
+     "level": "error",
+     "message": {
+      "text": "A high vulnerability in npm package: next, version 16.2.7 was found at: "
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ""
+        },
+        "region": {
+         "startLine": 1,
+         "startColumn": 1,
+         "endLine": 1,
+         "endColumn": 1
+        }
+       }
+      }
+     ],
+     "partialFingerprints": {
+      "primaryLocationLineHash": "c818303af2c4180794a3596e13156a376a096e15ce34ac31f465117bc5ac6038:1"
+     }
+    },
+    {
+     "ruleId": "GHSA-6mq8-rvhq-8wgg-aiohttp",
+     "level": "error",
+     "message": {
+      "text": "A high vulnerability in python package: aiohttp, version 3.10.10 was found at: "
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ""
+        },
+        "region": {
+         "startLine": 1,
+         "startColumn": 1,
+         "endLine": 1,
+         "endColumn": 1
+        }
+       }
+      }
+     ],
+     "partialFingerprints": {
+      "primaryLocationLineHash": "7591a97aaa3d209a3562d4d5c3e136cea6f2137610b5a4e318fb8fc0a90722de:1"
+     }
+    },
+    {
+     "ruleId": "GHSA-27mf-ghqm-j3j8-aiohttp",
+     "level": "warning",
+     "message": {
+      "text": "A medium vulnerability in python package: aiohttp, version 3.10.10 was found at: "
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ""
+        },
+        "region": {
+         "startLine": 1,
+         "startColumn": 1,
+         "endLine": 1,
+         "endColumn": 1
+        }
+       }
+      }
+     ],
+     "partialFingerprints": {
+      "primaryLocationLineHash": "7591a97aaa3d209a3562d4d5c3e136cea6f2137610b5a4e318fb8fc0a90722de:1"
+     }
+    },
+    {
+     "ruleId": "GHSA-m5qp-6w8w-w647-aiohttp",
+     "level": "warning",
+     "message": {
+      "text": "A medium vulnerability in python package: aiohttp, version 3.10.10 was found at: "
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ""
+        },
+        "region": {
+         "startLine": 1,
+         "startColumn": 1,
+         "endLine": 1,
+         "endColumn": 1
+        }
+       }
+      }
+     ],
+     "partialFingerprints": {
+      "primaryLocationLineHash": "7591a97aaa3d209a3562d4d5c3e136cea6f2137610b5a4e318fb8fc0a90722de:1"
+     }
+    }
+   ]
+  }
+ ]
+}

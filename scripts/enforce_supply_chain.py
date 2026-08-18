@@ -19,22 +19,87 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
 
 # SARIF severity lives in `level` (error/warning/note) and, for grype, in the
-# rule's `properties.security-severity` (a CVSS number). Map both.
+# rule's `properties.security-severity` (a CVSS number).
+#
+# ORDER MATTERS, and CVSS must NOT come first. In grype's SARIF presenter
+# (grype/presenter/sarif/presenter.go) these two fields have different
+# provenance and legitimately disagree:
+#
+#   * `properties.security-severity` is `securitySeverityValue()` — the raw
+#     CVSS base score, preferring vendor metrics then falling back to NVD.
+#   * `level` is `levelValue()` and the rule's shortDescription text is
+#     `severityText()` — BOTH derived from `m.Vulnerability.Severity`, the
+#     advisory's own (GHSA/vendor-assigned) label.
+#
+# A CVSS 7.5 finding that GHSA labels "medium" is common: NVD scores the
+# theoretical worst case, the vendor scores the realistic one. Mapping CVSS
+# first stamped `[HIGH]` on findings whose own message text read "A medium
+# vulnerability in python package: aiohttp". That mismatch is not cosmetic —
+# the citation and the evidence in the same audit record contradicted each
+# other, and it inflated the block with findings grype did not consider
+# blocking.
+#
+# So: trust grype's own verdict (its label, corroborated by `level`), and use
+# CVSS only as a fallback when the authoritative label is absent.
 _LEVEL_RANK = {"error": 3, "warning": 2, "note": 1, "none": 0}
 _CUTOFF_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
+# grype writes shortDescription as
+#   "<CVE> <severity> vulnerability for <pkg> package"
+# and the result message as
+#   "A <severity> vulnerability in <type> package: <pkg>, version <v> ..."
+_DESC_SEVERITY = re.compile(
+    r"\b(critical|high|medium|low)\s+vulnerability\b", re.IGNORECASE
+)
+
 
 def _severity_of(result: dict, rules_by_id: dict[str, dict]) -> str:
-    """Best-effort severity for a SARIF result, preferring CVSS when present."""
+    """Severity for a SARIF result, preferring the scanner's own verdict.
+
+    Precedence: explicit string severity -> grype's own severity word (from
+    the rule shortDescription, falling back to the result message) -> SARIF
+    `level` -> CVSS score. See the note above for why CVSS is last.
+    """
     rule_id = result.get("ruleId", "")
     rule = rules_by_id.get(rule_id, {})
     props = rule.get("properties", {}) or {}
 
+    # 1. An explicit string severity, if a scanner provides one.
+    for key in ("severity", "problem.severity"):
+        val = props.get(key)
+        if isinstance(val, str) and val.lower() in _CUTOFF_RANK:
+            return val.lower()
+
+    # 2. grype states its verdict in words. Prefer the rule's
+    #    shortDescription; fall back to the result message, which carries the
+    #    same word and is what an operator reads in the log. `level` collapses
+    #    critical and high into "error", so the word is strictly more precise.
+    for text in (
+        (rule.get("shortDescription") or {}).get("text") or "",
+        (result.get("message") or {}).get("text") or "",
+    ):
+        match = _DESC_SEVERITY.search(text)
+        if match:
+            return match.group(1).lower()
+
+    # 3. SARIF level. critical and high are indistinguishable here (both
+    #    "error"), so report the lower of the two rather than overstate.
+    level = (result.get("level") or "").lower()
+    if level == "error":
+        return "high"
+    if level == "warning":
+        return "medium"
+    if level == "note":
+        return "low"
+
+    # 4. Last resort: CVSS. Only reached when the scanner gave no label at
+    #    all, in which case a numeric score beats guessing.
     cvss = props.get("security-severity")
     if cvss is not None:
         try:
@@ -49,17 +114,6 @@ def _severity_of(result: dict, rules_by_id: dict[str, dict]) -> str:
         except (TypeError, ValueError):
             pass
 
-    # grype also stamps a plain string severity on the rule
-    for key in ("severity", "problem.severity"):
-        val = props.get(key)
-        if isinstance(val, str) and val.lower() in _CUTOFF_RANK:
-            return val.lower()
-
-    level = (result.get("level") or "").lower()
-    if level == "error":
-        return "high"
-    if level == "warning":
-        return "medium"
     return "low"
 
 

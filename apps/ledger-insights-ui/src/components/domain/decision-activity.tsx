@@ -79,7 +79,7 @@ export function DecisionActivity({ entries }: { entries: LedgerEntry[] }) {
           </p>
         </div>
         {learned > 0 && (
-          <span className="text-[11px] px-2 py-1 rounded-md bg-[var(--success)]/15 text-[var(--success)]">
+          <span className="text-[11px] px-2 py-1 rounded-md bg-[color-mix(in_srgb,var(--success)_var(--tint),transparent)] text-[var(--success)]">
             {learned} learning event{learned === 1 ? "" : "s"}
           </span>
         )}

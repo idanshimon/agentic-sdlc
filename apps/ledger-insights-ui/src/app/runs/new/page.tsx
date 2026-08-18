@@ -261,7 +261,7 @@ export default function NewRunPage() {
       />
 
       {error && (
-        <Card className="p-3 border-[var(--danger)]/40 bg-[var(--danger)]/10 flex items-start gap-2">
+        <Card className="p-3 border-[var(--danger)]/40 bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] flex items-start gap-2">
           <AlertCircle className="h-4 w-4 text-[var(--danger)] mt-0.5 shrink-0" />
           <span className="text-xs text-[var(--danger)] leading-relaxed">{error}</span>
         </Card>
@@ -287,7 +287,7 @@ export default function NewRunPage() {
                 disabled={busy !== null}
                 className={cn(
                   "group text-left rounded-lg border border-[var(--border-default)] bg-[var(--bg)] p-4 hover:border-[var(--text-tertiary)] hover:bg-[var(--overlay)]/40 transition-colors relative overflow-hidden",
-                  busy === s.id && "border-[var(--primary)] bg-[var(--primary)]/5",
+                  busy === s.id && "border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_var(--tint-weak),transparent)]",
                   busy && busy !== s.id && "opacity-50 cursor-not-allowed",
                 )}
               >
@@ -363,7 +363,7 @@ export default function NewRunPage() {
           className={cn(
             "rounded-lg border-2 border-dashed transition-colors",
             dragging
-              ? "border-[var(--primary)] bg-[var(--primary)]/5"
+              ? "border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_var(--tint-weak),transparent)]"
               : "border-[var(--border-default)]",
           )}
         >
@@ -403,7 +403,7 @@ export default function NewRunPage() {
                   className={cn(
                     "h-9 text-xs font-medium rounded-md border transition-colors capitalize",
                     team === t
-                      ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                      ? "border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_var(--tint),transparent)] text-[var(--primary)]"
                       : "border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--overlay)]",
                   )}
                 >
@@ -429,7 +429,7 @@ export default function NewRunPage() {
                     className={cn(
                       "w-full text-left flex items-start gap-2.5 p-2 rounded-md border transition-colors",
                       active
-                        ? "border-[var(--primary)] bg-[var(--primary)]/10"
+                        ? "border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_var(--tint),transparent)]"
                         : "border-[var(--border-default)] hover:bg-[var(--overlay)]",
                     )}
                   >

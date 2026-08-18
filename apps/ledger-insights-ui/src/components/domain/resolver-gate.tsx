@@ -333,7 +333,7 @@ export function ResolverGate({ runId, events, gateVersion, onApproved }: Props) 
 
   if (gating.length === 0) {
     return (
-      <Card className="p-5 border-[var(--warning)]/40 bg-[var(--warning)]/5">
+      <Card className="p-5 border-[var(--warning)]/40 bg-[color-mix(in_srgb,var(--warning)_var(--tint-weak),transparent)]">
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-[var(--warning)] mt-0.5 shrink-0" />
           <div className="flex-1">
@@ -363,7 +363,7 @@ export function ResolverGate({ runId, events, gateVersion, onApproved }: Props) 
 
   return (
     <Card className="overflow-hidden border-[var(--warning)]/40 bg-[var(--warning)]/[0.03]">
-      <div className="flex items-start gap-3 p-5 border-b border-[var(--warning)]/30 bg-[var(--warning)]/5">
+      <div className="flex items-start gap-3 p-5 border-b border-[var(--warning)]/30 bg-[color-mix(in_srgb,var(--warning)_var(--tint-weak),transparent)]">
         <FileWarning className="h-5 w-5 text-[var(--warning)] mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -549,7 +549,7 @@ export function ResolverGate({ runId, events, gateVersion, onApproved }: Props) 
                         className={cn(
                           "rounded-md border p-3 space-y-1.5",
                           o.recommended
-                            ? "border-[var(--success)]/40 bg-[var(--success)]/5"
+                            ? "border-[var(--success)]/40 bg-[color-mix(in_srgb,var(--success)_var(--tint-weak),transparent)]"
                             : "border-[var(--border-default)] bg-[var(--bg)]",
                         )}
                       >

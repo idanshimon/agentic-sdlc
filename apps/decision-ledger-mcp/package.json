@@ -1,7 +1,7 @@
 {
   "name": "decision-ledger-mcp",
   "version": "0.7.0",
-  "description": "Decision Ledger MCP server — exposes the ledger to any GitHub runtime via Model Context Protocol",
+  "description": "Decision Ledger MCP server \u2014 exposes the ledger to any GitHub runtime via Model Context Protocol",
   "type": "module",
   "main": "dist/server.js",
   "bin": {
@@ -28,10 +28,19 @@
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "fast-uri": ">=3.1.5 <4",
+    "hono": ">=4.13.1 <5",
+    "ip-address": ">=10.5.0 <11",
+    "nanoid": ">=3.3.18 <4",
+    "postcss": ">=8.5.26 <9",
+    "vite": ">=6.4.3 <7",
+    "body-parser": ">=1.20.6 <2"
+  }
 }

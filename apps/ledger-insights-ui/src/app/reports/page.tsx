@@ -401,8 +401,8 @@ export default function ReportsPage() {
                   className={cn(
                     "rounded-md border px-3 py-2.5 flex items-center gap-3",
                     f.ok
-                      ? "border-[var(--success)]/30 bg-[var(--success)]/5"
-                      : "border-[var(--warning)]/30 bg-[var(--warning)]/5",
+                      ? "border-[var(--success)]/30 bg-[color-mix(in_srgb,var(--success)_var(--tint-weak),transparent)]"
+                      : "border-[var(--warning)]/30 bg-[color-mix(in_srgb,var(--warning)_var(--tint-weak),transparent)]",
                   )}
                 >
                   <Icon
@@ -448,7 +448,7 @@ export default function ReportsPage() {
               className={cn(
                 "rounded-md border px-3 py-3",
                 s.severity === "warning"
-                  ? "border-[var(--warning)]/30 bg-[var(--warning)]/5"
+                  ? "border-[var(--warning)]/30 bg-[color-mix(in_srgb,var(--warning)_var(--tint-weak),transparent)]"
                   : "border-[var(--border-muted)]",
               )}
             >

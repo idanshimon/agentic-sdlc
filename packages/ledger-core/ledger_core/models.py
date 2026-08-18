@@ -67,6 +67,21 @@ DecisionKind = Literal["accept", "swap", "reject", "auto-deferred"]
 LedgerStatus = Literal["suggest", "shadow", "silent_apply", "demoted"]
 INVARIANT_CLASSES: set[str] = {"phi-classification", "auth-policy"}
 
+# --- gate reason (adopt-github-native-execution-substrate) -------------------
+# WHY a gate opened, as a typed, queryable classification. Complements
+# `autonomy_ref` (which carries the specific rule reference) — it does not
+# replace it. An operator feed can render "paused: budget_exceeded" and
+# "paused: invariant_class" as different human actions.
+GateReason = Literal[
+    "invariant_class",       # ambiguity_class is in INVARIANT_CLASSES — never bypassable
+    "autonomy_tier",         # the team's autonomy matrix says gate
+    "low_precedent",         # find_precedent returned nothing / below threshold
+    "budget_exceeded",       # run budget (retries / duration) exhausted
+    "verification_failed",   # a downstream check failed and needs a human
+    "stalled",               # idle timeout, or a required service was unreachable
+    "operator_requested",    # a human halted the run
+]
+
 
 # --- attribution sub-models --------------------------------------------------
 class Actor(BaseModel):
@@ -82,6 +97,22 @@ class ReviewerAttribution(BaseModel):
     role: str  # "security_lead", "privacy_dpo", etc — from reviewers.yaml
     approved_at: str
     review_kind: Literal["approved", "approved_with_comments"] = "approved"
+
+
+class RejectedOption(BaseModel):
+    """One resolution option that was presented to the decider but NOT selected.
+
+    Persisting these is what lets an audit answer "why not the other option?".
+    Before this model the ledger recorded only the chosen `resolution_text` +
+    `option_index`, so the alternatives an agent weighed were discarded at
+    persist time even though `AmbiguityCard.options` carried them.
+
+    Spec: openspec/changes/adopt-github-native-execution-substrate/specs/ledger/spec.md
+    """
+    resolution: str                       # the option's resolution text
+    rationale: str = ""                   # why it was offered
+    option_index: Optional[int] = None    # position in the original options list
+    recommended: bool = False             # was this the agent's recommendation?
 
 
 class CanaryMetrics(BaseModel):
@@ -124,6 +155,19 @@ class LedgerEntry(BaseModel):
     # autonomy rule that governed this decision — WHY autopilot vs gate. Read by
     # the Phase 5 compliance query. Empty on pre-Phase-2 / non-decision entries.
     autonomy_ref: str = ""
+
+    # --- adopt-github-native-execution-substrate ----------------------------
+    # The alternatives that were weighed but not chosen. Empty is legitimate
+    # (a single-option card); it does NOT mean "data missing".
+    rejected_options: List[RejectedOption] = Field(default_factory=list)
+    # The agent's confidence in the resolution. RECORDED EVIDENCE ONLY.
+    # It MUST NOT participate in gate evaluation: gating is decided by
+    # classification (ambiguity_class vs HARD_GATE_CLASSES) and autonomy
+    # posture. A confident agent does not earn its way past an invariant.
+    decision_confidence: Optional[float] = None
+    # WHY this gate opened, as a typed queryable value. Complements
+    # `autonomy_ref` (the specific rule reference); does not replace it.
+    gate_reason: Optional[GateReason] = None
 
     # GitHub audit log cross-reference (set on Agent-HQ-driven entries)
     agent_session_id: Optional[str] = None

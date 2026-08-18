@@ -79,7 +79,7 @@ describe("economics.summarize", () => {
     const entries = [
       baseEntry({ actor: { kind: "agent", id: "orchestrator" } }),
       baseEntry({ actor: { kind: "agent", id: "orchestrator" } }),
-      baseEntry({ actor: { kind: "human", id: "kapil@hca.com" } }),
+      baseEntry({ actor: { kind: "human", id: "reviewer-a@example.org" } }),
     ];
     const r = summarize(entries);
     expect(r.agent_driven).toBe(2);

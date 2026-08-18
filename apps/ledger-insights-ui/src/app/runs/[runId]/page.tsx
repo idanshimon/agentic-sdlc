@@ -167,7 +167,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ runId: str
               off-screen and the operator can't tell at a glance that they
               need to act. Click → smooth-scroll to the actual gate card. */}
           {awaitingGate && (
-            <div className="sticky top-0 z-40 -mx-2 px-2 py-2 backdrop-blur bg-[var(--warning)]/15 border border-[var(--warning)]/40 rounded-lg flex items-center gap-3">
+            <div className="sticky top-0 z-40 -mx-2 px-2 py-2 backdrop-blur bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] border border-[var(--warning)]/40 rounded-lg flex items-center gap-3">
               <span className="inline-flex h-2 w-2 rounded-full bg-[var(--warning)] animate-pulse shrink-0" />
               <div className="flex-1 text-xs">
                 <span className="font-semibold text-[var(--text-primary)]">

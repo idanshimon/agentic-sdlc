@@ -92,7 +92,7 @@ export default function PhiPage() {
             Result
           </h3>
           {m.isError ? (
-            <div className="p-3 rounded border border-[var(--danger)]/40 bg-[var(--danger)]/10 text-xs text-[var(--danger)]">
+            <div className="p-3 rounded border border-[var(--danger)]/40 bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)] text-xs text-[var(--danger)]">
               {String((m.error as Error)?.message ?? "Classifier failed")}
             </div>
           ) : !result ? (

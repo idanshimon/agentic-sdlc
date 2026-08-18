@@ -101,7 +101,7 @@ export function DesignReviewGate({ runId, run, onApproved }: Props) {
 
   return (
     <Card className="overflow-hidden border-[var(--info)]/40 bg-[var(--info)]/[0.04]">
-      <div className="flex items-start gap-3 p-5 border-b border-[var(--info)]/30 bg-[var(--info)]/5">
+      <div className="flex items-start gap-3 p-5 border-b border-[var(--info)]/30 bg-[color-mix(in_srgb,var(--info)_var(--tint-weak),transparent)]">
         <AlertTriangle className="h-5 w-5 text-[var(--info)] mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -122,7 +122,7 @@ export function DesignReviewGate({ runId, run, onApproved }: Props) {
             size="default"
             onClick={handleReject}
             disabled={submitting}
-            className="text-[var(--danger)] hover:bg-[var(--danger)]/10"
+            className="text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_var(--tint),transparent)]"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
