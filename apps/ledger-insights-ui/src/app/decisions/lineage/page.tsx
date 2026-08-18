@@ -324,12 +324,16 @@ export default function LineageV2Page() {
             <GraphLegend
               nodeKinds={["precedent", "decision", "flagged"]}
               edgeKinds={["reuses", "teaches"]}
-              sizeHint={
+              sizeHint={(() => {
                 // State the scope explicitly. A 2-node graph in a 74vh panel
                 // reads as "broken" unless the view says what it actually
                 // holds. Counts are derived, never asserted.
-                `${graph.nodes.filter((n) => !graph.edges.some((e) => e.kind === "reuses" && e.target === n.id)).length} precedent chain(s) in scope · ${graph.nodes.length} nodes. Hubs are human rulings; the fan below each is every later reuse.`
-              }
+                const chains = graph.nodes.filter(
+                  (n) => !graph.edges.some((e) => e.kind === "reuses" && e.target === n.id),
+                ).length;
+                const nodes = graph.nodes.length;
+                return `${chains} precedent ${chains === 1 ? "chain" : "chains"} in scope · ${nodes} ${nodes === 1 ? "node" : "nodes"}. Hubs are human rulings; the fan below each is every later reuse.`;
+              })()}
             />
             {/* quick-view modal — centered, dims graph behind it */}
             {panel && (
