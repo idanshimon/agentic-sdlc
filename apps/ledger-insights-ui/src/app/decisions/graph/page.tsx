@@ -162,6 +162,9 @@ export default function DecisionsMapPage() {
     // does not balloon; centering is explicit because fit() alone does not
     // recentre after a capped zoom.
     layout.one("layoutstop", () => {
+      // Re-read container geometry before fitting; the panel can be measured
+      // before the filter-chip block above it has finished laying out.
+      cy.resize();
       cy.fit(undefined, 48);
       if (cy.zoom() > 1.15) cy.zoom(1.15);
       cy.center();

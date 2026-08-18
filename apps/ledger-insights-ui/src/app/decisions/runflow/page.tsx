@@ -183,10 +183,15 @@ export default function RunFlowPage() {
     } as cytoscape.LayoutOptions);
 
     // Fit on layoutstop, not synchronously after .run() — positions are not
-    // final until then, so an immediate fit measures stale geometry. Zoom capped
-    // so a single-decision run doesn't render one enormous node off-centre.
+    // final until then, so an immediate fit measures stale geometry.
     layout.one("layoutstop", () => {
+      // The container sits below a run-picker block; Cytoscape can measure its
+      // height before that block has finished laying out, so centring computes
+      // against stale geometry and the graph renders sunk toward the bottom.
+      // Re-read the container size first, then fit.
+      cy.resize();
       cy.fit(undefined, 48);
+      // cy.zoom(level) scales about the viewport ORIGIN, so re-centre after it.
       if (cy.zoom() > 1.15) cy.zoom(1.15);
       cy.center();
     });
