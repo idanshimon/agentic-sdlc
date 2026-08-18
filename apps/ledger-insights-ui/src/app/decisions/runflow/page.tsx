@@ -171,7 +171,7 @@ export default function RunFlowPage() {
     });
     cyRef.current = cy;
 
-    cy.layout({
+    const layout = cy.layout({
       name: "dagre",
       rankDir: "LR",
       nodeSep: 24,
@@ -180,15 +180,17 @@ export default function RunFlowPage() {
       animate: false,
       fit: true,
       padding: 40,
-    } as cytoscape.LayoutOptions).run();
+    } as cytoscape.LayoutOptions);
 
-    // dagre's `fit` runs before positions settle; re-fit after and cap zoom so a
-    // single-decision run doesn't render one enormous node floating off-centre.
-    cy.fit(undefined, 48);
-    if (cy.zoom() > 1.15) {
-      cy.zoom({ level: 1.15, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+    // Fit on layoutstop, not synchronously after .run() — positions are not
+    // final until then, so an immediate fit measures stale geometry. Zoom capped
+    // so a single-decision run doesn't render one enormous node off-centre.
+    layout.one("layoutstop", () => {
+      cy.fit(undefined, 48);
+      if (cy.zoom() > 1.15) cy.zoom(1.15);
       cy.center();
-    }
+    });
+    layout.run();
 
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");

@@ -143,7 +143,7 @@ export default function DecisionsMapPage() {
     });
     cyRef.current = cy;
 
-    cy.layout({
+    const layout = cy.layout({
       name: "fcose",
       quality: "default",
       animate: false,
@@ -153,17 +153,20 @@ export default function DecisionsMapPage() {
       nodeRepulsion: 6500,
       fit: true,
       padding: 40,
-    } as cytoscape.LayoutOptions).run();
+    } as cytoscape.LayoutOptions);
 
-    // fcose's own `fit` runs mid-layout, before the final node positions settle,
-    // which left the graph clustered to one side with nodes clipped at the
-    // container edge. Re-fit once the layout has stopped, and cap the zoom so a
-    // sparse graph (2-3 nodes) doesn't balloon to fill the canvas.
-    cy.fit(undefined, 48);
-    if (cy.zoom() > 1.15) {
-      cy.zoom({ level: 1.15, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+    // fcose settles asynchronously even with animate:false, so a synchronous
+    // cy.fit() right after .run() measures stale positions and leaves the graph
+    // jammed against one edge with half the canvas empty. Fit on layoutstop,
+    // when the final positions actually exist. Zoom is capped so a sparse graph
+    // does not balloon; centering is explicit because fit() alone does not
+    // recentre after a capped zoom.
+    layout.one("layoutstop", () => {
+      cy.fit(undefined, 48);
+      if (cy.zoom() > 1.15) cy.zoom(1.15);
       cy.center();
-    }
+    });
+    layout.run();
 
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
