@@ -1,8 +1,14 @@
+allowBuilds:
+  unrs-resolver: set this to true or false
+
 # pnpm workspace configuration for ledger-insights-ui.
 #
-# `onlyBuiltDependencies` predates this file's other contents: sharp and
-# unrs-resolver carry install scripts that pnpm blocks by default, and both are
-# required for the Next.js build.
+# `onlyBuiltDependencies` predates this file's other contents. unrs-resolver
+# carries an install script that pnpm blocks by default and is required for the
+# Next.js build. sharp is retained in the list defensively: at 0.35.3 it ships
+# prebuilt binaries and no longer runs an install script (which is why it left
+# pnpm's ignored-builds warning after the bump below), but the entry costs
+# nothing and keeps the build working if a future release reverts to compiling.
 #
 # The `overrides` block exists for ONE reason: since pnpm v10, `pnpm.overrides`
 # in package.json is IGNORED. Overrides must be declared here or they silently do
@@ -32,3 +38,8 @@ overrides:
   # brace-expansion resolves at two majors in this tree; both were flagged.
   brace-expansion@1: ">=1.1.18 <2"
   brace-expansion@5: ">=5.0.9 <6"
+  # sharp inherits four libvips CVEs (GHSA-f88m-g3jw-g9cj) below 0.35.0. It is
+  # pulled in transitively by next for image optimization and is listed in
+  # onlyBuiltDependencies above, so it compiles at install time — this bump is
+  # verified by a real build, not by the lockfile alone.
+  sharp: ">=0.35.3 <0.36"
