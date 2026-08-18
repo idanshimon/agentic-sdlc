@@ -2043,15 +2043,14 @@ async def admin_clear_team_ledger(team_id: str) -> dict:
         raise HTTPException(503, "ledger not configured")
     ids: list[str] = []
     try:
-        # NOTE: no partition_key= kwarg. On azure-cosmos async 4.x, passing
-        # partition_key (or enable_cross_partition_query) to query_items raises
-        # TypeError from ClientSession._request — which the except below would
-        # swallow into an empty result, silently reporting "0 entries found"
-        # for a team that has thousands. The partition scope is expressed by
-        # the WHERE clause instead; the SDK auto-detects it.
+        # partition_key= scopes the query to this team's partition, which is
+        # both cheaper and required for correctness here — an unscoped query
+        # would need enable_cross_partition_query and could return other teams'
+        # entries. Same shape as LedgerClient.find_precedent in ledger-core.
         async for item in _ledger._ledger.query_items(  # type: ignore[attr-defined]
             query="SELECT c.id FROM c WHERE c.team_id=@t",
             parameters=[{"name": "@t", "value": team_id}],
+            partition_key=team_id,
         ):
             if item.get("id"):
                 ids.append(item["id"])
