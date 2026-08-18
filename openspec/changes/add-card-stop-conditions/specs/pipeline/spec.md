@@ -4,6 +4,8 @@
 
 ### Requirement: A detectable stop condition MUST name its enforcing mechanism
 
+A stop condition marked detectable MUST name the mechanism that evaluates it.
+
 A stop condition that claims the pipeline can evaluate it, without naming what
 performs that evaluation, asserts a control that does not exist. This mirrors
 `requires_mechanism` on BLOCK-severity bundle rules.
@@ -24,6 +26,8 @@ performs that evaluation, asserts a control that does not exist. This mirrors
 - **AND** the pipeline MUST NOT report it as enforced
 
 ### Requirement: A breached stop condition MUST gate to a human
+
+A breached stop condition MUST gate to a human.
 
 Stop conditions narrow autonomy. They never widen it.
 
@@ -46,6 +50,8 @@ Stop conditions narrow autonomy. They never widen it.
 
 ### Requirement: Declared and evaluated conditions MUST be recorded distinctly
 
+Declared and evaluated conditions MUST be recorded distinctly.
+
 An unevaluated condition is not a passed condition. Conflating the two would let
 an undetectable boundary read as a satisfied one.
 
@@ -60,6 +66,8 @@ an undetectable boundary read as a satisfied one.
 - **AND** compliance views MUST distinguish "no conditions declared" from "all conditions satisfied"
 
 ### Requirement: Stop conditions MUST be additive to existing cards
+
+Stop conditions MUST be additive to existing cards.
 
 #### Scenario: cards without stop conditions keep working
 - **WHEN** an existing card carries no `stop_conditions` field
