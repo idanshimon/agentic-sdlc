@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from .accuracy import project_accuracy_score
 from .auth import (
     AuthConfigurationError, Principal, authorize_mutation, principal_from_request,
     require_team, validate_auth_configuration,
@@ -414,7 +415,21 @@ async def _run_autopilot(run: RunState) -> None:
                 precedent = await _ledger.find_precedent(
                     run.team_id, card.ambiguity_class, card.slot_value_hash,
                 )
-                score = getattr(precedent, "accuracy_score", 0.0) if precedent else 0.0
+                # accuracy_score is a READ-TIME projection, never a stored field.
+                # It was previously read straight off the entry, where it is
+                # declared with default 0.0 and assigned by nothing — so this
+                # branch could never grant autonomy. See the openspec change
+                # compute-accuracy-score-projection.
+                score = 0.0
+                if precedent:
+                    history = await _ledger.query_class_history(
+                        run.team_id, card.ambiguity_class,
+                    )
+                    score = project_accuracy_score(
+                        history,
+                        team_id=run.team_id,
+                        ambiguity_class=card.ambiguity_class,
+                    )
                 if not precedent or score < rule.threshold:
                     run.autopilot_overrides.append(card.card_id)
                     continue
