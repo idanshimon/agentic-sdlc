@@ -40,11 +40,21 @@ function label(e: LedgerEntry): string {
   return e.ambiguity_class ? `(${e.ambiguity_class})` : "(decision)";
 }
 
+/** Spine bucket for decisions carrying no stage. Not a stage — labelled as such. */
+export const UNSTAGED_KEY = "unstaged";
+
 /**
  * Build the run-flow graph for a single run. Stages present in the run become
- * spine nodes connected in canonical order; each decision hangs under its stage
- * (falling back to ambiguity grouping when stage is absent, which the current
- * ledger shape often is — resolver decisions carry ambiguity_class not stage).
+ * spine nodes connected in canonical order; each decision hangs under its stage.
+ *
+ * Decisions with no `stage` (resolver decisions carry `ambiguity_class`, not
+ * stage) collect under ONE terminal `unstaged` bucket. They are deliberately
+ * NOT bucketed by `ambiguity_class`: doing so made the spine axis mean two
+ * different things — pipeline stage for some rows, ambiguity class for others —
+ * so an operator could not tell whether spine position encoded *when* a
+ * decision happened or *what kind* it was. The axis now means exactly one
+ * thing: pipeline stage. Ambiguity class remains available on each node as
+ * `ambiguityClass` for color/filter encoding.
  */
 export function buildRunFlow(entries: LedgerEntry[], runId: string): RunFlowGraph {
   const runEntries = entries.filter((e) => e.run_id === runId && (!e.runtime_kind || e.runtime_kind === "stage_decision"));
@@ -55,9 +65,9 @@ export function buildRunFlow(entries: LedgerEntry[], runId: string): RunFlowGrap
       .map((e) => e.references_entry_id as string),
   );
 
-  // Group by stage; when stage is null, bucket by ambiguity_class so the run
-  // still reads as an ordered set of decision groups rather than one blob.
-  const groupKey = (e: LedgerEntry) => e.stage ?? (e.ambiguity_class ? `class:${e.ambiguity_class}` : "decisions");
+  // Group by stage only. Stage-less decisions go to one honest `unstaged`
+  // bucket rather than masquerading as stages (see fn doc).
+  const groupKey = (e: LedgerEntry) => e.stage ?? UNSTAGED_KEY;
   const groups = new Map<string, LedgerEntry[]>();
   for (const e of runEntries) {
     const k = groupKey(e);
@@ -66,10 +76,10 @@ export function buildRunFlow(entries: LedgerEntry[], runId: string): RunFlowGrap
     groups.set(k, arr);
   }
 
-  // Order groups: real stages by canonical rank, class-buckets after, stable.
+  // Order groups: real stages by canonical rank, `unstaged` always terminal.
   const orderedKeys = [...groups.keys()].sort((a, b) => {
-    const ra = a.startsWith("class:") ? STAGE_ORDER.length + 1 : stageRank(a);
-    const rb = b.startsWith("class:") ? STAGE_ORDER.length + 1 : stageRank(b);
+    const ra = a === UNSTAGED_KEY ? STAGE_ORDER.length + 1 : stageRank(a);
+    const rb = b === UNSTAGED_KEY ? STAGE_ORDER.length + 1 : stageRank(b);
     return ra - rb || a.localeCompare(b);
   });
 
@@ -79,7 +89,10 @@ export function buildRunFlow(entries: LedgerEntry[], runId: string): RunFlowGrap
   // Stage spine.
   orderedKeys.forEach((k, i) => {
     const spineId = `stage:${k}`;
-    const pretty = k.startsWith("class:") ? k.slice(6) : k;
+    const isUnstaged = k === UNSTAGED_KEY;
+    // The unstaged bucket is labelled as what it is, so nobody reads it as a
+    // ninth pipeline stage.
+    const pretty = isUnstaged ? "unstaged" : k;
     nodes.push({ id: spineId, kind: "class", label: pretty, degree: groups.get(k)!.length });
     if (i > 0) {
       const prev = `stage:${orderedKeys[i - 1]}`;

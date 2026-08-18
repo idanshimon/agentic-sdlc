@@ -19,7 +19,9 @@ function entry(over: Partial<LedgerEntry>): LedgerEntry {
 }
 
 describe("buildRunFlow", () => {
-  it("scopes to one run and buckets decisions by ambiguity_class when stage is null", () => {
+  it("collects stage-less decisions into ONE unstaged bucket, not per-class pseudo-stages", () => {
+    // D6 regression guard. This previously bucketed by ambiguity_class, which
+    // made spine position mean "stage" for some rows and "class" for others.
     const g = buildRunFlow(
       [
         entry({ id: "d1", run_id: "r1", ambiguity_class: "phi-classification" }),
@@ -30,10 +32,28 @@ describe("buildRunFlow", () => {
     );
     expect(g.runId).toBe("r1");
     expect(g.stats.decisions).toBe(2); // r2 excluded
-    // two class-bucket spine nodes
-    expect(g.nodes.filter((n) => n.kind === "class")).toHaveLength(2);
-    // each decision leaf attached to its bucket
+    const spine = g.nodes.filter((n) => n.kind === "class");
+    expect(spine).toHaveLength(1);
+    expect(spine[0].label).toBe("unstaged");
+    // no ambiguity class ever appears as a spine node
+    expect(spine.map((n) => n.label)).not.toContain("phi-classification");
+    // both decision leaves still attach
     expect(g.edges.filter((e) => e.kind === "in_run")).toHaveLength(2);
+    // class survives on the decision node for color/filter encoding
+    expect(g.nodes.find((n) => n.id === "d1")!.ambiguityClass).toBe("phi-classification");
+  });
+
+  it("keeps the unstaged bucket terminal, after every real stage", () => {
+    const g = buildRunFlow(
+      [
+        entry({ id: "u", run_id: "r1", ambiguity_class: "phi-classification" }),
+        entry({ id: "c", run_id: "r1", stage: "codegen" }),
+        entry({ id: "a", run_id: "r1", stage: "assessor" }),
+      ],
+      "r1",
+    );
+    const spine = g.nodes.filter((n) => n.kind === "class").map((n) => n.label);
+    expect(spine).toEqual(["assessor", "codegen", "unstaged"]);
   });
 
   it("orders real pipeline stages by canonical rank (assessor before codegen)", () => {
