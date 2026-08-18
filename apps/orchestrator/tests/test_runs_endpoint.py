@@ -59,7 +59,14 @@ def test_runs_empty_when_ledger_disabled(client, monkeypatch):
     monkeypatch.setattr(orch_main, "_ledger", None)
     resp = client.get("/api/runs")
     assert resp.status_code == 200
-    assert resp.json() == {"items": [], "count": 0}
+    # The endpoint returns a paging envelope, not a bare list, so the UI can
+    # distinguish "showing 50 of 214" from "there are only 50". With no ledger
+    # every count is zero and nothing is truncated.
+    body = resp.json()
+    assert body["items"] == []
+    assert body["count"] == 0
+    assert body["total"] == 0
+    assert body["truncated"] is False
 
 
 def test_runs_returns_summaries_and_orders_by_updated_at_desc(client, fake_ledger):

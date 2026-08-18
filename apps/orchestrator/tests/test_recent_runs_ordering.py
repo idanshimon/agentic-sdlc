@@ -93,7 +93,7 @@ async def test_newest_run_is_returned_when_container_exceeds_limit():
     docs = [_run_doc(i) for i in range(200)]  # oldest-first in storage order
     ledger = _FakeLedger(docs)
 
-    out = await query_recent_runs(ledger, team_id="team-cardiology", limit=50)
+    out = (await query_recent_runs(ledger, team_id="team-cardiology", limit=50))["items"]
 
     assert len(out) == 50
     assert out[0]["run_id"] == "run-0199", (
@@ -105,7 +105,7 @@ async def test_newest_run_is_returned_when_container_exceeds_limit():
 @pytest.mark.asyncio
 async def test_results_are_ordered_newest_first():
     docs = [_run_doc(i) for i in range(120)]
-    out = await query_recent_runs(_FakeLedger(docs), limit=25)
+    out = (await query_recent_runs(_FakeLedger(docs), limit=25))["items"]
 
     updated = [r["updated_at"] for r in out]
     assert updated == sorted(updated, reverse=True)
@@ -128,7 +128,7 @@ async def test_over_fetch_window_is_bounded():
 async def test_small_container_returns_everything():
     """Fewer runs than the limit — no truncation, still newest-first."""
     docs = [_run_doc(i) for i in range(7)]
-    out = await query_recent_runs(_FakeLedger(docs), limit=50)
+    out = (await query_recent_runs(_FakeLedger(docs), limit=50))["items"]
 
     assert len(out) == 7
     assert out[0]["run_id"] == "run-0006"
@@ -137,7 +137,7 @@ async def test_small_container_returns_everything():
 @pytest.mark.asyncio
 async def test_limit_is_still_respected():
     docs = [_run_doc(i) for i in range(300)]
-    out = await query_recent_runs(_FakeLedger(docs), limit=10)
+    out = (await query_recent_runs(_FakeLedger(docs), limit=10))["items"]
     assert len(out) == 10
 
 
@@ -152,4 +152,4 @@ async def test_cosmos_error_returns_empty_not_500():
     class _L:
         _runs = _Boom()
 
-    assert await query_recent_runs(_L(), limit=50) == []
+    assert (await query_recent_runs(_L(), limit=50))["items"] == []

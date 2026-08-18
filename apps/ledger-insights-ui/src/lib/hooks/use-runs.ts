@@ -27,7 +27,15 @@ export function useHealth() {
   });
 }
 
-export function useRuns() {
+export type RunsQuery = {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  status?: string;
+  team_id?: string;
+};
+
+export function useRuns(params: RunsQuery = {}) {
   const queryClient = useQueryClient();
 
   // Same demo-store-updated subscription as useRun, but for the list view.
@@ -42,10 +50,15 @@ export function useRuns() {
     return () => window.removeEventListener("demo-store-updated", handler);
   }, [queryClient]);
 
+  // params is part of the key so changing page/search refetches rather than
+  // serving a stale page under a new offset.
   return useQuery({
-    queryKey: ["runs"],
-    queryFn: () => orchestrator.listRuns(),
+    queryKey: ["runs", params],
+    queryFn: () => orchestrator.listRuns(params),
     refetchInterval: 5_000,
+    // Keep the previous page visible while the next one loads, so paging does
+    // not flash an empty table.
+    placeholderData: (prev) => prev,
   });
 }
 

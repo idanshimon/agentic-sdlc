@@ -2609,23 +2609,31 @@ async def list_runs(
     team_id: str | None = None,
     status: str | None = None,
     limit: int = 50,
+    offset: int = 0,
+    search: str | None = None,
 ) -> dict:
     """Recent pipeline-runs summaries, newest-first by updated_at.
 
     Powers the /runs index page. Best-effort: returns empty list on Cosmos error
     rather than 500'ing the dashboard. Supports team_id and status filters
-    (status accepts comma-separated values, e.g. status=running,awaiting_gate).
+    (status accepts comma-separated values, e.g. status=running,awaiting_gate),
+    plus `offset` for paging and `search` for free-text matching.
+
+    Returns `total` and `truncated` alongside the page so the UI can say
+    "50 of 214" instead of a bare "50" — a count the operator cannot
+    distinguish from "there are only 50 runs".
     """
     principal = _principal(request)
     team_id = _scoped_team(principal, team_id)
     if team_id: require_team(principal, team_id)
     elif _requires_explicit_team(principal): raise HTTPException(400, "team_id is required")
     if _ledger is None:
-        return {"items": [], "count": 0}
-    items = await query_recent_runs(
+        return {"items": [], "count": 0, "total": 0, "offset": 0,
+                "limit": limit, "truncated": False}
+    return await query_recent_runs(
         _ledger, team_id=team_id, status=status, limit=limit,
+        offset=offset, search=search,
     )
-    return {"items": items, "count": len(items)}
 
 
 @app.post("/api/admin/backfill-canonical-teams", tags=["Admin"])
