@@ -165,6 +165,11 @@ export default function DecisionsMapPage() {
       cy.fit(undefined, 48);
       if (cy.zoom() > 1.15) cy.zoom(1.15);
       cy.center();
+      // The legend occupies ~186px of the left gutter, so cy.center() — which
+      // centres on the FULL container — leaves the graph sitting right of the
+      // visual centre. Shift left by roughly half the legend width so the
+      // canvas the operator can actually see is what gets balanced.
+      cy.panBy({ x: -95, y: 0 });
     });
     layout.run();
 
