@@ -40,4 +40,11 @@ Run with `.venv/bin/python -m pytest apps/orchestrator/tests/ -q`.
 - [x] 4.1 Fix the caller my return-type change broke: `test_runs_empty_when_ledger_disabled` asserted the exact old dict. Rewritten against the envelope — a shape assertion, not a behaviour regression.
 - [x] 4.2 `npx tsc --noEmit` clean; `pnpm build` passes, all 30 routes.
 - [x] 4.3 653 tests pass, zero failures. `enforce_bundles.py` clean.
-- [ ] 4.4 Deploy and confirm on the live page. A green build is not evidence that the screen is right — the whole point of this change is what the operator sees.
+- [x] 4.4 Deploy and confirm on the live page. A green build is not evidence that the screen is right — the whole point of this change is what the operator sees.
+
+## Phase 5 — What the live check caught that the tests did not
+
+- [x] 5.1 **First deploy crash-looped.** Built with `apps/orchestrator/Dockerfile` and the app dir as context; the image built clean and the container died with `ModuleNotFoundError: No module named 'ledger_core'`. The correct file is `apps/orchestrator/Dockerfile.repo-root`, which exists for exactly this reason and documents it. Traffic was unaffected — the previous revision kept serving.
+- [x] 5.2 **`total` was a function of page size.** Live probe: `limit=5` → `total=50, truncated=true`; `limit=200` → `total=69, truncated=false`. Same corpus, two totals. Cause: the scan window was sized `limit * 10`, so a small page scanned a small window and `total` measured the window rather than the data. All 13 original tests passed against this because each used a single limit. Fixed to a fixed `SCAN_CAP`; added two regressions that vary the page size. Re-verified live: `total=69` at limits 5, 25 and 200.
+- [x] 5.3 **Two surfaces still showed the page size.** Reading the deployed page: the footer correctly said "Showing 1–50 of 69" while the RUNS KPI tile said "50" and the filter bar said "Showing 50 runs" — the exact string this change set out to fix, still on screen a few pixels above the new pager. Both derived from the `runs` array, which is now one page. Fixed.
+- [ ] 5.4 Re-verify the corrected UI on the live page.
