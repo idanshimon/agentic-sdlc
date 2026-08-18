@@ -102,11 +102,32 @@ jobs:
           fi
           echo "valid=true" >> "$GITHUB_OUTPUT"
 
+      # Grype scanning an SBOM has no on-disk path per finding, so it writes
+      # `artifactLocation.uri: ""` on every result. That is well-formed SARIF —
+      # it parses, and the gate below reads it correctly — but Code Scanning
+      # rejects it with `locationFromSarifResult: expected artifact location`
+      # and fails the whole upload (JOB_STATUS_CONFIGURATION_ERROR). The result
+      # was a gate that blocked on 33 real high findings while none of that
+      # evidence ever reached the Security tab: a verdict nobody can audit,
+      # which is the same failure class SUPPLY-001 exists to prevent.
+      #
+      # Normalization writes to a SEPARATE file. The gate must reason over
+      # exactly what grype produced, so the blocking decision and the published
+      # evidence are never derived from different documents.
+      - name: Normalize SARIF for Code Scanning
+        id: normalize
+        if: always() && steps.sarif.outputs.valid == 'true'
+        run: |
+          python3 scripts/normalize_grype_sarif.py \
+            --sarif "${{ steps.grype.outputs.sarif }}" \
+            --out ./results.normalized.sarif \
+            --fallback-uri sbom.spdx.json
+
       - name: Upload results to the Security tab
         if: always() && steps.sarif.outputs.valid == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ steps.grype.outputs.sarif }}
+          sarif_file: ./results.normalized.sarif
           category: supply-chain
 
       # Retain the SARIF as a build artifact. The Security tab shows the
