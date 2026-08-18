@@ -43,9 +43,11 @@
   --border-default: #243042;
   --border-muted: #1B232E;
   /* Load-bearing boundaries: floating panels, legends, cards over canvas.
-   * --border-default is ~1.4:1 on --surface, which reads as "no border" on a
-   * dark canvas. This is the tier for edges that must actually be seen. */
-  --border-strong: #4A5D78;
+   * --border-default is 1.44:1 against the page bg, which reads as "no border"
+   * on a dark canvas. This tier clears the 3:1 WCAG threshold for non-text UI
+   * boundaries at 4.01:1 — two independent visual reviews called 2.86:1
+   * (#4A5D78) "subtle, not crisp", so the bar is measured, not eyeballed. */
+  --border-strong: #5E7490;
 
   /* Text */
   --text: #E6EDF3;
