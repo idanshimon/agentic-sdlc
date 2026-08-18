@@ -170,6 +170,31 @@ async def test_no_match_returns_empty_not_everything():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
+async def test_total_is_independent_of_page_size():
+    """The same corpus must report the same total at any limit.
+
+    Caught on the live deployment: the scan window was sized `limit * 10`, so
+    limit=5 reported total=50 while limit=200 reported the true 69, and
+    `truncated` fired spuriously on small pages. A count that changes when you
+    change the page size is not a count.
+    """
+    docs = _docs(69)
+    small = await query_recent_runs(_FakeLedger(docs), limit=5)
+    large = await query_recent_runs(_FakeLedger(docs), limit=200)
+    assert small["total"] == large["total"] == 69
+    assert small["truncated"] is False, "69 runs fit the window; nothing is truncated"
+
+
+@pytest.mark.asyncio
+async def test_truncated_does_not_fire_on_small_pages():
+    docs = _docs(80)
+    for lim in (1, 5, 10, 50):
+        res = await query_recent_runs(_FakeLedger(docs), limit=lim)
+        assert res["total"] == 80, f"total wrong at limit={lim}"
+        assert res["truncated"] is False, f"spurious truncation at limit={lim}"
+
+
+@pytest.mark.asyncio
 async def test_truncated_is_false_when_everything_fits():
     res = await query_recent_runs(_FakeLedger(_docs(60)), limit=50)
     assert res["truncated"] is False, "60 runs fit inside the scan window"

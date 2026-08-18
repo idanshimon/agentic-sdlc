@@ -467,7 +467,14 @@ async def query_recent_runs(
     # into an unbounded scan as the container grows. When the container exceeds
     # the window, `truncated` is reported so the caller can tell "these are the
     # newest N" from "this is everything".
-    fetch_cap = max(limit, min(_RECENT_RUNS_SCAN_CAP, limit * 10))
+    # Scan a FIXED window, independent of `limit`. An earlier version sized it
+    # as `min(SCAN_CAP, limit * 10)`, which made `total` a function of the page
+    # size: limit=5 reported total=50 while limit=200 reported the true 69. A
+    # count that changes when you change the page size is not a count, and it
+    # made `truncated` fire spuriously on small pages. Verified against live
+    # data before and after this fix.
+    fetch_cap = _RECENT_RUNS_SCAN_CAP
+
     query = (
         f"SELECT TOP {fetch_cap} * FROM c WHERE {' AND '.join(clauses)}"
     )
