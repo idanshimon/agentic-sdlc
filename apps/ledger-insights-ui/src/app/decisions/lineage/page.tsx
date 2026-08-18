@@ -312,7 +312,7 @@ export default function LineageV2Page() {
         description="Where the agent's answers came from. Each hub is a human ruling; the fan below it is every later decision the agent resolved the same way. Click any node to focus its learning loop — the precedent above it and the reuse below — and open the ledger record."
       />
 
-      <div className="relative h-[74vh] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg)]">
+      <div className="relative h-[74vh] overflow-hidden rounded-lg border-2 border-[var(--border-strong)] bg-[var(--bg)]">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>
         ) : empty ? (

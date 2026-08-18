@@ -282,7 +282,7 @@ export default function RunFlowPage() {
         )}
       </div>
 
-      <div className="relative h-[70vh] overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg)]">
+      <div className="relative h-[70vh] overflow-hidden rounded-lg border-2 border-[var(--border-strong)] bg-[var(--bg)]">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>
         ) : !runId || elements.length === 0 ? (
