@@ -1,7 +1,8 @@
 # bundle-ci-enforcement Specification
 
 ## Purpose
-TBD - created by archiving change add-bundle-ci-enforcement. Update Purpose after archive.
+Enforcing standards bundles on a GitHub-native CI surface independent of the orchestrator: enforcement surface as a declared per-rule property, fail-closed bundle loading, PINS-consistent version resolution, and the workflow that becomes a merge gate only when configured as a required check.
+
 ## Requirements
 ### Requirement: Bundle rules MUST be enforceable on a GitHub-native CI surface independent of the orchestrator
 

@@ -1,7 +1,8 @@
 # autonomous-review-loop Specification
 
 ## Purpose
-TBD - created by archiving change add-autonomous-review-loop. Update Purpose after archive.
+Bounded remediation after a review FAIL: a hard attempt ceiling with escalation on exhaustion, auto-merge restricted to Tier-A repositories, forced human escalation on PHI/auth/explicit-deny blockers, advisory default for unconfigured repositories, and an auditable ledger entry per hop.
+
 ## Requirements
 ### Requirement: A review FAIL verdict MUST be routed to bounded codegen remediation
 

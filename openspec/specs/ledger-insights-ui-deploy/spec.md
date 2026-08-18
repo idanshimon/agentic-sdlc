@@ -1,7 +1,8 @@
 # ledger-insights-ui-deploy Specification
 
 ## Purpose
-TBD - created by archiving change add-ledger-insights-ui-deploy. Update Purpose after archive.
+Building and deploying the operator dashboard: NEXT_PUBLIC_* threaded as build args, monorepo-root build context, Container App ingress and scale, server-side-only App Insights with PHI-safe defaults, and a smoke test that gates archive.
+
 ## Requirements
 ### Requirement: Dockerfile threads NEXT_PUBLIC_* as build args
 

@@ -1,7 +1,8 @@
 # config-editing-plane Specification
 
 ## Purpose
-TBD - created by archiving change add-config-editing-plane. Update Purpose after archive.
+Governed configuration editing: agent bundle subscriptions drive ledger bundle_refs, edits open a pull request, bundle edits are PR-only, and the write path is allowlist-confined and never fabricates a result.
+
 ## Requirements
 ### Requirement: Agent bundle subscriptions drive ledger bundle_refs
 

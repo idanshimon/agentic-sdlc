@@ -1,7 +1,8 @@
 # ledger-insights-ui-economics Specification
 
 ## Purpose
-TBD - created by archiving change ship-operator-grade-pipeline-workflow. Update Purpose after archive.
+The economics surface: backed by a real aggregation endpoint that degrades gracefully on upstream failure rather than inventing figures.
+
 ## Requirements
 ### Requirement: Economics page MUST be backed by a real aggregation endpoint
 

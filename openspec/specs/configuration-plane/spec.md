@@ -1,17 +1,8 @@
 # configuration-plane Specification
 
 ## Purpose
-Let a customer instantiate **their** governed AI operating model as configuration
-— not by forking the reference repo. The configuration plane makes four things
-authorable and enforceable: the **organization model** (who owns which decisions),
-the **autonomy matrix** (how much AI is trusted per decision-class × team), the
-**standards bundles** (the rules, with blast-class + PHI locks), and the **model
-policy** (which models may run which stages, and spend ceilings). Together they
-make ONE acceptance query return complete, real, cross-surface rows: *"every AI
-decision on PHI-classified data in the last 30 days, the governing rule version,
-the deciding actor, and the cost."* Every object is opt-in (never auto-loaded),
-edited through governed PRs (never live-mutated), and PHI/auth controls are
-hard-locked so no configuration edit can weaken them.
+COE-authored configuration: the organization model, authorable bundles with blast class and PHI lock, the autonomy matrix as configuration, model-policy enforcement, a unified compliance query surface, and opt-in objects that are never silently auto-loaded.
+
 ## Requirements
 ### Requirement: COE-authored organization model
 The system SHALL read an authorable `config/org.yaml` defining departments,

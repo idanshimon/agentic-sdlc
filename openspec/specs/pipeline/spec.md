@@ -1,7 +1,8 @@
 # pipeline Specification
 
 ## Purpose
-TBD - created by archiving change wire-real-llm-providers. Update Purpose after archive.
+Durable pipeline execution: keyless model-provider auth, live-provider enforcement independent of auth profile, driver tasks that survive garbage collection, event persistence, and recovery leases that tolerate the owner's own writes.
+
 ## Requirements
 ### Requirement: The pipeline MUST support keyless model-provider auth
 The Azure OpenAI provider MUST support keyless authentication via Managed

@@ -1,7 +1,8 @@
 # ledger-decision-audit Specification
 
 ## Purpose
-TBD - created by archiving change ship-operator-grade-pipeline-workflow. Update Purpose after archive.
+Ledger auditability: every entry pins its prompt resolution chain, the schema carries an entry_type discriminator, and the orchestrator exposes a run-scoped read endpoint.
+
 ## Requirements
 ### Requirement: Every decision ledger entry MUST pin its prompt resolution chain
 

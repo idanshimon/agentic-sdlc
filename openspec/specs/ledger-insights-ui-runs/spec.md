@@ -1,7 +1,8 @@
 # ledger-insights-ui-runs Specification
 
 ## Purpose
-TBD - created by archiving change ship-operator-grade-pipeline-workflow. Update Purpose after archive.
+The run-detail surface: live pipeline progress without manual refresh, a sticky needs-attention banner at a gate, per-card resolver decisions with a finalize action, whole-stage Design Review approval, and an artifacts panel with operator affordances.
+
 ## Requirements
 ### Requirement: Run-detail page MUST surface live pipeline progress without manual refresh
 

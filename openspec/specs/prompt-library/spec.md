@@ -1,7 +1,8 @@
 # prompt-library Specification
 
 ## Purpose
-TBD - created by archiving change add-multi-persona-prompt-library. Update Purpose after archive.
+Versioned YAML prompts in git: inheritance resolved most-specific to global, every stage_decision entry pinning its resolution chain, graceful rendering of legacy entries without a chain, and a catalog queryable by persona and stage.
+
 ## Requirements
 ### Requirement: Prompts MUST be stored as versioned YAML files in git
 

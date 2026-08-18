@@ -1,7 +1,8 @@
 # review-scan Specification
 
 ## Purpose
-TBD - created by archiving change harden-codegen-governance-quality. Update Purpose after archive.
+Review-stage quality gating: context-scoped PHI cleartext-logging rules, blocking generated code that cannot run, and requiring delivered code and tests to use the delivered module layout.
+
 ## Requirements
 ### Requirement: PHI cleartext-logging rules MUST be context-scoped
 A PHI identifier rule (e.g. security/v0.1.0/PHI-001) MUST flag only cleartext

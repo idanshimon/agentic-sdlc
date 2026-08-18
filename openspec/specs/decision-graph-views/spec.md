@@ -1,7 +1,8 @@
 # decision-graph-views Specification
 
 ## Purpose
-TBD - created by archiving change add-decision-graph-views. Update Purpose after archive.
+Read-only graph lenses over the Decision Ledger: every node drills through to its full audited record, the learning loop renders as a distinct directed lineage, and the map stays legible under load.
+
 ## Requirements
 ### Requirement: The ledger MUST offer graph lenses that read from the same ledger and never write
 

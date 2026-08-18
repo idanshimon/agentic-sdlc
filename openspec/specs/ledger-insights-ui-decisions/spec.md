@@ -1,7 +1,8 @@
 # ledger-insights-ui-decisions Specification
 
 ## Purpose
-TBD - created by archiving change ship-operator-grade-pipeline-workflow. Update Purpose after archive.
+The decisions surface: prompt-chain attribution on every entry and filtering by team.
+
 ## Requirements
 ### Requirement: Decisions page MUST surface prompt chain attribution on every entry
 

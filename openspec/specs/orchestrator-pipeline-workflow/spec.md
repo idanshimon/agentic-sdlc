@@ -1,7 +1,8 @@
 # orchestrator-pipeline-workflow Specification
 
 ## Purpose
-TBD - created by archiving change ship-operator-grade-pipeline-workflow. Update Purpose after archive.
+The run lifecycle contract: state persistence to Cosmos on every stage event, a finalize endpoint for resolver-gate closure, per-card versus gate-level approval semantics, and zombie-run cleanup.
+
 ## Requirements
 ### Requirement: Pipeline run state MUST persist to Cosmos on every stage event
 
