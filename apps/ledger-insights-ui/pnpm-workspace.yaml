@@ -1,3 +1,34 @@
+# pnpm workspace configuration for ledger-insights-ui.
+#
+# `onlyBuiltDependencies` predates this file's other contents: sharp and
+# unrs-resolver carry install scripts that pnpm blocks by default, and both are
+# required for the Next.js build.
+#
+# The `overrides` block exists for ONE reason: since pnpm v10, `pnpm.overrides`
+# in package.json is IGNORED. Overrides must be declared here or they silently do
+# nothing — `pnpm install` exits 0, prints no warning, and resolves the old
+# versions. The tell is that the regenerated pnpm-lock.yaml contains no
+# `overrides:` key at all.
+#
+# Every override below pins a TRANSITIVE dependency that grype flagged at high
+# severity under security/v0.2.0/SUPPLY-001. None are direct dependencies, so
+# they cannot be bumped from the dependency list.
+#
+# Each range stays WITHIN the currently-resolved major. `npm view <pkg> version`
+# reports the latest overall, which for several of these is a major jump
+# (undici 7 -> 8, nanoid 3 -> 6, js-yaml 4 -> 5). Forcing a major on a
+# transitive dependency is how a lockfile update turns into a broken build, and
+# every one of these had a patched release inside its existing major.
 onlyBuiltDependencies:
   - sharp
   - unrs-resolver
+
+overrides:
+  undici: ">=7.29.0 <8"
+  nanoid: ">=3.3.18 <4"
+  postcss: ">=8.5.26 <9"
+  js-yaml: ">=4.3.1 <5"
+  fast-uri: ">=3.1.5 <4"
+  # brace-expansion resolves at two majors in this tree; both were flagged.
+  brace-expansion@1: ">=1.1.18 <2"
+  brace-expansion@5: ">=5.0.9 <6"
