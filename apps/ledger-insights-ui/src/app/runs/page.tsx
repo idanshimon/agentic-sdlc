@@ -157,7 +157,7 @@ function RunsPageInner() {
             </div>
           ) : (
           <>
-          <RunsInsights runs={visible} />
+          <RunsInsights runs={visible} total={total} />
 
           <RunsFilterBar
             runs={runs}
