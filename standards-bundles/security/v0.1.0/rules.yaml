@@ -28,6 +28,19 @@ rules:
     #                              mask(patient_id), patient_id_redacted()).
     # A match requires context_pattern AND pattern AND NOT safe_wrapper_pattern.
     # This makes the rule match its own test cases (below) exactly.
+    #
+    # `quoted_literal_exempt` adds the DESCRIBES-vs-COMMITS distinction: a line
+    # whose logging SINK is itself inside a string literal is describing a
+    # violation, not committing one. Without it this rule had a 100% false-
+    # positive rate on this repo — 24 findings, 0 real leaks — and, decisively,
+    # it BLOCKED ITS OWN TEST SUITE (test_phi001_context_scoped.py's fixtures
+    # are quoted `logger.info(...)` strings). A gate that cannot survive its own
+    # tests trains people to route around it.
+    # The check is sink-position based, not token based: in a real leak the PHI
+    # token is usually inside the quoted format string, so quoting the TOKEN
+    # proves nothing. ANY bare sink on the line still BLOCKS. See
+    # scripts/tests/test_quoted_literal_exempt.py for the evasion cases.
+    quoted_literal_exempt: true
     context_pattern: '(?i)\b(logger|logging|log|print)\b|\.(info|debug|warning|warn|error|critical|exception|write)\s*\(|sys\.std(out|err)'
     pattern: '(?i)(?<![\w(])\b(MRN|patient_id|SSN|DOB)\b(?!\s*\()'
     safe_wrapper_pattern: '(?i)\b(redact|mask|hash|hash_id|deidentify|de_identify|scrub|anonymize|_redact|redacted)\w*\s*\(|(MRN|patient_id|SSN|DOB)_?(redacted|masked|hashed|hash)'
