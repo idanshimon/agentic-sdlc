@@ -31,6 +31,7 @@ import {
   VITALS_SUMMARY,
 } from "./fixtures";
 import type { RunState, StageEvent, AmbiguityCard } from "@/lib/types";
+import GRAPH_FIXTURE from "./graph-fixture.json";
 
 const DEMO_RUN_PREFIX = "demo-";
 const STORAGE_KEY = "agentic-sdlc.demo.runs";
@@ -613,5 +614,19 @@ export function approveDemoRun(runId: string) {
  * synthetic filler.
  */
 export function demoLedgerEntries() {
+  // GRAPH_FIXTURE is the richer, graph-shaped scenario generated from
+  // scripts/seed_graph_demo.py (see scripts/capture_graph_demo_fixture.py).
+  // It exercises every edge type the decision graph can draw — grounded_in,
+  // of_class, in_run, reuses, teaches — which VITALS_LEDGER does not: that
+  // one has no bundle_refs and no precedent_refs, so the map renders without
+  // hubs or a learning loop.
+  //
+  // Both are sample data and must be narrated as seeded, never as live
+  // telemetry.
+  return GRAPH_FIXTURE as unknown as import("@/lib/types").LedgerEntry[];
+}
+
+/** The original 6-entry Phase-A slice, kept for the runs surfaces. */
+export function demoVitalsLedger() {
   return VITALS_LEDGER as unknown as import("@/lib/types").LedgerEntry[];
 }

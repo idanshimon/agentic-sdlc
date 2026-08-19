@@ -1,0 +1,364 @@
+[
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Portal messages classified PHI-high; encrypt at rest + field-level access log",
+    "rationale": "Patient free-text messages can contain diagnoses. Lead call: treat as PHI-high.",
+    "run_id": "meridian-run-0001",
+    "ambiguity_class": "phi-classification",
+    "bundle_refs": [
+      "security/v0.1.0/PHI-001"
+    ],
+    "runtime_kind": "stage_decision",
+    "team_id": "team-demo",
+    "id": "8f6c8342-6b96-5290-ac06-702cf1f3bf7d",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:07:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Patient auth via SMART-on-FHIR OAuth2 + step-up MFA for record export",
+    "rationale": "Export of a full record is the high-risk action; require step-up MFA there only.",
+    "run_id": "meridian-run-0001",
+    "ambiguity_class": "auth-policy",
+    "bundle_refs": [
+      "security/v0.1.0/AUTH-002",
+      "security/v0.1.0/PHI-001"
+    ],
+    "runtime_kind": "stage_decision",
+    "team_id": "team-demo",
+    "id": "3c6bbf8c-e075-5708-abca-1e11f2c9d336",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:14:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Message retention 7 years to match clinical record policy, soft-delete + purge job",
+    "rationale": "Align portal retention with the underlying clinical record; no shorter.",
+    "run_id": "meridian-run-0001",
+    "ambiguity_class": "data-retention",
+    "bundle_refs": [
+      "privacy/v0.1.0/RETAIN-004"
+    ],
+    "runtime_kind": "stage_decision",
+    "team_id": "team-demo",
+    "id": "2a192501-4293-5bd7-ae49-15b74fc3ed8d",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:21:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "architect-agent@meridian",
+      "display_name": "Architect Agent"
+    },
+    "decision": "REST resources kebab-case, FHIR resource names preserved verbatim",
+    "rationale": "Consistency with existing FHIR gateway conventions.",
+    "run_id": "meridian-run-0001",
+    "ambiguity_class": "naming-convention",
+    "bundle_refs": [
+      "architect/v0.1.0/NAMING-001"
+    ],
+    "runtime_kind": "stage_decision",
+    "team_id": "team-demo",
+    "id": "c448bf7c-837e-556d-bfda-967024d09ad6",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:28:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "assessor-agent@meridian",
+      "display_name": "Assessor Agent"
+    },
+    "decision": "Appointment notes classified PHI-high (reused founding precedent)",
+    "rationale": "Auto-resolved from run-0001 human precedent: patient free-text is PHI-high.",
+    "run_id": "meridian-run-0002",
+    "ambiguity_class": "phi-classification",
+    "bundle_refs": [
+      "security/v0.1.0/PHI-001"
+    ],
+    "runtime_kind": "stage_decision",
+    "precedent_refs": [
+      "8f6c8342-6b96-5290-ac06-702cf1f3bf7d"
+    ],
+    "team_id": "team-demo",
+    "id": "b0a9736e-389e-5f9b-a6db-f49d30ed29cd",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:35:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "assessor-agent@meridian",
+      "display_name": "Assessor Agent"
+    },
+    "decision": "Appointment booking auth via SMART-on-FHIR OAuth2 (reused precedent)",
+    "rationale": "Auto-resolved from run-0001 auth precedent.",
+    "run_id": "meridian-run-0002",
+    "ambiguity_class": "auth-policy",
+    "bundle_refs": [
+      "security/v0.1.0/AUTH-002"
+    ],
+    "runtime_kind": "stage_decision",
+    "precedent_refs": [
+      "3c6bbf8c-e075-5708-abca-1e11f2c9d336"
+    ],
+    "team_id": "team-demo",
+    "id": "28697563-5379-58dc-b676-9fff150ba1ee",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:42:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "assessor-agent@meridian",
+      "display_name": "Assessor Agent"
+    },
+    "decision": "Appointment endpoints kebab-case (reused precedent)",
+    "rationale": "Auto-resolved from architect naming precedent.",
+    "run_id": "meridian-run-0002",
+    "ambiguity_class": "naming-convention",
+    "bundle_refs": [
+      "architect/v0.1.0/NAMING-001"
+    ],
+    "runtime_kind": "stage_decision",
+    "precedent_refs": [
+      "c448bf7c-837e-556d-bfda-967024d09ad6"
+    ],
+    "team_id": "team-demo",
+    "id": "6382f807-56ff-53cd-8959-0550c511f777",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:49:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "architect-agent@meridian",
+      "display_name": "Architect Agent"
+    },
+    "decision": "Appointment sync SLA 5min p99 \u2014 flagged for lead review",
+    "rationale": "No precedent for sync latency; proposing 5min, needs lead sign-off.",
+    "run_id": "meridian-run-0002",
+    "ambiguity_class": "sla-binding",
+    "bundle_refs": [
+      "architect/v0.1.0/SLA-007"
+    ],
+    "runtime_kind": "stage_decision",
+    "team_id": "team-demo",
+    "id": "c1ed998d-3dfe-5fe2-b73b-ca4f4a28c841",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T09:56:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "assessor-agent@meridian",
+      "display_name": "Assessor Agent"
+    },
+    "decision": "Billing records classified PHI-high (reused precedent)",
+    "rationale": "Auto-resolved from founding PHI precedent.",
+    "run_id": "meridian-run-0003",
+    "ambiguity_class": "phi-classification",
+    "bundle_refs": [
+      "security/v0.1.0/PHI-001"
+    ],
+    "runtime_kind": "stage_decision",
+    "precedent_refs": [
+      "8f6c8342-6b96-5290-ac06-702cf1f3bf7d"
+    ],
+    "team_id": "team-demo",
+    "id": "b3e0c91e-08cb-5887-9b4f-248d8d8b2d03",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T10:03:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "assessor-agent@meridian",
+      "display_name": "Assessor Agent"
+    },
+    "decision": "Billing data retention set to 3 years (SHORTER than clinical policy)",
+    "rationale": "Agent guessed 3y from generic finance norms \u2014 did NOT reuse the 7y precedent.",
+    "run_id": "meridian-run-0003",
+    "ambiguity_class": "data-retention",
+    "bundle_refs": [
+      "privacy/v0.1.0/RETAIN-004"
+    ],
+    "runtime_kind": "stage_decision",
+    "team_id": "team-demo",
+    "id": "ffefbcc0-742e-5d7c-b9a7-270e30069303",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T10:10:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "agent",
+      "id": "assessor-agent@meridian",
+      "display_name": "Assessor Agent"
+    },
+    "decision": "Billing export auth step-up MFA (reused precedent)",
+    "rationale": "Auto-resolved from founding auth precedent.",
+    "run_id": "meridian-run-0003",
+    "ambiguity_class": "auth-policy",
+    "bundle_refs": [
+      "security/v0.1.0/AUTH-002"
+    ],
+    "runtime_kind": "stage_decision",
+    "precedent_refs": [
+      "3c6bbf8c-e075-5708-abca-1e11f2c9d336"
+    ],
+    "team_id": "team-demo",
+    "id": "09eac50c-3d1e-5779-820e-36183e0ac82e",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "created_at": "2026-08-12T10:17:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Flagged: billing retention must match 7y clinical policy, not 3y",
+    "rationale": "This contradicts RETAIN-004 + the run-0001 precedent. Don't reuse it.",
+    "runtime_kind": "decision_flagged",
+    "references_entry_id": "ffefbcc0-742e-5d7c-b9a7-270e30069303",
+    "run_id": "meridian-teaching",
+    "team_id": "team-demo",
+    "id": "d17f6be2-2191-53c7-b5ad-8751722f1b77",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "bundle_refs": [],
+    "created_at": "2026-08-12T10:24:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Endorsed the PHI-high founding call",
+    "rationale": "Correct and worth reusing.",
+    "runtime_kind": "feedback_thumbs",
+    "references_entry_id": "8f6c8342-6b96-5290-ac06-702cf1f3bf7d",
+    "run_id": "meridian-teaching",
+    "feedback_kind": "thumbs_up",
+    "team_id": "team-demo",
+    "id": "d1c3a6d6-742d-5059-a926-93b9e5aa0601",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "bundle_refs": [],
+    "created_at": "2026-08-12T10:31:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Endorsed the appointments PHI reuse",
+    "rationale": "Good auto-resolution.",
+    "runtime_kind": "feedback_thumbs",
+    "references_entry_id": "b0a9736e-389e-5f9b-a6db-f49d30ed29cd",
+    "run_id": "meridian-teaching",
+    "feedback_kind": "thumbs_up",
+    "team_id": "team-demo",
+    "id": "5f6a7cf0-8b0b-558f-a57d-c24320dd952e",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "bundle_refs": [],
+    "created_at": "2026-08-12T10:38:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Replay SLA decision against updated SLA-007 rule",
+    "rationale": "SLA-007 was revised; re-evaluate the 5min p99 target.",
+    "runtime_kind": "replay_requested",
+    "references_entry_id": "c1ed998d-3dfe-5fe2-b73b-ca4f4a28c841",
+    "run_id": "meridian-teaching",
+    "team_id": "team-demo",
+    "id": "f0b7280a-aa5a-5573-82e4-81c42b91984e",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "bundle_refs": [],
+    "created_at": "2026-08-12T10:45:00+00:00"
+  },
+  {
+    "actor": {
+      "kind": "human",
+      "id": "idan@contoso.com",
+      "display_name": "Idan (Lead)"
+    },
+    "decision": "Paused autopilot for data-retention across Meridian",
+    "rationale": "Retention has legal exposure; lead will decide each one until further notice.",
+    "runtime_kind": "class_paused",
+    "references_entry_id": "2a192501-4293-5bd7-ae49-15b74fc3ed8d",
+    "run_id": "meridian-teaching",
+    "paused_class": "data-retention",
+    "ambiguity_class": "data-retention",
+    "team_id": "team-demo",
+    "id": "34bf2772-fbba-5a22-a571-338425768eb3",
+    "entry_type": "runtime",
+    "phi_class": "none",
+    "cost_usd": 0,
+    "model_used": "",
+    "bundle_refs": [],
+    "created_at": "2026-08-12T10:52:00+00:00"
+  }
+]
