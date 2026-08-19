@@ -108,4 +108,28 @@ describe("filterRunOptions", () => {
   it("is case-insensitive", () => {
     expect(filterRunOptions(opts, "ONCOLOGY")).toHaveLength(1);
   });
+
+  it("omits runs that contain no stage decisions (would render an empty canvas)", () => {
+    // Regression guard. Teaching signals carry a run_id and can be the most
+    // recent activity in the ledger. buildRunFlow only draws stage decisions,
+    // so a teaching-only run offered by the picker becomes the newest-first
+    // default and renders an empty graph while claiming "5 decisions".
+    const opts = buildRunOptions([
+      e({ run_id: "real-run", created_at: "2026-08-12T09:00:00Z" }),
+      e({
+        run_id: "teaching-only",
+        created_at: "2026-08-12T11:00:00Z", // newer — would sort first
+        runtime_kind: "decision_flagged",
+        references_entry_id: "x",
+      }),
+      e({
+        run_id: "teaching-only",
+        created_at: "2026-08-12T11:05:00Z",
+        runtime_kind: "feedback_thumbs",
+        feedback_kind: "thumbs_up",
+        references_entry_id: "x",
+      }),
+    ]);
+    expect(opts.map((o) => o.runId)).toEqual(["real-run"]);
+  });
 });

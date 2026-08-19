@@ -48,6 +48,20 @@ export function buildRunOptions(
     byRun.set(e.run_id, [...(byRun.get(e.run_id) ?? []), e]);
   }
 
+  // A run is only offerable if it contains at least one STAGE DECISION, which
+  // is what buildRunFlow() actually draws. Teaching signals (flags, thumbs,
+  // replays, class pauses) carry a run_id too and can be the most RECENT
+  // activity — so without this filter the picker's newest-first default lands
+  // on a teaching-only bucket and the canvas renders empty while the picker
+  // confidently reports "5 decisions". Offering a run that cannot render is
+  // worse than hiding it: it looks like the view is broken.
+  for (const [runId, list] of [...byRun]) {
+    const renderable = list.some(
+      (e) => !e.runtime_kind || e.runtime_kind === "stage_decision",
+    );
+    if (!renderable) byRun.delete(runId);
+  }
+
   const options: RunOption[] = [];
   for (const [runId, list] of byRun) {
     const sorted = [...list].sort((a, b) =>
