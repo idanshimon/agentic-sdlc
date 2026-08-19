@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Designing an agentic pipeline that survives audit</title>
+<style>
+  :root {
+    --bg:#0B0F14; --surface:#11161D; --elevated:#161D26; --overlay:#1E2632;
+    --border:#243042; --border-strong:#5E7490;
+    --text:#E6EDF3; --text-secondary:#9FB0C3; --text-tertiary:#697789;
+    --primary:#0EA5E9; --success:#22C55E; --warning:#F59E0B; --danger:#EF4444;
+    --plane-standards:#A78BFA; --plane-pipeline:#0EA5E9; --plane-ledger:#22C55E; --plane-agenthq:#F472B6;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", "Menlo", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; height:100%; background: var(--bg); }
+  body { color: var(--text); font: 18px/1.6 var(--sans); overflow: hidden; }
+  code, .mono, .m { font-family: var(--mono); font-variant-ligatures: none; }
+
+  .deck { position: fixed; inset: 0; }
+  section {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; justify-content: center;
+    padding: 6vh 8vw; overflow: auto;
+  }
+  section.active { display: flex; }
+  section.quiet { background:
+      radial-gradient(120% 90% at 50% 40%, #0C1218 0%, #080B0F 100%); }
+
+  h1 { font-size: clamp(40px, 5vw, 62px); font-weight: 650; margin: 0 0 18px; letter-spacing: -1.4px; line-height: 1.05; }
+  h2 { font-size: clamp(30px, 3.4vw, 44px); font-weight: 640; margin: 0 0 22px; letter-spacing: -0.6px; line-height: 1.1; }
+  h3 { font-size: 19px; font-weight: 640; margin: 0 0 10px; color: var(--text); }
+  p  { font-size: clamp(18px, 1.5vw, 21px); color: var(--text-secondary); max-width: 60ch; margin: 0 0 14px; }
+  .lede { font-size: clamp(20px, 2vw, 26px); color: var(--text-secondary); max-width: 62ch; }
+  .kicker { color: var(--primary); font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 14px; }
+  .caption { color: var(--text-tertiary); font-size: 15px; margin-top: 22px; }
+  strong { color: var(--text); }
+  .big { font-size: clamp(34px, 4vw, 52px); font-weight: 650; letter-spacing: -1px; line-height: 1.15; max-width: 20ch; }
+
+  .row { display: flex; gap: 22px; flex-wrap: wrap; }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; max-width: 1200px; }
+  .cols3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; max-width: 1200px; }
+  .cols4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; max-width: 1280px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 20px 22px; }
+  .card.sub { background: var(--elevated); }
+  .card h3 { margin-bottom: 8px; }
+  .card p, .card li { font-size: 16px; margin: 0; }
+  ul { color: var(--text-secondary); padding-left: 20px; margin: 8px 0; font-size: 17px; }
+  li { margin: 7px 0; }
+
+  .tag { display: inline-block; font-family: var(--mono); font-size: 12px; padding: 3px 9px; border-radius: 6px; letter-spacing: .3px; border: 1px solid var(--border-strong); color: var(--text-secondary); }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align: middle; }
+
+  pre { background: #0A0E13; border: 1px solid var(--border-strong); border-radius: 10px; padding: 18px 20px; overflow: auto; font-family: var(--mono); font-size: 15px; line-height: 1.55; color: var(--text); max-width: 1100px; }
+  pre .c { color: var(--text-tertiary); }
+  pre .k { color: var(--plane-standards); }
+  pre .s { color: var(--success); }
+  pre .b { color: var(--primary); }
+
+  /* plane diagram */
+  .planes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 18px; max-width: 1200px; }
+  .plane { border-radius: 12px; padding: 18px 20px; background: var(--surface); border: 1px solid var(--border-strong); position: relative; }
+  .plane .ph { font-weight: 700; font-size: 15px; letter-spacing: .5px; margin-bottom: 6px; display:flex; align-items:center; }
+  .plane .pd { font-size: 15px; color: var(--text-secondary); }
+  .plane.standards { border-left: 5px solid var(--plane-standards); }
+  .plane.pipeline { border-left: 5px solid var(--plane-pipeline); }
+  .plane.ledger { border-left: 5px solid var(--plane-ledger); grid-column: 1 / -1; background: var(--elevated); }
+  .plane.agenthq { border-left: 5px solid var(--plane-agenthq); grid-column: 1 / -1; }
+  .writers { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-top: 12px; }
+  .writer { border: 1px dashed var(--border-strong); border-radius: 8px; padding: 10px 12px; font-size: 14px; text-align: center; color: var(--text-secondary); position: relative; }
+  .writer::after { content: "▼ writes"; position:absolute; bottom:-26px; left:50%; transform:translateX(-50%); font-size:11px; font-family:var(--mono); color: var(--success); white-space:nowrap; }
+
+  /* steps flow */
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; max-width: 1240px; align-items: stretch; }
+  .step { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px 18px; position: relative; }
+  .step .n { font-family: var(--mono); font-size: 12px; color: var(--primary); font-weight: 700; }
+  .step h3 { font-size: 16px; margin: 6px 0 8px; }
+  .step p { font-size: 14px; margin: 0; }
+  .flow .step:not(:last-child)::after { content: "→"; position:absolute; right:-12px; top:50%; transform:translateY(-50%); color: var(--border-strong); font-size:20px; z-index:2; }
+
+  /* gate */
+  .gate { display:flex; align-items:center; gap: 20px; max-width: 1100px; margin-top: 10px; }
+  .gate .node { flex:1; text-align:center; padding: 22px; border-radius: 12px; border:1px solid var(--border-strong); background: var(--surface); }
+  .gate .stopbar { flex:0 0 auto; padding: 20px 22px; border-radius: 12px; background: rgba(239,68,68,.10); border: 1px solid var(--danger); text-align:center; }
+  .gate .arrow { color: var(--text-tertiary); font-size: 24px; }
+
+  /* scenario runs */
+  .runs { display:grid; grid-template-columns: repeat(3,1fr); gap: 18px; max-width: 1200px; }
+  .run { border-radius: 12px; padding: 18px; border:1px solid var(--border-strong); background: var(--surface); }
+  .run.r3 { border-color: var(--danger); background: rgba(239,68,68,.06); }
+  .run .rn { font-family: var(--mono); font-size: 12px; color: var(--text-tertiary); }
+  .run h3 { font-size: 17px; margin: 6px 0 10px; }
+
+  .metric { display:flex; gap: 34px; margin-top: 6px; }
+  .metric .v { font-family: var(--mono); font-size: 40px; font-weight: 650; color: var(--plane-ledger); }
+  .metric .l { font-size: 14px; color: var(--text-secondary); }
+
+  .counter { position: fixed; bottom: 18px; right: 22px; font-family: var(--mono); font-size: 13px; color: var(--text-tertiary); z-index: 40; }
+  .hint { position: fixed; bottom: 18px; left: 22px; font-family: var(--mono); font-size: 12px; color: var(--text-tertiary); z-index: 40; }
+  .rail { position: fixed; top:0; left:0; height:3px; background: linear-gradient(90deg, var(--plane-standards), var(--plane-pipeline), var(--plane-ledger)); z-index: 41; transition: width .15s; }
+
+  #notes { position: fixed; inset: auto 0 0 0; max-height: 42vh; overflow:auto; background: rgba(8,11,15,.97); border-top: 1px solid var(--border-strong); padding: 18px 8vw; z-index: 60; display:none; }
+  #notes.on { display:block; }
+  #notes h4 { margin:0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--warning); }
+  #notes p { font-size: 15px; color: var(--text-secondary); max-width: 90ch; }
+</style>
+</head>
+<body>
+<div class="rail" id="rail"></div>
+<div class="deck" id="deck">
+
+<section id="s1" data-topic="open" class="quiet">
+  <div class="kicker">Reference architecture</div>
+  <h1>Designing an agentic pipeline<br>that survives audit</h1>
+  <p class="lede">A reference architecture for enterprise engineering teams — how to design a governed agentic pipeline, and how developers actually work inside it day to day.</p>
+  <p class="caption">Sample data throughout; every number describes seeded sample data, not live telemetry. <strong>Meridian</strong> is a fictional product used for illustration.</p>
+</section>
+
+<section id="s2" data-topic="problem">
+  <div class="kicker">The problem</div>
+  <h2>The question nobody can answer</h2>
+  <div class="cols2">
+    <div class="card" style="border-color:var(--warning)">
+      <h3 style="color:var(--warning)">The audit request</h3>
+      <p style="color:var(--text)">"Show me every decision an AI agent made about <strong>PHI handling</strong> this quarter, who approved each one, and which policy version applied."</p>
+    </div>
+    <div class="card">
+      <h3>What teams can produce today</h3>
+      <ul>
+        <li><span class="m">git log</span> — commits, no reasoning, no rule cited</li>
+        <li>a Slack thread — scrolled past, half the people gone</li>
+        <li>a screenshot — of a dashboard that has since changed</li>
+      </ul>
+    </div>
+  </div>
+  <p class="caption">The gap between the ask and the evidence is where trust in agentic development breaks.</p>
+</section>
+
+<section id="s3" data-topic="shift">
+  <div class="kicker">The shift</div>
+  <h2>Two columns that no longer meet</h2>
+  <div class="cols2">
+    <div class="card">
+      <h3 style="color:var(--plane-agenthq)">What changed</h3>
+      <ul>
+        <li>Agents open PRs on their own</li>
+        <li>Agents write and refactor code</li>
+        <li>Agents make judgment calls at machine speed</li>
+        <li>Volume of decisions is now super-human</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--text-secondary)">What didn't</h3>
+      <ul>
+        <li>Your regulator's evidence standard</li>
+        <li>Who-approved-what, and under which rule</li>
+        <li>Immutable, queryable, time-versioned proof</li>
+        <li>The burden falls on <em>you</em>, not the agent</li>
+      </ul>
+    </div>
+  </div>
+  <p class="big" style="margin-top:26px; color:var(--text)">The gap between those two columns is the entire problem.</p>
+</section>
+
+<section id="s4" data-topic="principle" class="quiet">
+  <div class="kicker">The one idea</div>
+  <p class="big">An agent decision is not an event to log.<br>It is a record to keep.</p>
+  <div class="cols3" style="margin-top:34px">
+    <div class="card sub"><h3>Events</h3><p>For debugging. Rotated out, sampled, dropped. Nobody promises they survive the quarter.</p></div>
+    <div class="card sub"><h3>Records</h3><p>Immutable and queryable. You can ask them a question a year later and get the same answer.</p></div>
+    <div class="card sub"><h3>The rule travels</h3><p>A record carries its governing rule version, so the <em>why</em> is inside the artifact — not in someone's memory.</p></div>
+  </div>
+</section>
+
+<section id="s5" data-topic="architecture">
+  <div class="kicker">Architecture</div>
+  <h2>The four planes</h2>
+  <div class="planes">
+    <div class="plane standards">
+      <div class="ph"><span class="dot" style="background:var(--plane-standards)"></span>STANDARDS</div>
+      <div class="pd">Versioned policy bundles, committee-approved. The law agents load, not what they remember. <span class="m">security/v0.1.0</span></div>
+    </div>
+    <div class="plane pipeline">
+      <div class="ph"><span class="dot" style="background:var(--plane-pipeline)"></span>PIPELINE</div>
+      <div class="pd">The governed heavy lane — assess, architect, codegen, review — each stage classifies and cites.</div>
+    </div>
+    <div class="plane agenthq">
+      <div class="ph"><span class="dot" style="background:var(--plane-agenthq)"></span>AGENT HQ RUNTIME</div>
+      <div class="pd">Three writer surfaces — IDE, coding-agent, and CI lanes — that developers actually work in.</div>
+      <div class="writers">
+        <div class="writer">IDE Copilot session</div>
+        <div class="writer">Cloud coding-agent</div>
+        <div class="writer">CI / workflow lane</div>
+      </div>
+    </div>
+    <div class="plane ledger">
+      <div class="ph"><span class="dot" style="background:var(--plane-ledger)"></span>LEDGER + DOCTOR — the audit spine</div>
+      <div class="pd">Every runtime surface writes <strong>into</strong> the ledger. Doctor watches for drift. One immutable record of every decision, with its rule.</div>
+    </div>
+  </div>
+  <p class="caption">Three writer surfaces. One record.</p>
+</section>
+
+<section id="s6" data-topic="dev-day">
+  <div class="kicker">Day in the life</div>
+  <h2>How a developer actually works</h2>
+  <div class="flow">
+    <div class="step"><div class="n">01</div><h3>Open &amp; assign</h3><p>Dev opens an issue and assigns a coding agent. Normal GitHub flow — no new console.</p></div>
+    <div class="step"><div class="n">02</div><h3>Load the law</h3><p>Agent loads <span class="m">AGENTS.md</span> plus the pinned standards bundle for its role.</p></div>
+    <div class="step"><div class="n">03</div><h3>Classify first</h3><p>Ambiguity above its authority becomes a gating card for a human — <em>before</em> acting.</p></div>
+    <div class="step"><div class="n">04</div><h3>Record</h3><p>Every decision writes a ledger entry citing the rule version. <span class="m">[security/v0.1.0/PHI-001]</span></p></div>
+  </div>
+  <p class="caption" style="font-size:19px;color:var(--text)">The developer does not do extra paperwork. The pipeline records itself.</p>
+</section>
+
+<section id="s7" data-topic="standards-injected">
+  <div class="kicker">Standards</div>
+  <h2>Injected, not remembered</h2>
+  <div class="cols2" style="align-items:start">
+    <pre><span class="c"># standards-bundles/security/v0.1.0/rules.yaml</span>
+<span class="k">- id:</span> <span class="s">security/v0.1.0/PHI-001</span>
+  <span class="k">title:</span> Classify PHI before any write
+  <span class="k">applies_to:</span> <span class="b">["ledger","prompt","log"]</span>
+  <span class="k">severity:</span> <span class="b">high</span>
+  <span class="k">rule:</span> >
+    No raw PHI in ledger, telemetry, or prompts.
+    Emit phi_class and cite this id on every entry.</pre>
+    <div>
+      <h3>Precedence — bundle always wins</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:14px">
+        <div class="tag">1 · AGENTS.md</div>
+        <div class="tag">2 · copilot-instructions</div>
+        <div class="tag">3 · path instructions</div>
+        <div class="tag">4 · agent persona</div>
+        <div class="tag" style="border-color:var(--plane-standards);color:var(--plane-standards)">5 · standards bundle ▸ WINS</div>
+      </div>
+      <p style="margin-top:16px">Change a rule in one place; every agent picks it up on next session. No prompt archaeology.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s8" data-topic="gate">
+  <div class="kicker">The gate</div>
+  <h2>Autonomy vs. recklessness</h2>
+  <div class="gate">
+    <div class="node"><h3 style="margin:0">Agent working</h3><p style="margin:6px 0 0;font-size:15px">within its authority</p></div>
+    <div class="arrow">→</div>
+    <div class="node" style="border-color:var(--warning)"><h3 style="margin:0;color:var(--warning)">Decision above authority</h3><p style="margin:6px 0 0;font-size:15px">retention? auth policy? PHI class?</p></div>
+    <div class="arrow">→</div>
+    <div class="stopbar"><h3 style="margin:0;color:var(--danger)">STOP</h3><p style="margin:6px 0 0;font-size:15px;color:var(--text)">emits a gating card<br>for a human</p></div>
+  </div>
+  <p class="caption" style="font-size:19px;color:var(--text);margin-top:34px">A reckless agent guesses. A governed agent stops and asks — and the stop is itself a record.</p>
+</section>
+
+<section id="s9" data-topic="scenario" class="quiet">
+  <div class="kicker">The scenario · Meridian patient portal</div>
+  <h2>Three runs</h2>
+  <div class="runs">
+    <div class="run"><div class="rn">RUN 1 · human lead</div><h3>Sets four precedents</h3><ul style="font-size:15px"><li>PHI classification</li><li>Auth policy</li><li>Retention</li><li>Naming</li></ul></div>
+    <div class="run"><div class="rn">RUN 2 · agents</div><h3>Reuse precedents</h3><p style="font-size:15px">Agents apply the four precedents correctly across a new module — citing the same rule versions.</p></div>
+    <div class="run r3"><div class="rn">RUN 3 · agent error</div><h3>Sets billing retention to <span class="m">3y</span></h3><p style="font-size:15px">Clinical standard is <span class="m">7y</span>. A human catches it, flags it — and autopilot <strong>pauses</strong> for that entire decision class.</p></div>
+  </div>
+  <p class="big" style="margin-top:28px;color:var(--text)">The agent was wrong. That is not the story.<br>The system noticed, and stopped itself.</p>
+</section>
+
+<section id="s10" data-topic="seeing">
+  <div class="kicker">Seeing it</div>
+  <h2>Three graph surfaces for the operator</h2>
+  <div class="cols3">
+    <div class="card"><h3 style="color:var(--plane-standards)">Decision Map</h3><p>Which rule does the most work across the corpus.</p></div>
+    <div class="card"><h3 style="color:var(--plane-agenthq)">Precedent Lineage</h3><p>The human → agent learning loop, edge by edge.</p></div>
+    <div class="card"><h3 style="color:var(--plane-pipeline)">Run Flow</h3><p>Stage by stage for one run, start to merge.</p></div>
+  </div>
+  <div class="row" style="margin-top:22px;align-items:center;gap:34px">
+    <div class="metric"><div><div class="v">29</div><div class="l">nodes</div></div><div><div class="v">44</div><div class="l">edges</div></div></div>
+    <div style="font-size:15px;color:var(--text-secondary)">Legend decodes 5 edge types.<br><span class="m">solid</span> = cited / authored &nbsp;·&nbsp; <span class="m">dashed</span> = inferred</div>
+  </div>
+  <p class="caption">Counts describe the seeded sample corpus.</p>
+</section>
+
+<section id="s11" data-topic="scale">
+  <div class="kicker">Why it scales</div>
+  <h2>Four properties that compound</h2>
+  <div class="cols4">
+    <div class="card"><h3>a · Precedent reuse</h3><p>Decision cost falls as the corpus grows — each answer is reusable.</p></div>
+    <div class="card"><h3>b · One source of law</h3><p>Standards live in one versioned place, not scattered across N prompts.</p></div>
+    <div class="card"><h3>c · Plug-in surfaces</h3><p>New agent surfaces adopt the same ledger contract — no bespoke governance.</p></div>
+    <div class="card"><h3>d · Per-class gate</h3><p>Autonomy expands where trust is earned, contracts where it is not.</p></div>
+  </div>
+</section>
+
+<section id="s12" data-topic="platform">
+  <div class="kicker">It meets the platform you already run</div>
+  <h2>GitHub Agentic Workflows <span class="tag" style="border-color:var(--warning);color:var(--warning)">technical preview · Feb 2026</span></h2>
+  <div class="cols2" style="align-items:start">
+    <div>
+      <p style="font-size:17px">gh-aw (GitHub Next + Microsoft Research + Azure Core Upstream). Agents run <strong>read-only</strong>; writes go through declared <span class="m">safe-outputs</span>, executed by a separate permission-controlled job.</p>
+      <div class="card sub" style="margin-top:8px">
+        <p style="font-size:16px;color:var(--text)"><span class="m">safe-outputs</span> controls <em>whether</em> a write happens. It does not record <em>why</em> the decision was made, which rule governed it, or what precedent it reused.</p>
+      </div>
+      <p style="margin-top:12px;font-size:17px">So gh-aw becomes a <strong>fourth writer surface</strong> into the same ledger — the two are complementary, not competing.</p>
+    </div>
+    <pre><span class="c">--- .github/workflows/triage.md ---</span>
+<span class="k">on:</span> issues
+<span class="k">permissions:</span>
+  contents: <span class="b">read</span>
+<span class="k">safe-outputs:</span>
+  add-comment:
+    max: <span class="b">1</span>
+  add-labels:
+    allowed: <span class="s">["triage","needs-info"]</span>
+<span class="c">---</span>
+Read the issue, classify it, and
+propose one label from the allowed set.</pre>
+  </div>
+</section>
+
+<section id="s13" data-topic="candour">
+  <div class="kicker">What we got wrong</div>
+  <h2>The trust beat</h2>
+  <div class="cols3">
+    <div class="card"><h3 style="color:var(--warning)">Feature with no consumer</h3><p>We built a rewind/reopen feature whose state nothing read. We shipped it <strong>disabled</strong> rather than ship the lie.</p></div>
+    <div class="card"><h3 style="color:var(--warning)">One axis, two meanings</h3><p>A run-flow view where one axis meant two different things by row. A correctness bug — found and fixed.</p></div>
+    <div class="card"><h3 style="color:var(--warning)">Empty graphs, green tests</h3><p>Three graph views shipped rendering completely empty (a missing data fallback) — and the full suite stayed green throughout.</p></div>
+  </div>
+  <p class="big" style="margin-top:28px;color:var(--text)">Tests certify shape. Only looking certifies truth.</p>
+</section>
+
+<section id="s14" data-topic="test" class="quiet">
+  <div class="kicker">The test</div>
+  <h2>Judge this on one query</h2>
+  <p class="lede">Pick any agent decision from the last quarter and ask the system <em>why</em> it was made. You should get the rule version, the human who approved it, and the precedent it reused — <strong>in one hop.</strong></p>
+  <p class="big" style="margin-top:36px;color:var(--text)">Agents will be wrong.<br>The question is whether your system can notice.</p>
+</section>
+
+</div>
+
+<div class="rail" id="railx" style="display:none"></div>
+<div class="counter" id="counter">01 / 14</div>
+<div class="hint">← → navigate · N notes</div>
+
+<div id="notes"><h4>Presenter notes</h4><p id="notesText"></p></div>
+
+<script>
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.deck > section'));
+  var total = slides.length;
+  var notesText = {
+    1: "Set the frame: this is a reference architecture, customer-neutral. Say up front the data is sample/seeded and Meridian is fictional. Audience is dev team + architecture leaders + CISO + VP Eng — talk to evidence and design, not features.",
+    2: "Make the gap felt before offering a solution. Read the audit request out loud. Then point at git log / Slack / screenshot. Nobody in the room can actually answer that request today — let the silence sit.",
+    3: "The pace of agent decisions went super-human; the evidence standard did not move. Don't blame the regulator — their standard is correct. The mismatch is ours to close.",
+    4: "This is the whole thesis. Events vs records. Events are for debugging and get rotated. Records are immutable, queryable, and carry their governing rule. If they remember one slide, this one.",
+    5: "Walk the four planes by color. Standards = the law. Pipeline = heavy governed lane. Agent HQ = where devs live, three writer surfaces. Ledger+Doctor = the spine everything writes into. Land: three writers, one record.",
+    6: "Emphasise there is no extra paperwork for the developer. They open an issue and assign an agent like normal. Steps 2-4 happen inside the pipeline. Classify-before-acting is the safety property.",
+    7: "Bundles are injected at session start, not pasted into prompts. Show precedence — bundle always wins. Change one rule, every agent picks it up next session. Kills prompt archaeology and drift.",
+    8: "The gate is the line between autonomy and recklessness. A reckless agent guesses at a decision above its authority; a governed one stops and emits a gating card. The stop is itself a ledger record.",
+    9: "The spine of the demo. Run1 human sets precedents, Run2 agents reuse them correctly, Run3 an agent gets retention wrong (3y vs 7y clinical). Human catches it, autopilot pauses for that decision class. The point: the system noticing is the story, not the error.",
+    10: "Three graph surfaces the operator gets. Decision Map, Precedent Lineage, Run Flow. Mention the 5 edge types and solid=cited/dashed=inferred. 29 nodes / 44 edges — seeded sample, say so.",
+    11: "Why it scales, four compounding properties. Keep each to one sentence + why. The gate being per-decision-class is the subtle one — autonomy is not global, it is earned per class.",
+    12: "Be fair to gh-aw. It is a technical preview, Feb 2026. safe-outputs is a real, good control — but it governs WHETHER a write happens, not WHY. Frame gh-aw as a fourth writer into the same ledger. Complementary, not competitive. Do not oversell.",
+    13: "Candour slide — this earns trust with a CISO. Three real mistakes: dead feature shipped disabled, an axis meaning two things, three empty graphs with green tests. Lesson: tests certify shape, only looking certifies truth.",
+    14: "Close direct. One query test: any decision, ask why, get rule version + approver + precedent in one hop. Then the controlling idea: agents will be wrong; the question is whether your system can notice. Stop talking after that line."
+  };
+
+  function clamp(n){ return Math.max(1, Math.min(total, n)); }
+  var current = 1;
+
+  function show(n, push){
+    current = clamp(n);
+    slides.forEach(function(s,i){ s.classList.toggle('active', i === current-1); });
+    document.getElementById('counter').textContent =
+      String(current).padStart(2,'0') + ' / ' + String(total).padStart(2,'0');
+    document.getElementById('rail').style.width = (current/total*100) + '%';
+    document.getElementById('notesText').textContent = notesText[current] || '';
+    if (push !== false) {
+      var u = new URL(location.href);
+      u.searchParams.set('s', current);
+      history.replaceState(null, '', u);
+    }
+  }
+
+  function initFromURL(){
+    var p = new URLSearchParams(location.search);
+    var s = parseInt(p.get('s'), 10);
+    show(isNaN(s) ? 1 : s, false);
+  }
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { show(current+1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(current-1); e.preventDefault(); }
+    else if (e.key === 'Home') { show(1); }
+    else if (e.key === 'End') { show(total); }
+    else if (e.key.toLowerCase() === 'n') { document.getElementById('notes').classList.toggle('on'); }
+  });
+  document.getElementById('deck').addEventListener('click', function(e){
+    if (window.getSelection && String(window.getSelection())) return;
+    var x = e.clientX / window.innerWidth;
+    show(x < 0.28 ? current-1 : current+1);
+  });
+  window.addEventListener('popstate', initFromURL);
+  initFromURL();
+</script>
+</body>
+</html>
