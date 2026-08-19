@@ -221,13 +221,14 @@
   <h2>Injected, not remembered</h2>
   <div class="cols2" style="align-items:start">
     <pre><span class="c"># standards-bundles/security/v0.1.0/rules.yaml</span>
-<span class="k">- id:</span> <span class="s">security/v0.1.0/PHI-001</span>
-  <span class="k">title:</span> Classify PHI before any write
-  <span class="k">applies_to:</span> <span class="b">["ledger","prompt","log"]</span>
-  <span class="k">severity:</span> <span class="b">high</span>
-  <span class="k">rule:</span> >
-    No raw PHI in ledger, telemetry, or prompts.
-    Emit phi_class and cite this id on every entry.</pre>
+<span class="k">- id:</span> <span class="s">PHI-001</span>
+  <span class="k">title:</span> Patient identifiers may not appear
+         in cleartext logs
+  <span class="k">phi:</span> <span class="b">true</span>
+  <span class="k">phi_locked:</span> <span class="b">true</span>
+  <span class="k">blast_class:</span> <span class="b">high</span>
+  <span class="k">enforcement:</span>
+    <span class="k">pipeline_stages:</span> <span class="b">[codegen, review-scan]</span></pre>
     <div>
       <h3>Precedence — bundle always wins</h3>
       <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:14px">
