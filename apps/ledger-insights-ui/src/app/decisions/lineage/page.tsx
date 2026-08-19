@@ -221,7 +221,14 @@ export default function LineageV2Page() {
     // force/rank algorithm to infer it.
     const roots = cy.nodes().filter((n) => n.indegree(false) === 0);
     const box = cy.container()?.getBoundingClientRect();
-    const usableW = Math.max(640, (box?.width ?? 1200) - 120);
+    // The legend is a fixed panel in the top-left gutter (~186px + 12px inset).
+    // Roots used to start at x=90, which put the FIRST chain — usually the most
+    // reused precedent, i.e. the one worth pointing at — half behind the
+    // legend, readable only as "…ified…". Reserve the gutter in the layout
+    // instead of moving the legend: the legend belongs top-left, the graph does
+    // not have to start there.
+    const LEGEND_GUTTER = 210;
+    const usableW = Math.max(640, (box?.width ?? 1200) - LEGEND_GUTTER - 60);
     const colW = 250;
     const rowH = 190;
     const perRow = Math.max(1, Math.floor(usableW / colW));
@@ -229,7 +236,7 @@ export default function LineageV2Page() {
     roots.forEach((root, i) => {
       const col = i % perRow;
       const row = Math.floor(i / perRow);
-      const x = 90 + col * colW;
+      const x = LEGEND_GUTTER + col * colW;
       const y = 70 + row * rowH;
       root.position({ x, y });
       // Stack this root's reuses directly beneath it so the precedent → reuse
@@ -241,6 +248,13 @@ export default function LineageV2Page() {
 
     cy.fit(undefined, 44);
     if (cy.zoom() > 1.15) cy.zoom({ level: 1.15, position: { x: 0, y: 0 } });
+    // fit() frames the node bounding box and re-centres it, which cancels the
+    // LEGEND_GUTTER reserved above — the first chain slides back under the
+    // legend. Push the viewport right to restore it. Compensating by half the
+    // gutter was measurably not enough (the hub still read as "…ages
+    // classified…"), because fit() centres the whole box rather than shifting
+    // it: the full gutter is what the reservation actually costs.
+    cy.panBy({ x: LEGEND_GUTTER * cy.zoom(), y: 0 });
 
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
