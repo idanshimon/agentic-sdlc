@@ -298,7 +298,9 @@ export default function DecisionsMapPage() {
                   <div className="mb-3 flex items-start justify-between gap-2">
                     <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
                       {panel.kind === "decision" ? (panel.actorKind === "agent" ? <Bot className="h-4 w-4 text-[var(--plane-pipeline)]" /> : <User className="h-4 w-4 text-[var(--plane-ledger)]" />) : null}
-                      {panel.kind}{panel.kind === "decision" && panel.actorKind ? ` · ${panel.actorKind}` : ""}
+                      {/* B1: enum values come from the system, not a human —
+                        * mono marks them as machine-generated. */}
+                      <span className="mono">{panel.kind}{panel.kind === "decision" && panel.actorKind ? ` · ${panel.actorKind}` : ""}</span>
                     </span>
                     <button onClick={closeModal} className="text-[var(--text-tertiary)] hover:text-[var(--text)]"><X className="h-4 w-4" /></button>
                   </div>

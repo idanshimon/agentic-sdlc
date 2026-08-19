@@ -303,7 +303,8 @@ export default function RunFlowPage() {
                   <div className="mb-3 flex items-start justify-between gap-2">
                     <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
                       {panel.actorKind === "agent" ? <Bot className="h-4 w-4 text-[var(--plane-pipeline)]" /> : <User className="h-4 w-4 text-[var(--plane-ledger)]" />}
-                      {panel.actorKind === "agent" ? "agent" : "human"}
+                      {/* B1: actor kind is a system enum, not human prose. */}
+                      <span className="mono">{panel.actorKind === "agent" ? "agent" : "human"}</span>
                     </span>
                     <button onClick={closeModal} className="text-[var(--text-tertiary)] hover:text-[var(--text)]"><X className="h-4 w-4" /></button>
                   </div>
@@ -313,7 +314,7 @@ export default function RunFlowPage() {
                   </div>
                   <p className="mb-3 text-[15px] font-medium leading-snug text-[var(--text)]">{panel.full}</p>
                   {panel.ambiguityClass && (
-                    <div className="mb-4"><span className="rounded-full bg-[var(--overlay)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">{panel.ambiguityClass}</span></div>
+                    <div className="mb-4"><span className="mono rounded-full bg-[var(--overlay)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">{panel.ambiguityClass}</span></div>
                   )}
                   <button
                     onClick={() => router.push(`/decisions#decision-${panel.entryId}`)}

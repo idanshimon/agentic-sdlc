@@ -361,7 +361,7 @@ export default function LineageV2Page() {
                   </div>
                   <p className="mb-3 text-[15px] font-medium leading-snug text-[var(--text)]">{panel.full || panel.label}</p>
                   <div className="mb-4 flex flex-wrap gap-1.5">
-                    {panel.ambiguityClass && <span className="rounded-full bg-[var(--overlay)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">{panel.ambiguityClass}</span>}
+                    {panel.ambiguityClass && <span className="mono rounded-full bg-[var(--overlay)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">{panel.ambiguityClass}</span>}
                     {panel.rule && <span className="mono rounded bg-[var(--overlay)] px-1.5 py-0.5 text-[10px] text-[var(--secondary)]">{panel.rule}</span>}
                   </div>
                   {(panel.upstream.length > 0 || panel.downstream.length > 0) && (
