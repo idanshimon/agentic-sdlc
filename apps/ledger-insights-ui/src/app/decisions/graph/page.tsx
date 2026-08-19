@@ -166,13 +166,24 @@ export default function DecisionsMapPage() {
       // before the filter-chip block above it has finished laying out.
       cy.resize();
       cy.fit(undefined, 48);
+      // The zoom cap exists so a SPARSE graph (2-3 nodes) does not balloon to
+      // fill the canvas. It must never zoom back IN past what fit() chose — on
+      // a dense graph fit() legitimately zooms out below 1.15, and re-applying
+      // the cap there pushes nodes off the bottom of the panel. Only ever
+      // reduce.
       if (cy.zoom() > 1.15) cy.zoom(1.15);
       cy.center();
       // The legend occupies ~186px of the left gutter, so cy.center() — which
       // centres on the FULL container — leaves the graph sitting right of the
       // visual centre. Shift left by roughly half the legend width so the
       // canvas the operator can actually see is what gets balanced.
-      cy.panBy({ x: -95, y: 0 });
+      //
+      // Only pan when the graph is NARROWER than the container. On a dense
+      // graph fit() already uses the full width, and panning then pushes the
+      // right-hand nodes out of frame. Same class of bug as the zoom cap above:
+      // a nudge tuned on sparse data must not fire on dense data.
+      const bb = cy.elements().renderedBoundingBox();
+      if (bb.w < cy.width() - 240) cy.panBy({ x: -95, y: 0 });
     });
     layout.run();
 
@@ -277,7 +288,7 @@ export default function DecisionsMapPage() {
         </p>
       </div>
 
-      <div className="relative h-[70vh] overflow-hidden rounded-lg border-2 border-[var(--border-strong)] bg-[var(--bg)]">
+      <div className="relative h-[calc(100vh-460px)] min-h-[380px] overflow-hidden rounded-lg border-2 border-[var(--border-strong)] bg-[var(--bg)]">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>
         ) : graph.nodes.length === 0 ? (

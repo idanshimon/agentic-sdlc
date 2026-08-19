@@ -71,7 +71,10 @@ Open `/decisions/lineage`.
 
 This is the moment the room remembers. Slow down.
 
-- Go to `/decisions/runflow`, select **meridian-run-0003**.
+- Go to `/decisions/runflow`. **meridian-run-0003 is already selected** — the
+  picker sorts newest-first, so the hinge of the demo loads by default. Do not
+  go hunting in the dropdown.
+- If it is not selected, the fixture did not load. Restart the dev server.
 - Find: `Billing data retention set to 3 years (SHORTER than clinical policy)`
 - Then show the flag on it: `Flagged: billing retention must match 7y clinical
   policy, not 3y` — a human correction, linked to the exact decision.
