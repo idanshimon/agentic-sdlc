@@ -303,8 +303,11 @@ export default function RunFlowPage() {
                   <div className="mb-3 flex items-start justify-between gap-2">
                     <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-secondary)]">
                       {panel.actorKind === "agent" ? <Bot className="h-4 w-4 text-[var(--plane-pipeline)]" /> : <User className="h-4 w-4 text-[var(--plane-ledger)]" />}
-                      {/* B1: actor kind is a system enum, not human prose. */}
-                      <span className="mono">{panel.actorKind === "agent" ? "agent" : "human"}</span>
+                      {/* Actor identity, not a system token: lineage renders
+                        * the same concept as actor.display_name (a real person's
+                        * name when one exists). Keep it sans — mono would be
+                        * wrong the moment this reads "Sarah Chen". */}
+                      {panel.actorKind === "agent" ? "agent" : "human"}
                     </span>
                     <button onClick={closeModal} className="text-[var(--text-tertiary)] hover:text-[var(--text)]"><X className="h-4 w-4" /></button>
                   </div>
