@@ -27,6 +27,21 @@ Verify before the room fills: each canvas shows nodes, and the legend is
 top-left. If a canvas is empty, the demo fallback did not load — restart the
 dev server rather than presenting an empty graph.
 
+### If a page hangs mid-demo
+
+The dev server wedges occasionally: it stays bound to the port and accepts
+connections but never responds, so the tab spins forever. It looks like a
+network problem and is not. Do not debug the app — restart it:
+
+```bash
+lsof -ti tcp:3005 | xargs -r kill -9      # often MORE than one pid
+sleep 2 && lsof -ti tcp:3005 || echo "port free"
+cd apps/ledger-insights-ui && rm -rf .next && pnpm dev
+```
+
+Takes about 30 seconds. Worth doing once as a dry run so the muscle memory is
+there — the failure mode is that a bound port makes every naive check pass.
+
 ---
 
 ## The scenario, in one paragraph
@@ -51,9 +66,14 @@ Open `/decisions/graph`.
 - 29 nodes, 44 edges, five edge kinds. Open the legend and read it aloud —
   **solid = cited or authored, dashed = inferred by the system.** That
   distinction is the whole trust model in one visual.
-- Point at a hub: one rule node with many decisions hanging off it. Say:
-  *"That is a policy earning its keep. If you retire it, this is your blast
-  radius — you can see it before you change it, not after."*
+- Point at the `PHI-001` hub. **Say the real number, not "many"** — the hub has
+  roughly four edges, and a room full of engineers can count. Overselling a
+  visible quantity is the fastest way to lose them:
+  *"Four decisions, across three runs, all resolved against that one rule. If
+  you retire it, that is your blast radius — visible before you change it, not
+  after."*
+- The honest framing is stronger anyway: a precise small number reads as
+  measurement, "many" reads as marketing.
 
 ### Move 2 — "Where did this answer come from?" (Precedent Lineage, ~90s)
 
