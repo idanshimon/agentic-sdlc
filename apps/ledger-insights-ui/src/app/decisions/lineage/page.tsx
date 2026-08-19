@@ -342,11 +342,26 @@ export default function LineageV2Page() {
                 // State the scope explicitly. A 2-node graph in a 74vh panel
                 // reads as "broken" unless the view says what it actually
                 // holds. Counts are derived, never asserted.
+                // A CHAIN is a root that something actually reuses. Counting
+                // every root overstated it: a lone decision nobody has reused
+                // yet is a root with no fan, and the canvas draws no chain for
+                // it — so the legend claimed 5 chains over a canvas showing 3.
+                // On a governance surface a caption that disagrees with the
+                // picture is worse than no caption.
+                const isRoot = (id: string) =>
+                  !graph.edges.some((e) => e.kind === "reuses" && e.target === id);
                 const chains = graph.nodes.filter(
-                  (n) => !graph.edges.some((e) => e.kind === "reuses" && e.target === n.id),
+                  (n) =>
+                    isRoot(n.id) &&
+                    graph.edges.some((e) => e.kind === "reuses" && e.source === n.id),
+                ).length;
+                const lone = graph.nodes.filter(
+                  (n) =>
+                    isRoot(n.id) &&
+                    !graph.edges.some((e) => e.kind === "reuses" && e.source === n.id),
                 ).length;
                 const nodes = graph.nodes.length;
-                return `${chains} precedent ${chains === 1 ? "chain" : "chains"} in scope · ${nodes} ${nodes === 1 ? "node" : "nodes"}. Hubs are human rulings; the fan below each is every later reuse.`;
+                return `${chains} precedent ${chains === 1 ? "chain" : "chains"} in scope · ${nodes} ${nodes === 1 ? "node" : "nodes"}${lone ? ` · ${lone} not yet reused` : ""}. Hubs are human rulings; the fan below each is every later reuse.`;
               })()}
             />
             {/* quick-view modal — centered, dims graph behind it */}
