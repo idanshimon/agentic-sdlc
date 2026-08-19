@@ -3,7 +3,44 @@
 **Date:** 2026-08-18
 **Repo:** `agentic-sdlc` · app `apps/ledger-insights-ui`
 **Branch at time of audit:** `chore/recover-stranded-pr-work` (clean)
-**Status of this document:** analysis + recommendation. **No code has been changed.**
+**Status of this document:** **SUPERSEDED — historical analysis, not current
+state.** This was the pre-implementation audit. The redesign it recommends has
+since been built and merged; see the corrections block below before relying on
+any claim in here.
+
+> ## ⚠️ Read this before using this document
+>
+> This file records what was true on 2026-08-18 *before* any code was written.
+> It is kept because the reasoning and the reference-design analysis remain
+> useful, but **three of its claims did not survive implementation**, and one
+> statement below is now simply false.
+>
+> **Now false:** "No code has been changed" (also §9). The work shipped —
+> `1fd9805`, `bf98fbb`, `3e30614`, `0b3c26c`, `37f7b0e`, `c2a0aa1`, `d3136f0`,
+> `ca15c60`, `4846208`, `a0e492b`.
+>
+> **Corrections found during implementation:**
+>
+> 1. **D1 is mischaracterised.** The claim "three of four views ship without a
+>    legend" is wrong — all four had legends. The real defect was worse: three
+>    *divergent hand-written* legends, none of which decoded a single edge kind,
+>    while six edge kinds carried meaning. Fixed by generating one legend from
+>    `graph-grammar.ts`, the same module the stylesheets read.
+> 2. **D5 was already resolved.** `lineage-v2` did not use a side panel; it
+>    already used the centered modal this document recommends adopting.
+> 3. **The real blocker was not in this document at all.** Every graph rendered
+>    *empty*: `useDecisions` had no demo fallback, so without live Cosmos
+>    credentials the ledger API returned 401 and the legend — gated behind graph
+>    data — never mounted. An audit that reads source but never loads the page
+>    cannot see this class of defect.
+>
+> **Method note for future audits:** this document's claims were verified by
+> reading code. That found real bugs (D6 is genuine) but missed the one that
+> mattered most. Read the source *and* open the page.
+
+**Outcome:** the recommendation in §6 was accepted, including the cut. See
+`openspec/changes/redesign-decision-graph-surfaces/proposal.md` for the change
+as actually proposed and executed.
 
 **Purpose.** The operator's decision-graph surfaces were reported as unclear —
 "not very clear what is going on, what belongs to what." This document records
@@ -258,11 +295,21 @@ fixed on its own merits, not bundled into a visual change.
 
 ## 9. Explicit non-claims
 
-- No code has been written or changed.
+> **As-of-audit only.** The first bullet is no longer true — see the corrections
+> block at the top of this file. The rest still stand as written.
+
+- ~~No code has been written or changed.~~ **Superseded:** the redesign shipped.
+  This bullet described the document's status on 2026-08-18, not the repo today.
 - No deployment has been performed or re-verified as part of this analysis.
   The live UI returned HTTP 200 at audit time; nothing further was checked.
+  (Implementation note: HTTP 200 turned out to be a near-worthless signal here —
+  all three routes returned 200 while rendering completely empty canvases.)
 - Reference design B is a third-party prototype with hardcoded fiction. Its
   patterns are abstracted here; its content is not a source of truth and its
   identifiers must not enter this repo.
 - Claims about reference design A are read from its shipped client source, not
   from documentation about it.
+- Reference design B's token values quoted in its teardown (`#080a0e`,
+  `#3fd3e6`) were **inferred from rendered pixels, not read from declared
+  tokens** — B has no token layer at all; every colour there is inline. Treat
+  those hexes as one analyst's eyedropper reading, not B's palette.
