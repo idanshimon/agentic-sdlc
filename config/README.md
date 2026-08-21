@@ -17,6 +17,7 @@ into *your* governed instance.
 | `org.yaml.example` | Organization model | Departments, teams (cost_center, m365_group), Entra identity, approver RBAC. The identity spine — every ledger entry attributes to a real team. | 1 |
 | `autonomy.yaml.example` | Autonomy matrix | Per (decision_class × team): `gate` / `autopilot_always` / `autopilot_above_threshold(t)`. The COE's steering wheel. PHI + auth-policy are hard-locked to gate. | 2 |
 | `models.yaml.example` | Model policy | `allowlist` / `denylist` / `phi_eligible` / per-stage `routing` / `cost_ceiling_usd` / `phi_stages`. Enforced at stage dispatch — a denied model or a non-cleared model on a PHI-adjacent stage fails the run with a ledger entry citing the rule. | 4 |
+| `integrations.yaml.example` | Integrations registry | The external systems this instance is wired to: the `code_host` (where delivered PRs open) and a read-only `planning_tracker` (Aha!/Jira/Azure Boards/generic) that a run can cite for work-item provenance. **Credentials are referenced by env var, never stored** — an entry carrying an inline token is refused at load. | integrations-plane |
 
 Standards bundles (`blast_class` + `phi_locked` per rule) are authored in
 `standards-bundles/<dept>/<version>/` and edited through the governed PR flow

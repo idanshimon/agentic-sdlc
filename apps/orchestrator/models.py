@@ -192,6 +192,14 @@ class LedgerEntry(BaseModel):
     # None for legacy entries and for any entry not associated with a
     # specific catalog-resolved prompt (e.g. operator-only resolutions).
     prompt_resolution_path: Optional[list[dict[str, Any]]] = None
+    # add-enterprise-integrations-plane: planning-system provenance. Extends the
+    # audit chain one hop upstream — work item -> run -> decision -> PR. Mirrored
+    # on ledger-core's LedgerEntry in the same change (the two-model drift noted
+    # above is a recurring failure class). None for every run submitted without
+    # provenance, which is the default and stays byte-identical to pre-capability
+    # behaviour. Carries its own verification state, so a reference we never
+    # fetched reads as `claimed`, never as validated.
+    work_item: Optional[dict[str, Any]] = None
 
 
 # --- stage events / run state -------------------------------------------------
@@ -305,6 +313,11 @@ class RunState(BaseModel):
     synthetic_stages: list[str] = Field(default_factory=list)
     # Content-addressed bytes accepted by Review Scan; Deliver must match.
     reviewed_artifact_manifest: list[dict[str, str]] = Field(default_factory=list)
+    # add-enterprise-integrations-plane: the planning work item this run came
+    # from (Aha!/Jira/Azure Boards/...). None when the run was submitted without
+    # provenance — the default, and identical to pre-capability behaviour. Shape
+    # is work_items.WorkItemRef; stored as a dict so it round-trips Cosmos.
+    work_item: Optional[dict[str, Any]] = None
     # Durable execution/checkpoint foundation. These fields round-trip through
     # Cosmos and are authoritative over process-local queues/events.
     input_ref: str = ""

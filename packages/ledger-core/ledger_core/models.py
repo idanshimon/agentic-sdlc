@@ -193,6 +193,12 @@ class LedgerEntry(BaseModel):
     # self-heal cowork (add-self-heal-cowork): ties heal_proposed → heal_decided
     # → heal_executed into one queryable chain. Null on non-heal entries.
     heal_id: Optional[str] = None
+    # add-enterprise-integrations-plane: planning-system provenance, mirrored from
+    # the orchestrator's LedgerEntry in the SAME change (a field added to one of
+    # the two models must always be added to the other — see the recurring
+    # two-model drift). Null for every entry written without provenance, so
+    # pre-existing entries validate unchanged.
+    work_item: Optional[Dict[str, Any]] = None
 
     # ------------- meta-only fields -------------------------
     meta_kind: Optional[MetaKind] = None
