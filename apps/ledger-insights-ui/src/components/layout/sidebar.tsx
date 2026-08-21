@@ -15,6 +15,7 @@ import {
   Sparkles,
   DollarSign,
   FileSearch,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +57,7 @@ const nav = [
       { href: "/agents", label: "Custom Agents", icon: Bot, plane: "agenthq" },
       { href: "/prompts", label: "Prompt Library", icon: BookOpen, plane: "standards" },
       { href: "/hooks", label: "Hooks", icon: Workflow, plane: "agenthq" },
+      { href: "/settings", label: "Settings", icon: SlidersHorizontal, plane: null },
     ],
   },
 ];

@@ -5,14 +5,16 @@
 ### Requirement: The Settings surface renders the instance's enterprise posture in one place
 
 The dashboard MUST provide a `/settings` surface that renders the aggregated enterprise
-configuration — organization, integrations, autonomy, models, and governance — as tabbed
-sections derived from the aggregated settings read.
+configuration — organization, integrations, models, and governance — as tabbed sections
+derived from the aggregated settings read. Autonomy posture is deliberately NOT duplicated
+here: it already has a dedicated `/autonomy` surface, and a second thin rendering of the
+same state would be a place for the two to disagree.
 
 #### Scenario: Every configuration section is reachable from one surface
 
 - **GIVEN** an operator opens `/settings`
 - **WHEN** the page renders
-- **THEN** Organization, Integrations, Autonomy, Models, and Governance sections are each reachable
+- **THEN** Organization, Integrations, Models, and Governance sections are each reachable
 - **AND** each section shows whether it is in bootstrap or activated state
 
 #### Scenario: Section selection is addressable
