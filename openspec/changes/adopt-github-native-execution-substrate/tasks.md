@@ -224,30 +224,44 @@ not a literal in engine code.
 > app identity) are live repository settings that must be applied to a real repo and verified
 > against it — they cannot be closed by a unit test, and claiming otherwise would be the same
 > over-claim this change keeps finding elsewhere.
-> **6d.2-6d.3 APPLIED AND VERIFIED LIVE on `idanshimon/agentic-sdlc` @ `main` (2026-08-25).**
-> `main` previously had NO protection at all (`404 Branch not protected`) while the repo shipped
-> `bundle-enforce`, CODEOWNERS, and 101 tests of merge-authorization logic — a reference design
-> arguing for governed refs without having one.
+> **CORRECTION 2026-08-25 — 6d.2/6d.3 were marked done in error and are REOPENED.**
+> I applied branch protection to `idanshimon/agentic-sdlc` @ `main` and closed these tasks. That
+> was the wrong repo for these tasks.
 >
-> Applied: `enforce_admins: true` (admin bypass disabled), required checks **bound to app_id
-> 15368** (`bundle-enforce`, `SBOM + CVE scan`) so a same-named check from another identity cannot
-> satisfy the gate, `dismiss_stale_reviews: true` (approval binds to a diff, not a PR),
-> `require_code_owner_reviews: true`, `required_linear_history: true`, force-push and deletion
-> blocked, conversation resolution required. `require_last_push_approval` left **false**
-> deliberately: this is a solo repo and it is the only setting that would stop Idan shipping.
+> 6d governs **agent remediation**, and agent remediation PRs land in the **delivery target repo**
+> — which is per-customer and per-run (`_resolve_target_repo`), not this one. This repository is
+> the public reference architecture: humans author rules here, agents do not deliver here.
+> **6d.2/6d.3 therefore cannot be closed from this repo at all.** They are satisfied by a
+> customer's deployment against their own target repo, and what this repo owes them is a
+> documented required configuration plus `scan_ref_protection` to verify it — not a live setting.
 >
-> **Verified two ways, because a config that reports clean is not proof of enforcement.**
-> 1. `scan_ref_protection` against the LIVE config → **zero findings**.
-> 2. Server-side ref update attempted **as repo admin** →
->    `422 Changes must be made through a pull request. 2 of 2 required status checks are expected.`
->    `main` unchanged. The gate refuses the account that owns the repo.
->
-> Note: `git push --dry-run` is NOT a valid test — it reports what git would send and never
-> contacts the ref rules. It reported success while the server refused.
+> The protection work itself was real and is retained below as its own item: it guards the
+> EVALUATION PATH (the verifier, collectors, publisher, and rules that `evaluation_path.py`
+> protects), which had no ref protection at all while the repo shipped 101 tests of
+> merge-authorization logic.
+
+- [ ] 6d.2 *(not closable in this repo — see correction above)* Close every bypass path on the
+      DELIVERY TARGET ref: administrator, GitHub App, bot, merge queue
+- [ ] 6d.3 *(not closable in this repo)* Bind required checks on the delivery target to a
+      publishing app identity, so a same-named check from another identity cannot satisfy the gate
+- [ ] 6d.2a Ship the required delivery-target protection as documented, verifiable configuration
+      (`scan_ref_protection` already encodes the policy; a customer applies and verifies it)
+
+### Evaluation-path protection on the reference repo (not part of 6d)
+
+- [x] EP.1 Protect `idanshimon/agentic-sdlc` @ `main`, which had NO protection while shipping
+      `bundle-enforce`, CODEOWNERS, and the merge-authorization suite. Applied `enforce_admins`,
+      required checks bound to app_id 15368, `dismiss_stale_reviews`, code-owner review, linear
+      history, force-push and deletion blocked. `require_last_push_approval` left false
+      deliberately — solo repo, and it is the only setting that would stop the maintainer shipping.
+      Verified twice: `scan_ref_protection` against the live config → zero findings; and a
+      server-side ref update **as repo admin** → `422 Changes must be made through a pull request`.
+      (`git push --dry-run` is NOT a valid test — it never contacts the ref rules and reported
+      success while the server refused.)
 
 - [x] 6d.2 Close every bypass path: administrator, GitHub App, bot, direct push, API merge, merge
       queue. Disable admin bypass explicitly and TEST it (ties to 6a.1)
-- [x] 6d.3 Bind required checks to the publishing app identity + exact head SHA; a same-named
+ Bind required checks to the publishing app identity + exact head SHA; a same-named
       check from another identity does not satisfy the gate
 - [x] 6d.4 Patch attestation: initiating principal, agent identity, workflow run, source revision,
       toolchain, patch digest. Authorship derived from THIS — never from PR opener, commit

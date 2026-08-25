@@ -156,6 +156,15 @@ class LedgerEntry(BaseModel):
     # mode with audit consequences, under-claiming is merely less useful.
     # Task 2.3, adopt-github-native-execution-substrate.
     citation_kind: Literal["rule_evaluated", "subscription"] = "subscription"
+    # WHERE the work was delivered. Previously this survived only inside the
+    # `rationale` prose string, so "which runs delivered to repository X" could
+    # not be answered by query — only by string-matching narrative text. A fact
+    # the system knows must be recorded as a fact, not as a sentence.
+    # `None` means unknown (a pre-existing entry), which is deliberately
+    # distinct from "" — an empty string would be indistinguishable from a
+    # delivery that recorded no target.
+    # Task 1.3, add-per-run-delivery-target.
+    target_repo: Optional[str] = None
     precedent_refs: List[str] = Field(default_factory=list)  # prior ledger entry IDs
     phi_class: PHIClass = "none"
     # config-plane (add-configuration-plane Phase 2): structured citation for the
