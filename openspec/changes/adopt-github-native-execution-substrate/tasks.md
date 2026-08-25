@@ -249,6 +249,27 @@ not a literal in engine code.
 
 ### Evaluation-path protection on the reference repo (not part of 6d)
 
+> **SOLO-REPO POSTURE, recorded deliberately (2026-08-25).** The first configuration required
+> 1 approving review with `require_code_owner_reviews`. CODEOWNERS assigns every governed path to
+> `@idanshimon`, who is also the only author — and GitHub does not let an author approve their own
+> pull request. `reviewDecision` could therefore never reach `APPROVED`, and PR #13 was permanently
+> `BLOCKED` with all four checks green.
+>
+> The tempting fix was `gh pr merge --admin`. **Rejected:** a review gate that only ever passes by
+> bypassing it is theatre, and every bypass would have to be repeated forever while the artifact
+> claimed a human-review control it did not have.
+>
+> Instead the review requirement was REMOVED and everything real was kept: required checks bound to
+> app_id 15368, `enforce_admins`, linear history, no force-push, no deletions, conversation
+> resolution. PR #13 then merged `CLEAN` through the gates — no `--admin`, no bypass.
+>
+> `scan_ref_protection` now reports two findings against this repo: `self_review` and
+> `no_review_requirement`. **Those findings are TRUE and are left standing.** A solo repository has
+> no independent reviewer and must not pretend otherwise. When a team adopts this reference, the
+> review requirement goes back on and the findings clear legitimately. A true finding is worth more
+> than a green scan bought with a bypass.
+
+
 - [x] EP.1 Protect `idanshimon/agentic-sdlc` @ `main`, which had NO protection while shipping
       `bundle-enforce`, CODEOWNERS, and the merge-authorization suite. Applied `enforce_admins`,
       required checks bound to app_id 15368, `dismiss_stale_reviews`, code-owner review, linear
