@@ -252,9 +252,23 @@ not a literal in engine code.
 > contract and the cryptography swaps underneath. A test asserts the module documents this
 > limit — a governance control that overstates its own strength is the exact failure mode
 > this project keeps finding in itself.
-- [ ] 6d.6 Trust boundary resolves from an immutable trusted revision: policy, gate workflow,
+> **6d.6-6d.7 — `apps/orchestrator/evaluation_path.py`.** Closes the review's sharpest line:
+> *an agent that can't weaken a rule can still weaken the test that proves it.* Protecting
+> `standards-bundles/**` while leaving the workflow, actions, verifier, collectors, publisher, or
+> pins writable is a gate in name only. The protected set is therefore **the whole path by which a
+> rule becomes a verdict**, and this module's own file is in it — a checker its subject can edit is
+> decorative. Path filters are treated as POLICY, not performance tuning: a gate that does not run
+> cannot fail, and narrowing `paths:` is the quietest way to disable one. Strengthening is always
+> allowed, mirroring the PHI-lock rule. Verified against this repo's real `bundle-enforce.yml`:
+> a diff touching ZERO rules but adding `continue-on-error`, narrowing `paths:`, and widening
+> `permissions:` is caught with all three signals named.
+> Two bugs found by tests during the build: `lstrip("./")` strips CHARACTERS not a prefix, so every
+> `.github/**` path silently lost its leading dot and matched nothing; and `standards-bundles/**`
+> shadowed `PINS.yaml`, classifying a pin as a rule.
+
+- [x] 6d.6 Trust boundary resolves from an immutable trusted revision: policy, gate workflow,
       referenced actions (pinned by digest), verifier, evidence collectors, check publisher
-- [ ] 6d.7 A change modifying any trust-boundary component is routed as a standards change and
+- [x] 6d.7 A change modifying any trust-boundary component is routed as a standards change and
       cannot influence its own evaluation
 
 ### 6d-state — concurrency, approval binding, transactional lifecycle
