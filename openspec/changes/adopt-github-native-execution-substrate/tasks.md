@@ -208,8 +208,22 @@ not a literal in engine code.
 
 ### 6d-core — merge chokepoint, attestation, trust boundary (do these first)
 
-- [ ] 6d.1 Governed ref rejects any update lacking a control-plane authorization for the EXACT
-      resulting SHA + gate instance + classification + policy digest
+- [x] 6d.1 *(decision surface)* Authorization is bound to the EXACT resulting SHA + gate instance
+      + classification + policy digest — `apps/orchestrator/merge_authorization.py`.
+      An authorization for SHA `A` is worthless against SHA `B`, so a moved base, a rebase, or a
+      force-push invalidates rather than silently carrying over.
+      **The ref-side enforcement (6d.2/6d.3) is NOT done** — see the note below.
+- [x] 6a.4 Governance scan detects protection drift — `scan_ref_protection` evaluates a supplied
+      snapshot. Admin bypass is ON by default in GitHub, so its ABSENCE from a snapshot reads as
+      enabled (the dangerous reading, deliberately), and an empty/unreachable snapshot reports
+      every control missing rather than compliant.
+
+> **Scope boundary — what 6d.1 does and does not prove.** This module can prove a merge SHOULD be
+> refused. Only a correctly configured governed ref can prove one WAS. Tasks 6d.2 (close every
+> bypass path incl. admin, App, bot, merge queue) and 6d.3 (bind required checks to a publishing
+> app identity) are live repository settings that must be applied to a real repo and verified
+> against it — they cannot be closed by a unit test, and claiming otherwise would be the same
+> over-claim this change keeps finding elsewhere.
 - [ ] 6d.2 Close every bypass path: administrator, GitHub App, bot, direct push, API merge, merge
       queue. Disable admin bypass explicitly and TEST it (ties to 6a.1)
 - [ ] 6d.3 Bind required checks to the publishing app identity + exact head SHA; a same-named
@@ -245,12 +259,14 @@ not a literal in engine code.
 
 ### 6d-state — concurrency, approval binding, transactional lifecycle
 
-- [ ] 6d.8 State tuple `{repo_id, root_gate_instance, parent_pr, parent_head_sha, target_base_sha,
-      policy_bundle_digest, remediation_head_sha}`; merge authorization is compare-and-swap on it
+- [x] 6d.8 State tuple `{repo_id, root_gate_instance, parent_pr, parent_head_sha, target_base_sha,
+      policy_bundle_digest, remediation_head_sha}`; merge authorization is compare-and-swap on its
+      fingerprint. Drift invalidates the authorization AND the approvals gathered under it —
+      an approval is consent to a specific diff landing on a specific base, not a general blessing.
 - [ ] 6d.9 At most ONE active remediation per gate instance; concurrent workers cannot create
       siblings (siblings would break the linear-stack reviewability claim)
-- [ ] 6d.10 Invalidate authorization AND approvals on: parent force-push, base movement, rebase
-      after approval, policy bundle rotation
+- [x] 6d.10 Invalidate authorization AND approvals on: parent force-push, base movement, rebase
+      after approval, policy bundle rotation — each has its own test and its own typed refusal.
 - [ ] 6d.11 Approval binds to exact patch digest + resulting merge SHA; any material change
       invalidates it
 - [ ] 6d.12 Reviewer independence: distinct eligible humans, independent of the agent operator and
