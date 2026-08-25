@@ -108,11 +108,19 @@ not a literal in engine code.
 
 - [x] 5.0 Fail closed and report honestly while `accuracy_score` has no writer
 - [ ] 5.1 Retrospective job (scheduled workflow) sampling completed runs at random across the window
-- [ ] 5.2 Compute and write `accuracy_score` for examined decisions
-- [ ] 5.3 Tentative lessons: recorded, weight below injection floor, never injected
-- [ ] 5.4 Promotion only on recurrence of the same pattern at the same stage on a separate run
-- [ ] 5.5 Asymmetric weighting (harm costs more than help gains) + decay for presented-but-unused
-- [ ] 5.6 Archive below floor with a recorded tombstone reason; retire contradicted lessons
+      — **sampling implemented** (`select_sample`, seeded + reproducible); the scheduled
+      workflow that calls it is not yet wired
+- [x] 5.2 Compute `accuracy_score` for examined decisions — `accuracy_compute.compute_accuracy_update`,
+      folding `replay.ClassScore.autopilot_disagreement_rate`. **Writing stays with the caller:**
+      `replay.py` refuses to write to the ledger and this module preserves that boundary
+      (asserted by `test_module_performs_no_persistence`)
+- [x] 5.3 Tentative lessons: recorded, below the autonomy floor, never granting autopilot
+- [x] 5.4 Promotion only on recurrence of the same class on a separate retrospective
+      (`ValueError` when a different class is folded into a prior score)
+- [x] 5.5 Asymmetric weighting — penalty 0.30 vs reward 0.12, so a helpful-then-harmful
+      sequence nets BELOW its starting point; decay for unread scores
+- [x] 5.6 Archive below `ARCHIVE_FLOOR` with a recorded tombstone reason. Floor is deliberately
+      above zero so "archived" stays distinguishable from "never measured"
 - [ ] 5.7 Lessons keyed by `(ambiguity_class, slot_value_hash)` — org-scoped, reusable across teams
 - [ ] 5.8 PHI block on lesson content; human endorsement required for `INVARIANT_CLASSES` lessons
 - [ ] 5.9 Reconcile with `add-teaching-signal-feedback` (42/56) — do not duplicate its shipped parts
