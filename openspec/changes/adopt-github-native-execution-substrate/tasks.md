@@ -273,13 +273,21 @@ not a literal in engine code.
       the requester; no shared-account, bot, or group-membership delegation back to the requester
 - [ ] 6d.13 Invariant-class quorum evaluated by the control plane against `reviewers.yaml`; the
       Environment is never the quorum authority (ties to 6a.3)
-- [ ] 6d.14 Remediation created in non-mergeable QUARANTINE; eligible only after idempotent
+> **6d.14-6d.17 — `apps/orchestrator/remediation_lifecycle.py`.** Closes the review's fourth
+> finding: GitHub and the ledger cannot be updated atomically, and "fail delivery closed" covers
+> none of the failures that happen AFTER delivery returned successfully.
+> **Ordering rule: ledger first, then GitHub.** A ledger entry with no PR is a harmless orphan the
+> reconciler retires; a PR with no ledger entry is an unattributable agent action. When only one
+> write survives it must be the record. Verified by simulating a crash in both orders.
+> Remediations are born non-mergeable, so a partial write is inert rather than actionable.
+
+- [x] 6d.14 Remediation created in non-mergeable QUARANTINE; eligible only after idempotent
       reconciliation confirms ledger and repository agree
-- [ ] 6d.15 Idempotency keys on every operation — retries never duplicate a remediation or a
+- [x] 6d.15 Idempotency keys on every operation — retries never duplicate a remediation or a
       re-evaluation
-- [ ] 6d.16 Reconciler independent of webhook delivery: detects orphan, duplicate, missing,
+- [x] 6d.16 Reconciler independent of webhook delivery: detects orphan, duplicate, missing,
       reordered, post-verification-edited records; blocks the affected ref
-- [ ] 6d.17 Explicit state machine (draft, verified, under-review, approved, stale,
+- [x] 6d.17 Explicit state machine (draft, verified, under-review, approved, stale,
       merge-authorized, merged, superseded, abandoned); out-of-order events cannot produce an
       impossible history
 
