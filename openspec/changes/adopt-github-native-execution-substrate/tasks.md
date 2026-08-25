@@ -107,9 +107,14 @@ not a literal in engine code.
 > The compute site below is still required — but the control no longer lies while it is absent.
 
 - [x] 5.0 Fail closed and report honestly while `accuracy_score` has no writer
-- [ ] 5.1 Retrospective job (scheduled workflow) sampling completed runs at random across the window
-      — **sampling implemented** (`select_sample`, seeded + reproducible); the scheduled
-      workflow that calls it is not yet wired
+- [x] 5.1 Retrospective job sampling completed runs at random across the window —
+      `apps/orchestrator/retrospective.py` + `.github/workflows/accuracy-retrospective.yml`
+      (weekly cron + `workflow_dispatch`). Seed derives from the window id via SHA-256, not
+      `hash()` (Python randomizes string hashing per interpreter, which would break
+      reproducibility across machines); a subprocess test asserts stability under
+      `PYTHONHASHSEED`. **Reports only — no ledger write, no secret, no cloud egress**, so
+      its blast radius is a run summary. Verified by running the workflow's exact commands.
+      Remaining: a governed ledger export so the job reads live runs instead of a fixture.
 - [x] 5.2 Compute `accuracy_score` for examined decisions — `accuracy_compute.compute_accuracy_update`,
       folding `replay.ClassScore.autopilot_disagreement_rate`. **Writing stays with the caller:**
       `replay.py` refuses to write to the ledger and this module preserves that boundary
