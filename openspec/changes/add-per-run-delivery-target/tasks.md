@@ -23,9 +23,18 @@
 ## 2. Resolve the open questions (blocked on Idan)
 
 - [ ] 2.1 **Q1** — declare vs inherit for the PRD path
-- [ ] 2.2 **Q2** — is the delivery target part of gate classification?
-      **Blocks 3.x.** Precedent is already accumulating and `accuracy_score` is now promoted;
-      a target-blind precedent key cannot be retroactively split by target.
+- [x] 2.2 **Q2 — ANSWERED: yes, and it is worse than a missing key dimension.** See `design.md`.
+      Four facts verified in source: `find_precedent` and `query_class_history` are both
+      target-blind; the projection's explicit column list does not select `target_repo`; **zero**
+      of `main.py`'s five `LedgerEntry` writes stamp it; and `_resolve_target_repo` runs inside
+      `stage_deliver` — the LAST stage — while the autopilot decision happens during resolution.
+      **The system grants autonomy without knowing the blast radius of the decision it authorises.**
+      A card is resolved identically whether the run delivers to a scratch repo or to production.
+      Recommendation: resolve the target at RUN CREATION, stamp it on every precedent-forming
+      entry, add it to `query_class_history`, and key on `target_class` (production / sandbox /
+      internal) rather than `target_repo` — raw-repo keying would fragment precedent per service
+      and starve the teaching loop. Guarded by `test_precedent_target_blindness.py`, which fails
+      when the finding is fixed so the evidence is updated rather than silently dropped.
 - [ ] 2.3 **Q3** — fail closed at run creation on a missing App installation, or at delivery?
 
 ## 3. Per-run target (after Q1-Q3)
