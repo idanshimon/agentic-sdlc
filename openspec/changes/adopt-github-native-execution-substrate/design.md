@@ -125,11 +125,92 @@ proof required.
 | `bundle_refs` is honest | No hardcoded rule ID remains in `deliver_github.py`; all seven stages stamp; entries distinguish rule-evaluated from subscription-set. |
 | OIDC replaces stored secrets | No service-principal secret in the workflow; a live run authenticates to Azure by federated token. |
 | Gate reason is typed | Every gate-opening entry carries a non-null `gate_reason`. |
+| Agent never writes to a human branch | A live failed gate yields a stacked PR; the triggering head branch shows zero agent-authored commits. |
+| Remediation evidence chain is complete | Open a live remediation PR; every link (triggering PR, gate, run URL, ledger id, rule citations) resolves. |
+| Agent cannot close its own loop | An agent approval on an agent-authored PR leaves required review unsatisfied in the live repo. |
+| Triggering PR unblocks automatically | Merging a live remediation re-evaluates the triggering PR's gates with no manual action. |
 
-## 6. Open questions carried from the proposal
+## 6. The authoring layer: agentic workflows as the stage-execution engine
 
-- **Q1** per-stage vs per-run job granularity — leaning per-stage.
-- **Q2** custom deployment protection rule callback shape and timeout budget — confirm before
-  committing Phase 2.
+§4 says stages move to GitHub Actions. It does not say how a stage is *authored*. Hand-writing
+seven pipeline stages as raw Actions YAML — each with sandboxing, egress control, engine
+selection, and a write path that the agent itself must not hold — is the kind of undifferentiated
+work this change exists to stop doing.
+
+The GitHub agentic-workflow toolchain is that authoring layer. A stage is a Markdown file with
+YAML frontmatter; the toolchain compiles it to a committed `.lock.yml` that Actions executes. The
+compiled artifact is a repository file under `CODEOWNERS` — which is exactly the deployment spec's
+requirement that user-private automation must not be the canonical definition.
+
+### 6.1 What the authoring layer provides, and therefore what we stop building
+
+| Need | Provided by the authoring layer | Our former plan |
+|---|---|---|
+| Stage definition as a reviewable repo artifact | `.md` source + compiled `.lock.yml` pair | hand-written Actions YAML per stage |
+| Agent sandbox + egress allowlist | container isolation behind the workflow firewall | task 6a.6, largely satisfied |
+| Per-stage engine selection | `engine:` frontmatter | per-stage provider config in orchestrator env |
+| Agent holds no write permission | agent job read-only; writes execute in a separate scoped job | task 6a.5, satisfied structurally |
+| Mechanical write path | safe-output handlers, incl. pull-request creation and check runs | bespoke GitHub client code per stage |
+| Per-run cost ceiling | per-run AI credit budget | part of §4 run budget |
+| Inter-stage data | run-scoped artifact upload + restored context folders | §4 artifact store, cheaper |
+
+### 6.2 The boundary, stated precisely
+
+The authoring layer is an **execution** mechanism. It has no concept of subject-matter
+classification, no durable decision record, and no cross-run precedent. Its own built-in threat
+screening is a non-deterministic classifier — defense in depth, never a policy gate.
+
+Therefore the split is exact and unchanged from §3:
+
+> **Safe outputs are the mechanism by which a write happens. The control plane decides whether
+> the write is permitted.** A safe-output handler that creates a pull request is plumbing. The
+> verdict that a `phi-classification` decision requires a named human before that pull request may
+> merge is ours, and there is no frontmatter key that expresses it.
+
+Concretely, the remediation flow specified in `specs/agent-remediation/spec.md` composes both
+planes: the agent job proposes, the safe-output job creates the stacked pull request, and the
+control plane supplies the classification verdict and the quorum policy that decide whether it
+may merge.
+
+### 6.3 Q1 resolves: per-stage
+
+The authoring layer's unit of composition is one workflow file. Stage jobs chain by declaring
+dependencies, and a stage job can be gated on a control-plane job. This resolves **Q1 in favour of
+per-stage granularity**, which was already the leaning; the artifact store makes re-hydration
+cheap enough that the objection does not bind.
+
+### 6.4 Q2 partially resolves
+
+The authoring layer exposes manual approval routed through environment protection rules. That is
+the seam the custom deployment protection rule attaches to, and it confirms the hook is a
+first-class frontmatter concern rather than something bolted on. **The timeout budget remains
+open** and still gates Phase 2.
+
+### 6.5 Correction to a recorded blocker
+
+The proposal's §1a records the toolchain as "a research-stage project whose own README has retired
+releases over a billing defect." That characterization is stale: the toolchain is in public
+preview with per-run credit budgeting. The **mitigation is unchanged and still required** — pin an
+explicit version, keep the prior path behind a per-stage flag (tasks 6a.7, 6a.8, 7.1). Preview
+status is a reason to pin, not a reason to defer.
+
+### 6.6 What does not change
+
+Constraint 2 is untouched and remains the load-bearing limit. A workflow run is an Actions run:
+job and run duration caps apply, and a standards committee deliberating for weeks exceeds them.
+The authoring layer is a per-run execution engine, not a durable workflow engine.
+
+> The run **ends** at the gate. A new run resumes on approval. The Decision Ledger is the
+> continuity.
+
+This is the strongest available argument that the control plane is not redundant: the substrate
+structurally cannot hold a governance gate open, and its log retention is measured in days against
+a six-year obligation.
+
+## 7. Open questions carried from the proposal
+
+- **Q1** per-stage vs per-run job granularity — **RESOLVED: per-stage** (design §6.3).
+- **Q2** custom deployment protection rule callback shape and timeout budget — **shape resolved**
+  (environment-protection seam, design §6.4); **timeout budget remains open** and gates Phase 2.
 - **Q3** human endorsement before first injection of a promoted lesson — proposed default is
   required for `INVARIANT_CLASSES` only.

@@ -126,8 +126,62 @@
 - quorum policy rejects a single approval when two distinct approvers are required
 - governance scan fails an Environment with administrator bypass enabled
 
-## 7 — Stage migration (flag-gated, one stage at a time)
+## 6c — Authoring layer (agentic workflows as the stage engine)
 
+> Design §6. The authoring layer is an execution mechanism; it never holds the policy verdict.
+
+- [ ] 6c.1 Install and pin the agentic-workflow toolchain to an explicit version (satisfies 6a.7)
+- [ ] 6c.2 Author one stage as a `.md` + compiled `.lock.yml` pair under `.github/workflows/`;
+      confirm `CODEOWNERS` covers both files
+- [ ] 6c.3 Confirm the agent job carries no write permission and every write lands in a separate
+      scoped job (evidences 6a.5 structurally rather than by convention)
+- [ ] 6c.4 Configure deny-by-default egress allowlist via the workflow firewall (evidences 6a.6)
+- [ ] 6c.5 Set a per-run credit budget; assert exhaustion surfaces as `budget_exceeded`, not as an
+      opaque failure
+- [ ] 6c.6 Wire the ledger MCP as a workflow tool so a stage writes its `runtime` entry from the
+      substrate; verify the entry is durable-store readable, not just job-log visible
+- [ ] 6c.7 Assert the built-in threat screening is NOT wired as a policy gate anywhere; it is
+      defense in depth only
+- [ ] 6c.8 Record the compiled `.lock.yml` digest in the run's ledger entry so the executed
+      definition is reconstructable
+
+**Test targets:** `apps/orchestrator/tests/`, plus live verification
+- compiled definition is a tracked repository file, not user-private automation
+- agent job token carries no write scope
+- a stage-authored ledger entry reads back from the durable store
+
+## 6d — Stacked-PR remediation (capability `agent-remediation`)
+
+> Spec: `specs/agent-remediation/spec.md`. This is what the agent *produces* when a gate fails —
+> the question the deployment spec leaves open.
+
+- [ ] 6d.1 Remediation delivery opens a NEW pull request based on the triggering PR's head branch
+- [ ] 6d.2 Hard refusal: never push to a branch whose PR was opened by `actor.kind: human`;
+      an attempted push fails closed and records the refusal
+- [ ] 6d.3 Remediation body carries the full evidence chain: triggering PR, failed gate name,
+      failing run URL, `LedgerEntry` id, `[<dept>/<version>/<rule-id>]` citations
+- [ ] 6d.4 Delivery fails closed with `gate_reason: verification_failed` on any unresolvable
+      evidence link
+- [ ] 6d.5 Extend `gh_audit_xref` to carry triggering PR + remediation PR + stack depth
+- [ ] 6d.6 Agent principals cannot satisfy required review on an agent-authored PR
+- [ ] 6d.7 Invariant-class remediation additionally enforces `reviewers.yaml` quorum (ties to 6a.3)
+- [ ] 6d.8 Auto re-evaluate the triggering PR's gates when a remediation merges into its head
+      branch; record the re-evaluation as a `runtime` entry
+- [ ] 6d.9 Bound remediation depth; exhaustion opens a gate with `gate_reason: budget_exceeded`
+      referencing the triggering PR
+- [ ] 6d.10 Gate policy resolves from the base revision or a central location — never from the
+      evaluated PR's head; fail closed when policy cannot be loaded
+
+**Test targets:** `apps/orchestrator/tests/`, `packages/ledger-core/tests/`
+- a failed gate yields a PR based on the triggering head branch, and zero agent commits on it
+- a remediation body missing its run URL is rejected before delivery
+- an agent approval leaves required review unsatisfied
+- a single approval on a `phi-classification` remediation fails the quorum check
+- a PR whose diff edits the gate policy is evaluated against the base policy
+- the third remediation under a depth-two budget is refused with `budget_exceeded`
+- full stack lineage reconstructs from ledger entries with no repository read
+
+## 7 — Stage migration (flag-gated, one stage at a time)
 - [ ] 7.1 Migration flag per stage; prior path remains functional
 - [ ] 7.2 Phase 1 — `review_scan` (deterministic, already has `bundle-enforce.yml`, no consumer)
 - [ ] 7.3 Phase 2 — resolver gate via Environment (depends on §6)
@@ -145,7 +199,14 @@
 - [ ] 8.3 Live entry with `accuracy_score != 0.0` and the retrospective run identified
 - [ ] 8.4 Live run authenticating to Azure by federated token, no stored secret
 - [ ] 8.5 Stage handoff exceeding the prior payload limit completing on the substrate
-- [ ] 8.6 Report status split: verified live / verified locally / implemented-not-proven / blocked
+- [ ] 8.6 Live failed gate producing a stacked remediation PR; triggering head branch shows zero
+      agent-authored commits
+- [ ] 8.7 Live remediation PR whose every evidence link resolves (triggering PR, gate, run URL,
+      ledger id, rule citations)
+- [ ] 8.8 Live agent approval on an agent-authored PR observed as NOT satisfying required review
+- [ ] 8.9 Live remediation merge observed re-evaluating the triggering PR's gates with no manual
+      action
+- [ ] 8.10 Report status split: verified live / verified locally / implemented-not-proven / blocked
 
 ## Rollback plan
 
@@ -158,6 +219,7 @@ Every phase is independently reversible.
 | 4 | Budget and halt are additive. Disable the budget check; runs behave as before. |
 | 5 | Retrospective is a scheduled job. Disable the schedule. Promoted lessons stop being written; injection is gated by weight, so tentative lessons were never influencing runs. Archive promoted lessons rather than deleting — they are ledger entries and the ledger is append-only. |
 | 6 | Environment protection is additive to the existing in-app approval path, which remains functional. Remove the protection rule; approvals route as they do today. The classification verdict is computed by the control plane either way. |
+| 6c, 6d | The authoring layer is additive: the prior stage executor and the existing delivery path remain until Phase 4. Revert by disabling the stage flag. Remediation PRs already opened are ordinary pull requests and are closed, not deleted — their ledger entries are append-only and remain. |
 | 7 | Per-stage flag. Disable to return that stage to the prior executor. No cross-stage coupling. Phase 4 decommission is the only irreversible step and is gated on §8 evidence for every stage. |
 
 **Irreversible step:** Phase 4 (7.6) only. It MUST NOT proceed until 8.1–8.5 are recorded for
