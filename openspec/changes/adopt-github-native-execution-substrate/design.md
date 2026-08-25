@@ -207,6 +207,44 @@ This is the strongest available argument that the control plane is not redundant
 structurally cannot hold a governance gate open, and its log retention is measured in days against
 a six-year obligation.
 
+## 6.7 Correction from adversarial review: topology is not authorship
+
+The first draft of `agent-remediation` treated the stacked pull request as the control that keeps
+agent work attributable. An adversarial review defeated that in one move, and the correction is
+worth stating plainly because it changes what we claim in front of a customer.
+
+**A pull request's opener does not establish who wrote its contents.** An agent's patch can be
+transplanted into a human-opened PR, or a human can open an empty PR that an agent then fills.
+Either way the work is agent-produced and the rule that agents cannot approve agent-authored PRs
+silently stops applying. Worse, a squash merge collapses commit identity so the durable history
+may attribute the result to the merging human. Branch shape is not evidence.
+
+The controls are therefore reassigned:
+
+| Concern | Wrong control (first draft) | Correct control |
+|---|---|---|
+| Who wrote this | PR opener / branch topology | Attestation bound to the patch digest |
+| May this merge | HTTP 409 from the API | Authorization for the exact resulting SHA, enforced at the ref |
+| Is the gate trustworthy | Policy read from base revision | The whole evaluation boundary — policy, workflow, actions, verifier, collectors, publisher — from an immutable trusted revision |
+| Is this bounded | Stack depth | Root-scoped budget (attempts, time, cost, changed surface) |
+| Can it be reconstructed | `gh_audit_xref` triple | Immutable lifecycle events with parent/root ids and all SHAs |
+
+Two consequences we should not soften:
+
+1. **An API refusal is advisory unless it is bound to the merge.** The 409 remains correct and
+   remains ours, but if any merge path — administrator, App, bot, merge queue — can route around
+   it, "classification decides" is false. The gate has to live at the ref.
+2. **The trust boundary is bigger than the policy.** An agent that cannot weaken the rule can
+   still weaken the test that proves it. Protecting `rules.yaml` while leaving the verifier
+   writable is a gate in name only.
+
+**Stacked PRs are retained, with a demoted claim.** They materially improve review segregation —
+human intent is one diff, agent remediation is another — and that is a real benefit worth keeping.
+They are not proof of authorship and this spec no longer implies they are.
+
+The honest customer sentence is now: *attestation says who wrote it, the ref says what may merge,
+and the stack makes it reviewable.*
+
 ## 7. Open questions carried from the proposal
 
 - **Q1** per-stage vs per-run job granularity — **RESOLVED: per-stage** (design §6.3).

@@ -150,36 +150,86 @@
 - agent job token carries no write scope
 - a stage-authored ledger entry reads back from the durable store
 
-## 6d — Stacked-PR remediation (capability `agent-remediation`)
+## 6d — Agent remediation (capability `agent-remediation`)
 
-> Spec: `specs/agent-remediation/spec.md`. This is what the agent *produces* when a gate fails —
-> the question the deployment spec leaves open.
+> Spec: `specs/agent-remediation/spec.md`. Hardened after adversarial review — the stacked PR is
+> a REVIEWABILITY practice, not the authorship control. Authorship = attestation. Enforcement =
+> merge chokepoint. Order matters: 6d.1–6d.4 are the security core and gate everything below.
 
-- [ ] 6d.1 Remediation delivery opens a NEW pull request based on the triggering PR's head branch
-- [ ] 6d.2 Hard refusal: never push to a branch whose PR was opened by `actor.kind: human`;
-      an attempted push fails closed and records the refusal
-- [ ] 6d.3 Remediation body carries the full evidence chain: triggering PR, failed gate name,
-      failing run URL, `LedgerEntry` id, `[<dept>/<version>/<rule-id>]` citations
-- [ ] 6d.4 Delivery fails closed with `gate_reason: verification_failed` on any unresolvable
-      evidence link
-- [ ] 6d.5 Extend `gh_audit_xref` to carry triggering PR + remediation PR + stack depth
-- [ ] 6d.6 Agent principals cannot satisfy required review on an agent-authored PR
-- [ ] 6d.7 Invariant-class remediation additionally enforces `reviewers.yaml` quorum (ties to 6a.3)
-- [ ] 6d.8 Auto re-evaluate the triggering PR's gates when a remediation merges into its head
-      branch; record the re-evaluation as a `runtime` entry
-- [ ] 6d.9 Bound remediation depth; exhaustion opens a gate with `gate_reason: budget_exceeded`
-      referencing the triggering PR
-- [ ] 6d.10 Gate policy resolves from the base revision or a central location — never from the
-      evaluated PR's head; fail closed when policy cannot be loaded
+### 6d-core — merge chokepoint, attestation, trust boundary (do these first)
+
+- [ ] 6d.1 Governed ref rejects any update lacking a control-plane authorization for the EXACT
+      resulting SHA + gate instance + classification + policy digest
+- [ ] 6d.2 Close every bypass path: administrator, GitHub App, bot, direct push, API merge, merge
+      queue. Disable admin bypass explicitly and TEST it (ties to 6a.1)
+- [ ] 6d.3 Bind required checks to the publishing app identity + exact head SHA; a same-named
+      check from another identity does not satisfy the gate
+- [ ] 6d.4 Patch attestation: initiating principal, agent identity, workflow run, source revision,
+      toolchain, patch digest. Authorship derived from THIS — never from PR opener, commit
+      author/committer, trailers, branch names, or labels
+- [ ] 6d.5 Unverifiable or mixed-provenance branch fails closed (`verification_failed`)
+- [ ] 6d.6 Trust boundary resolves from an immutable trusted revision: policy, gate workflow,
+      referenced actions (pinned by digest), verifier, evidence collectors, check publisher
+- [ ] 6d.7 A change modifying any trust-boundary component is routed as a standards change and
+      cannot influence its own evaluation
+
+### 6d-state — concurrency, approval binding, transactional lifecycle
+
+- [ ] 6d.8 State tuple `{repo_id, root_gate_instance, parent_pr, parent_head_sha, target_base_sha,
+      policy_bundle_digest, remediation_head_sha}`; merge authorization is compare-and-swap on it
+- [ ] 6d.9 At most ONE active remediation per gate instance; concurrent workers cannot create
+      siblings (siblings would break the linear-stack reviewability claim)
+- [ ] 6d.10 Invalidate authorization AND approvals on: parent force-push, base movement, rebase
+      after approval, policy bundle rotation
+- [ ] 6d.11 Approval binds to exact patch digest + resulting merge SHA; any material change
+      invalidates it
+- [ ] 6d.12 Reviewer independence: distinct eligible humans, independent of the agent operator and
+      the requester; no shared-account, bot, or group-membership delegation back to the requester
+- [ ] 6d.13 Invariant-class quorum evaluated by the control plane against `reviewers.yaml`; the
+      Environment is never the quorum authority (ties to 6a.3)
+- [ ] 6d.14 Remediation created in non-mergeable QUARANTINE; eligible only after idempotent
+      reconciliation confirms ledger and repository agree
+- [ ] 6d.15 Idempotency keys on every operation — retries never duplicate a remediation or a
+      re-evaluation
+- [ ] 6d.16 Reconciler independent of webhook delivery: detects orphan, duplicate, missing,
+      reordered, post-verification-edited records; blocks the affected ref
+- [ ] 6d.17 Explicit state machine (draft, verified, under-review, approved, stale,
+      merge-authorized, merged, superseded, abandoned); out-of-order events cannot produce an
+      impossible history
+
+### 6d-shape — delivery, budget, evidence, re-evaluation
+
+- [ ] 6d.18 Remediation delivered as a PR based on the triggering head branch; no direct push.
+      Documented as review segregation, NOT as proof of authorship
+- [ ] 6d.19 Agent attribution survives a squash merge (derivable from attestation, not history)
+- [ ] 6d.20 ROOT-SCOPED budget: attempts, elapsed time, cost, cumulative changed surface. Depth is
+      descriptive metadata only. Siblings share the budget; reopening does not reset it
+- [ ] 6d.21 Exhaustion halts with `gate_reason: budget_exceeded` referencing the root gate instance
+- [ ] 6d.22 PR body carries ONE durable ledger reference + a concise human reason — not a
+      duplicated evidence chain in mutable prose
+- [ ] 6d.23 Body edits do not break verification and do not raise false compliance incidents
+- [ ] 6d.24 Re-evaluation follows the merged head SHA through the NORMAL trusted gate path, causally
+      linked by idempotency key. Do NOT build a parallel rerun subsystem
+- [ ] 6d.25 Ledger records immutable lifecycle EVENTS (created, attested, approved, head-changed,
+      merge-authorized, merged, re-evaluated, superseded, abandoned) with stable parent/root ids and
+      all relevant SHAs; `gh_audit_xref` is generated from them, never the system of record
 
 **Test targets:** `apps/orchestrator/tests/`, `packages/ledger-core/tests/`
-- a failed gate yields a PR based on the triggering head branch, and zero agent commits on it
-- a remediation body missing its run URL is rejected before delivery
-- an agent approval leaves required review unsatisfied
-- a single approval on a `phi-classification` remediation fails the quorum check
-- a PR whose diff edits the gate policy is evaluated against the base policy
-- the third remediation under a depth-two budget is refused with `budget_exceeded`
-- full stack lineage reconstructs from ledger entries with no repository read
+
+Adversarial cases (these are the acceptance bar, not the happy path):
+- merge attempted by an administrator with no authorization for the resulting SHA → rejected
+- same-named check published by a different app identity → gate unsatisfied
+- agent patch cherry-picked into a human-opened PR → still attributed to the agent, human review
+  still required
+- remediation whose diff edits the verifier → evaluated against the trusted revision
+- two workers on one gate instance → exactly one remediation
+- force-push after approval → authorization and approvals invalidated
+- policy bundle rotates mid-review → authorization invalidated
+- PR created but ledger write failed → stays non-mergeable, surfaced as orphan
+- merge webhook delivered twice / out of order → one evaluation, causally consistent history
+- five sibling attempts under a depth-one limit → refused on root budget
+- squash merge → agent attribution still derivable
+- reconstruct a stack containing an abandoned attempt and a force-push, with no repository read
 
 ## 7 — Stage migration (flag-gated, one stage at a time)
 - [ ] 7.1 Migration flag per stage; prior path remains functional
@@ -199,8 +249,10 @@
 - [ ] 8.3 Live entry with `accuracy_score != 0.0` and the retrospective run identified
 - [ ] 8.4 Live run authenticating to Azure by federated token, no stored secret
 - [ ] 8.5 Stage handoff exceeding the prior payload limit completing on the substrate
-- [ ] 8.6 Live failed gate producing a stacked remediation PR; triggering head branch shows zero
-      agent-authored commits
+- [ ] 8.6 Live: merge attempted on a governed ref WITHOUT control-plane authorization (including
+      as an administrator) is rejected at the ref — observed, not unit-tested
+- [ ] 8.7 Live: agent patch transplanted into a human-opened PR is still attributed to the agent
+      by attestation, and still requires human review
 - [ ] 8.7 Live remediation PR whose every evidence link resolves (triggering PR, gate, run URL,
       ledger id, rule citations)
 - [ ] 8.8 Live agent approval on an agent-authored PR observed as NOT satisfying required review
