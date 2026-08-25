@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agentic SDLC — GitHub Substrate Architecture</title>
+<script src="vendor/cytoscape.min.js"></script>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --surface:#1c2128; --border:#30363d;
+    --text:#e6edf3; --secondary:#8b949e; --muted:#6e7681;
+    --blue:#58a6ff; --green:#3fb950; --purple:#bc8cff; --red:#f85149;
+    --amber:#d29922; --teal:#39c5cf;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);background:var(--panel);
+    display:flex;align-items:center;gap:16px;flex-shrink:0}
+  h1{font-size:15px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap}
+  h1 span{color:var(--secondary);font-weight:400}
+  #crumbs{display:flex;align-items:center;gap:8px;font-size:12.5px;flex:1;overflow:hidden}
+  #crumbs a{color:var(--blue);cursor:pointer;text-decoration:none;white-space:nowrap}
+  #crumbs a:hover{text-decoration:underline}
+  #crumbs .sep{color:var(--muted)}
+  #crumbs .cur{color:var(--text);font-weight:600;white-space:nowrap}
+  .btn{background:var(--surface);border:1px solid var(--border);color:var(--text);
+    padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12.5px;font-family:inherit}
+  .btn:hover{background:#262c36;border-color:#484f58}
+  main{flex:1;display:flex;min-height:0}
+  #cy{flex:1;min-width:0}
+  #side{width:320px;flex-shrink:0;border-left:1px solid var(--border);background:var(--panel);
+    padding:18px;overflow-y:auto}
+  #tag{font-size:13px;color:var(--secondary);line-height:1.6;padding-bottom:14px;
+    border-bottom:1px solid var(--border);margin-bottom:14px}
+  #detail h3{font-size:13.5px;font-weight:600;margin-bottom:8px;line-height:1.35}
+  #detail .role{font-size:12px;color:var(--secondary);line-height:1.65;margin-bottom:12px}
+  #detail .kv{font-size:11.5px;border-top:1px solid var(--border);padding-top:10px;margin-top:10px}
+  #detail .kv div{display:flex;gap:8px;margin-bottom:6px}
+  #detail .kv b{color:var(--muted);font-weight:500;flex-shrink:0;width:66px}
+  #detail .kv span{color:var(--secondary);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11px;word-break:break-word}
+  #detail .empty{color:var(--muted);font-size:12.5px;font-style:italic}
+  .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10.5px;
+    font-weight:600;margin-bottom:10px;letter-spacing:0.02em}
+  .p-gh{background:rgba(88,166,255,.15);color:var(--blue)}
+  .p-cp{background:rgba(63,185,80,.15);color:var(--green)}
+  .p-both{background:rgba(188,140,255,.15);color:var(--purple)}
+  .p-ext{background:rgba(210,153,34,.15);color:var(--amber)}
+  #legend{position:absolute;left:16px;bottom:14px;background:rgba(22,27,34,.94);
+    border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-size:11px;
+    color:var(--secondary);pointer-events:none}
+  #legend div{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  #legend div:last-child{margin-bottom:0}
+  #legend i{width:15px;height:2.5px;border-radius:2px;display:block;flex-shrink:0}
+  .hint{position:absolute;right:340px;bottom:14px;font-size:11px;color:var(--muted)}
+
+  /* ---- live trace ---- */
+  #play{display:flex;align-items:center;gap:7px;flex-shrink:0}
+  select.btn{padding:5px 8px}
+  .btn.go{background:var(--green);border-color:var(--green);color:#06210e;font-weight:700}
+  .btn.go:hover{background:#4ad160;border-color:#4ad160}
+  #narr{display:none;flex-direction:column}
+  #narr.on{display:flex}
+  #narr .beat{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    margin-bottom:9px}
+  #narr .say{font-size:14px;line-height:1.62;color:var(--text);margin-bottom:16px}
+  #narr .sub{font-size:11.5px;color:var(--secondary);line-height:1.6;
+    border-left:2px solid var(--border);padding-left:11px;margin-bottom:16px}
+  #steps{border-top:1px solid var(--border);padding-top:12px;margin-top:4px}
+  #steps ol{list-style:none;counter-reset:s}
+  #steps li{counter-increment:s;font-size:11.5px;color:var(--muted);padding:3px 0 3px 22px;
+    position:relative;line-height:1.45}
+  #steps li::before{content:counter(s);position:absolute;left:0;top:3px;width:15px;height:15px;
+    border-radius:50%;background:var(--surface);color:var(--muted);font-size:9px;
+    display:flex;align-items:center;justify-content:center;font-weight:700}
+  #steps li.done{color:var(--secondary)}
+  #steps li.done::before{background:rgba(63,185,80,.2);color:var(--green)}
+  #steps li.now{color:var(--text);font-weight:600}
+  #steps li.now::before{background:var(--blue);color:#06213f}
+  .b-ok{color:var(--green)} .b-stop{color:var(--red)} .b-run{color:var(--blue)}
+  .b-human{color:var(--amber)} .b-rec{color:var(--purple)}
+  #banner{position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    padding:9px 20px;border-radius:8px;font-size:13px;font-weight:700;letter-spacing:.02em;
+    opacity:0;transition:opacity .25s;pointer-events:none;border:1.5px solid}
+  #banner.show{opacity:1}
+  #banner.stop{background:rgba(248,81,73,.16);border-color:var(--red);color:#ffb3ae}
+  #banner.ok{background:rgba(63,185,80,.14);border-color:var(--green);color:#8ff0a4}
+
+</style>
+</head>
+<body>
+<header>
+  <h1>Agentic SDLC <span>/ GitHub substrate</span></h1>
+  <div id="crumbs"></div>
+  <div id="play">
+    <select class="btn" id="scenario">
+      <option value="phi">PHI leak — caught and stopped</option>
+      <option value="clean">Clean requirement — autopilot</option>
+      <option value="test">Missing tests — agent remediates</option>
+    </select>
+    <button class="btn go" id="run">&#9654; Watch it run</button>
+  </div>
+  <button class="btn" id="back">&larr; Back</button>
+  <button class="btn" id="reset">Reset zoom</button>
+</header>
+<main>
+  <div id="cy" style="position:relative">
+    <div id="legend">
+      <div><i style="background:#58a6ff"></i> execution / data flow</div>
+      <div><i style="background:#3fb950"></i> governance verdict</div>
+      <div><i style="background:#bc8cff"></i> ledger write (append-only)</div>
+      <div><i style="background:#f85149"></i> hard gate — cannot be bypassed</div>
+      <div><i style="background:#d29922"></i> human action</div>
+    </div>
+    <div id="banner"></div>
+    <div class="hint">click + nodes to descend &middot; click empty canvas to go up</div>
+  </div>
+  <aside id="side">
+    <div id="tag"></div>
+    <div id="detail"><p class="empty">Click any node to see what it does, and what flows in and out of it.</p></div>
+    <div id="narr">
+      <div class="beat" id="n-beat"></div>
+      <div class="say" id="n-say"></div>
+      <div class="sub" id="n-sub"></div>
+      <div id="steps"><ol id="n-steps"></ol></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ============================ VIEWS ============================ */
+const VIEWS = {
+
+root:{
+ title:'System',
+ tag:'Two planes. GitHub executes; the control plane decides. Every arrow crossing between them is either a verdict going down, or evidence coming up. Click a + node to open it.',
+ nodes:[
+  {id:'human',label:'DEVELOPER',cls:'actor',pos:[90,70],
+   role:'Opens the feature pull request. Never has agent commits pushed onto their branch \u2014 that isolation is structural, not a convention.',
+   plane:'ext',io:{in:'PRD / feature intent',out:'pull request'}},
+
+  {id:'gh',label:'GITHUB SUBSTRATE',cls:'gh core',drill:'gh',pos:[470,70],
+   role:'Runs everything: stage jobs, agent sandboxes, the deterministic gates, PR lifecycle. Authored as agentic-workflow Markdown compiled to committed .lock.yml files under CODEOWNERS.',
+   plane:'gh',io:{in:'workflow definitions, run triggers',out:'run results, safe outputs, run URLs'}},
+
+  {id:'gate',label:'CLASSIFICATION GATE',cls:'gate core',drill:'gate',pos:[470,275],
+   role:'The product. Gates on WHAT is being decided, not on how confident the agent is. phi-classification and auth-policy pause regardless of confidence, enforced server-side with an HTTP 409 no client can talk past.',
+   plane:'cp',io:{in:'proposed decision + ambiguity_class',out:'verdict: autopilot | gate | refuse'}},
+
+  {id:'remed',label:'STACKED-PR REMEDIATION',cls:'gh',drill:'remed',pos:[880,70],
+   role:'What the agent PRODUCES when a gate fails. A separate PR stacked on the human\u2019s branch, carrying the full evidence chain. The gate is what forced it to exist.',
+   plane:'both',io:{in:'gate failure + evidence',out:'stacked PR, ledger entry'}},
+
+  {id:'ledger',label:'DECISION LEDGER',cls:'ledger core',drill:'ledger',pos:[470,470],
+   role:'Append-only record of every meaningful agent action. The compliance artifact \u2014 6-year HIPAA retention against Actions logs measured in days. This is why the control plane cannot be delegated.',
+   plane:'cp',io:{in:'runtime + meta entries from every stage',out:'precedent, audit, analytics'}},
+
+  {id:'std',label:'STANDARDS BUNDLES',cls:'std',drill:'std',pos:[90,470],
+   role:'Versioned, committee-reviewed policy-as-code. Bundles are law \u2014 they outrank every instruction layer. Cited on every decision as [dept/version/rule-id].',
+   plane:'cp',io:{in:'standards-change PRs',out:'pinned rules, reviewer quorum'}},
+
+  {id:'teach',label:'TEACHING LOOP',cls:'teach',drill:'teach',pos:[880,470],
+   role:'Turns closed runs into durable lessons. Deliberately conservative: two-stage promotion, asymmetric weighting, decay, tombstones. Currently the largest honest gap \u2014 accuracy_score is 0.0 on all live entries.',
+   plane:'cp',io:{in:'sampled completed runs',out:'weighted meta entries'}},
+
+  {id:'op',label:'OPERATOR',cls:'actor',pos:[90,275],
+   role:'Resolves gated ambiguity cards, halts live runs, approves standards changes. Named, attributable, and required \u2014 an agent can never stand in for them.',
+   plane:'ext',io:{in:'gate notification',out:'resolution, approval, halt'}},
+ ],
+ edges:[
+  {s:'human',t:'gh',label:'opens PR',cls:'e-flow'},
+  {s:'gh',t:'gate',label:'may this proceed?',cls:'e-gov fat'},
+  {s:'gate',t:'gh',label:'verdict',cls:'e-gov'},
+  {s:'gate',t:'op',label:'hard gate',cls:'e-hard fat'},
+  {s:'op',t:'gate',label:'resolves',cls:'e-human'},
+  {s:'gh',t:'remed',label:'gate failed',cls:'e-flow'},
+  {s:'remed',t:'human',label:'stacked PR \u2014 never their branch',cls:'e-flow dashedE arcup'},
+  {s:'gate',t:'ledger',label:'writes verdict',cls:'e-ledger'},
+  {s:'remed',t:'ledger',label:'writes evidence chain',cls:'e-ledger'},
+  {s:'std',t:'gate',label:'supplies rules + quorum',cls:'e-gov'},
+  {s:'ledger',t:'gate',label:'precedent',cls:'e-ledger dashedE'},
+  {s:'ledger',t:'teach',label:'sampled runs',cls:'e-ledger'},
+  {s:'teach',t:'ledger',label:'promoted lessons',cls:'e-ledger dashedE'},
+  {s:'op',t:'std',label:'approves changes',cls:'e-human'},
+ ]},
+
+gh:{
+ title:'GitHub substrate',
+ tag:'The execution plane. Agentic-workflow Markdown compiles to a committed .lock.yml; the agent job holds NO write permission, and every write happens in a separate scoped job. That separation is the security model, not a setting.',
+ nodes:[
+  {id:'src',label:'STAGE SOURCE (.md)',cls:'gh',pos:[110,70],
+   role:'One Markdown file per pipeline stage: YAML frontmatter declares the engine, tools, permissions and safe outputs; the body is the stage prompt. Reviewable as an ordinary diff.',
+   plane:'gh',io:{in:'authored by pod, reviewed via CODEOWNERS',out:'compiles to .lock.yml'}},
+  {id:'lock',label:'COMPILED .lock.yml',cls:'gh',pos:[400,70],
+   role:'The hardened Actions workflow GitHub actually runs. Schema-validated, actions SHA-pinned, expressions allowlisted. Committed \u2014 so the executed definition is reconstructable from the repo.',
+   plane:'gh',io:{in:'compile step',out:'the run GitHub executes'}},
+  {id:'agentjob',label:'AGENT JOB (read-only)',cls:'gh core',pos:[400,235],
+   role:'Where the model actually runs \u2014 containerized, behind the egress firewall, with a read-only token. It cannot write to the repo even if fully compromised. It can only emit a structured request.',
+   plane:'gh',io:{in:'repo context + prompt + MCP tools',out:'agent_output.json (a REQUEST, not a write)'}},
+  {id:'fw',label:'EGRESS FIREWALL',cls:'gh',pos:[110,235],
+   role:'Deny-by-default domain allowlist in front of the agent container. Blocks exfiltration and confines a compromised agent to permitted hosts.',
+   plane:'gh',io:{in:'all agent network traffic',out:'permitted domains only'}},
+  {id:'safeout',label:'SAFE-OUTPUT JOB (scoped write)',cls:'gh',pos:[400,400],
+   role:'The ONLY thing that writes. Runs after the agent finishes, with narrowly scoped permissions, applying validated requests: create PR, create check run, raise a code-scanning alert.',
+   plane:'gh',io:{in:'validated agent_output.json',out:'real GitHub writes'}},
+  {id:'mcp',label:'LEDGER MCP',cls:'ledger',pos:[700,235],
+   role:'How a stage running on GitHub writes its runtime entry to the durable ledger. The bridge between the execution plane and the control plane.',
+   plane:'both',io:{in:'stage decision + citations',out:'durable LedgerEntry'}},
+  {id:'detgate',label:'DETERMINISTIC GATES',cls:'gate',pos:[700,70],
+   role:'Already live today: bundle-enforce and supply-chain-scan. Policy-as-code on every PR, no secret required, fail-closed on load error. The un-bypassable floor.',
+   plane:'gh',io:{in:'every pull request',out:'required check status'}},
+  {id:'oidc',label:'OIDC \u2192 AZURE',cls:'gh',pos:[700,400],
+   role:'Federated identity replacing stored service-principal secrets for data-plane auth. No long-lived credential lives in the repo.',
+   plane:'gh',io:{in:'workflow identity token',out:'short-lived Azure credential'}},
+ ],
+ edges:[
+  {s:'src',t:'lock',label:'gh aw compile',cls:'e-flow'},
+  {s:'lock',t:'agentjob',label:'Actions executes',cls:'e-flow fat'},
+  {s:'fw',t:'agentjob',label:'confines',cls:'e-hard'},
+  {s:'agentjob',t:'safeout',label:'requests a write \u2014 cannot perform one',cls:'e-flow fat'},
+  {s:'agentjob',t:'mcp',label:'writes decision',cls:'e-ledger'},
+  {s:'safeout',t:'oidc',label:'authenticates',cls:'e-flow dashedE'},
+  {s:'detgate',t:'lock',label:'blocks merge',cls:'e-hard'},
+ ]},
+
+gate:{
+ title:'Classification gate',
+ tag:'The one sentence a regulated customer needs: confidence is RECORDED, classification DECIDES. A threshold on a scalar fails structurally \u2014 a confident enough agent clears any threshold. A classification of the subject matter does not move.',
+ nodes:[
+  {id:'card',label:'AMBIGUITY CARD',cls:'gate',pos:[110,80],
+   role:'A typed question the assessor raises from the PRD, carrying its ambiguity_class and every resolution option it considered.',
+   plane:'cp',io:{in:'PRD text',out:'class + options + confidence'}},
+  {id:'classify',label:'CLASSIFY',cls:'gate core',pos:[400,80],
+   role:'Decides the path by SUBJECT MATTER. Is this class an invariant? Is there precedent? What autonomy tier is this team on? Confidence is recorded here but has no vote.',
+   plane:'cp',io:{in:'ambiguity_class, precedent, tier',out:'autopilot | gate'}},
+  {id:'inv',label:'INVARIANT CLASSES',cls:'hard',pos:[400,240],
+   role:'phi-classification and auth-policy. Environment may EXTEND this set and may never shrink it. No configuration, env var, or request field makes confidence sufficient to bypass it.',
+   plane:'cp',io:{in:'the class under decision',out:'hard-gated: yes / no'}},
+  {id:'409',label:'HTTP 409 (server-side)',cls:'hard',pos:[700,240],
+   role:'A bulk approval on a hard-gated card is rejected server-side \u2014 a curl cannot rubber-stamp a PHI decision. But an API refusal is only advisory unless it is BOUND TO THE MERGE: the governed ref must reject any update lacking authorization for that exact SHA, with admin bypass disabled.',
+   plane:'cp',io:{in:'approval_path=bulk on invariant class',out:'409 refusal + ledger entry'}},
+  {id:'quorum',label:'REVIEWER QUORUM',cls:'std',pos:[700,400],
+   role:'N-of-M named approvers from the bundle\u2019s reviewers.yaml. GitHub Environments accept 1-of-6 and cannot express this \u2014 so the quorum authority stays in the control plane.',
+   plane:'cp',io:{in:'the recorded approval set',out:'quorum satisfied / short'}},
+  {id:'auto',label:'AUTOPILOT',cls:'gh',pos:[110,400],
+   role:'Proceeds without a human \u2014 but only with recorded precedent and an autonomy_ref stating WHY it was allowed to. Never silent.',
+   plane:'both',io:{in:'non-invariant class + precedent',out:'stage continues'}},
+  {id:'pause',label:'RUN ENDS \u2014 GATE OPENS',cls:'hard core',pos:[400,400],
+   role:'The load-bearing constraint. An Actions run cannot wait weeks for a committee, so the run ENDS here and a new run resumes on approval. The ledger is the continuity, not a held process.',
+   plane:'cp',io:{in:'gate verdict + typed gate_reason',out:'ended run + resumable ledger state'}},
+  {id:'reason',label:'gate_reason (typed)',cls:'ledger',pos:[700,240],
+   role:'Seven closed values \u2014 invariant_class, autonomy_tier, low_precedent, budget_exceeded, verification_failed, stalled, operator_requested. "Paused: budget" and "paused: invariant" are different human actions.',
+   plane:'cp',io:{in:'the gate that opened',out:'reportable pause cause'}},
+ ],
+ edges:[
+  {s:'card',t:'classify',label:'class + options',cls:'e-flow'},
+  {s:'classify',t:'inv',label:'is this an invariant?',cls:'e-gov fat'},
+  {s:'inv',t:'409',label:'enforces',cls:'e-hard fat'},
+  {s:'inv',t:'pause',label:'yes \u2014 must gate',cls:'e-hard fat'},
+  {s:'classify',t:'auto',label:'has precedent',cls:'e-gov'},
+  {s:'quorum',t:'pause',label:'how many humans',cls:'e-gov'},
+  {s:'pause',t:'reason',label:'stamps why',cls:'e-ledger'},
+ ]},
+
+remed:{
+ title:'Stacked-PR remediation',
+ tag:'Attestation says who wrote it. The ref says what may merge. The stack makes it reviewable. Branch topology is NOT authorship \u2014 an agent patch can be transplanted into a human-opened PR, so the authorship control is a signed attestation bound to the patch.',
+ nodes:[
+  {id:'pr1',label:'PR #1 \u2014 HUMAN',cls:'actor core',pos:[110,80],
+   role:'The feature PR. Authorship in the SCM is truthful because nothing else ever lands on this branch. You can tell it is their code because they opened it.',
+   plane:'ext',io:{in:'developer intent',out:'a diff to be gated'}},
+  {id:'fail',label:'GATE FAILS',cls:'hard',pos:[400,80],
+   role:'A required check goes red. This is the trigger, and it is also the justification \u2014 the remediation exists because a governed gate demanded it.',
+   plane:'gh',io:{in:'PR #1 evaluation',out:'failure + run URL'}},
+  {id:'agent',label:'REMEDIATION AGENT',cls:'gh',pos:[700,80],
+   role:'Produces the work that would satisfy the gate. It proposes only \u2014 it holds no write permission and cannot push anywhere.',
+   plane:'gh',io:{in:'failed gate + repo context',out:'proposed changes'}},
+  {id:'refuse',label:'REFUSES TO PUSH TO PR #1',cls:'hard core',pos:[700,240],
+   role:'Fail-closed refusal, recorded. This gives REVIEW SEGREGATION \u2014 human intent one diff, agent remediation another. It is deliberately NOT the authorship proof: a patch can be moved between branches, so provenance rides on the attestation, not on where the commit landed.',
+   plane:'cp',io:{in:'attempted push to a human branch',out:'refusal + ledger entry'}},
+  {id:'pr2',label:'PR #2 \u2014 AGENT (stacked)',cls:'gh core',pos:[400,240],
+   role:'Based on PR #1\u2019s head branch. A second, independent reviewable unit. If it fails a gate too, a third PR stacks on it \u2014 one diff per actor action, always linear.',
+   plane:'both',io:{in:'agent changes',out:'reviewable stacked diff'}},
+  {id:'eyev',label:'EVIDENCE CHAIN',cls:'ledger',pos:[110,240],
+   role:'ONE durable ledger reference plus a short human reason. The full chain lives in the ledger and signed check output \u2014 duplicating it as prose in a mutable PR body turns editable text into a compliance record that goes stale.',
+   plane:'cp',io:{in:'gate + run + ledger + bundles',out:'a PR body an auditor can follow cold'}},
+  {id:'review',label:'HUMAN REVIEW REQUIRED',cls:'hard',pos:[110,400],
+   role:'An agent principal\u2019s approval never counts on work ATTESTED to an agent \u2014 attribution comes from the attestation, not from who opened the PR, so relabeling cannot defeat it. Reviewers must be independent of the agent\u2019s operator, and approval binds to the exact merge SHA.',
+   plane:'cp',io:{in:'the approval set',out:'mergeable / not'}},
+  {id:'rerun',label:'GATES AUTO RE-RUN',cls:'gh',pos:[400,400],
+   role:'When PR #2 merges into PR #1\u2019s branch, PR #1\u2019s gates re-evaluate with no manual action. A gate that only goes green when a human remembers to press a button is a convention, not an enforcement surface.',
+   plane:'gh',io:{in:'remediation merged',out:'PR #1 unblocks, recorded as a runtime entry'}},
+  {id:'depth',label:'ROOT BUDGET',cls:'hard',pos:[700,400],
+   role:'Scoped to the ROOT gate instance \u2014 attempts, time, cost, changed surface. Depth alone is forgeable: five siblings evade a depth limit of one, and reopening resets it. Exhaustion surfaces "the agent cannot satisfy this" as a governance event.',
+   plane:'cp',io:{in:'current stack depth',out:'allow / halt'}},
+ ],
+ edges:[
+  {s:'pr1',t:'fail',label:'evaluated',cls:'e-flow'},
+  {s:'fail',t:'agent',label:'triggers',cls:'e-flow fat'},
+  {s:'agent',t:'refuse',label:'blocked from PR #1',cls:'e-hard fat'},
+  {s:'agent',t:'pr2',label:'opens a NEW stacked PR',cls:'e-flow fat'},
+  {s:'pr2',t:'eyev',label:'body carries',cls:'e-ledger'},
+  {s:'pr2',t:'review',label:'needs a real human',cls:'e-hard fat'},
+  {s:'review',t:'rerun',label:'merged',cls:'e-human'},
+  {s:'rerun',t:'pr1',label:'unblocks',cls:'e-flow dashedE'},
+  {s:'depth',t:'pr2',label:'bounds all attempts',cls:'e-hard dashedE'},
+ ]},
+
+ledger:{
+ title:'Decision Ledger',
+ tag:'Append-only, attributable, cross-runtime. GitHub retains logs for days; HIPAA requires six years and the EU AI Act requires deployer AI logs for at least six months. That gap is why this cannot be delegated under any configuration.',
+ nodes:[
+  {id:'entry',label:'LEDGER ENTRY',cls:'ledger core',pos:[400,80],
+   role:'One record per meaningful agent action. runtime for stage decisions, meta for standards changes. Never mutated \u2014 new fields default empty on historical rows.',
+   plane:'cp',io:{in:'every stage, gate and remediation',out:'the audit surface'}},
+  {id:'actor',label:'actor + autonomy_ref',cls:'ledger',pos:[110,80],
+   role:'Who decided \u2014 human UPN or agent principal \u2014 and WHY it was autopiloted or gated. Present on every path: autopilot, human gate, and model-policy refusal.',
+   plane:'cp',io:{in:'the deciding principal',out:'attribution'}},
+  {id:'alts',label:'rejected_options[]',cls:'ledger',pos:[700,80],
+   role:'NEW. Today only the chosen option is persisted, so an auditor asking "why not the other one" cannot be answered from the record. This keeps every option the assessor presented.',
+   plane:'cp',io:{in:'AmbiguityCard.options',out:'the alternatives weighed'}},
+  {id:'conf',label:'decision_confidence',cls:'ledger',pos:[700,240],
+   role:'NEW. Recorded as evidence, explicitly NOT a gating authority. A test asserts that confidence 1.0 on a phi-classification card still gates.',
+   plane:'cp',io:{in:'agent self-report',out:'evidence for reviewers only'}},
+  {id:'bundles',label:'bundle_refs',cls:'std',pos:[110,240],
+   role:'Which rule decided this, as [dept/version/rule-id]. Currently coarse \u2014 stamped from a static subscription list, with one rule ID hardcoded in delivery. Being fixed to distinguish rule-evaluated from subscription-set.',
+   plane:'cp',io:{in:'rules actually evaluated',out:'honest citation'}},
+  {id:'xref',label:'gh_audit_xref',cls:'ledger',pos:[400,240],
+   role:'The link to the code plane. Extended here to carry the triggering PR, the remediation PR and the stack depth \u2014 so the full stack reconstructs from ledger entries with no repository read.',
+   plane:'both',io:{in:'PR + run identifiers',out:'cross-plane lineage'}},
+  {id:'prec',label:'precedent_refs',cls:'ledger',pos:[400,400],
+   role:'Keyed by (ambiguity_class, slot_value_hash). This is what gates autopilot: no precedent means no autopilot. It is also the key the teaching loop uses, so lessons cross runs, stages and teams.',
+   plane:'cp',io:{in:'prior comparable decisions',out:'autopilot eligibility'}},
+  {id:'cosmos',label:'DURABLE STORE',cls:'ledger',pos:[110,400],
+   role:'Partitioned by team, write-once in practice, with invariant writes blocked. An in-memory GET can mask a failed durable write \u2014 so persistence claims are proven by reading back, not by a 200.',
+   plane:'cp',io:{in:'entry writes',out:'6-year retention'}},
+  {id:'cost',label:'cost_usd + model_used',cls:'ledger',pos:[700,400],
+   role:'Already shipped on every entry. Real token spend per decision, which is what makes cost analytics decision-level rather than run-level.',
+   plane:'cp',io:{in:'provider usage',out:'telemetry'}},
+ ],
+ edges:[
+  {s:'actor',t:'entry',label:'attributes',cls:'e-ledger'},
+  {s:'alts',t:'entry',label:'what was NOT chosen',cls:'e-ledger fat arc'},
+  {s:'conf',t:'entry',label:'evidence only',cls:'e-ledger dashedE'},
+  {s:'bundles',t:'entry',label:'cites',cls:'e-gov'},
+  {s:'entry',t:'xref',label:'links to code',cls:'e-flow'},
+  {s:'entry',t:'prec',label:'becomes precedent',cls:'e-ledger fat'},
+  {s:'entry',t:'cosmos',label:'persists',cls:'e-ledger'},
+  {s:'entry',t:'cost',label:'stamps spend',cls:'e-ledger dashedE'},
+ ]},
+
+std:{
+ title:'Standards bundles',
+ tag:'Bundles are law. They outrank every instruction layer including this repo\u2019s own AGENTS.md, they are versioned and pinned, and changing one requires an OpenSpec proposal plus the roster the bundle itself declares.',
+ nodes:[
+  {id:'rules',label:'rules.yaml',cls:'std core',pos:[400,80],
+   role:'Per-department, per-version rule set. Each rule carries an id cited on every decision that applies it. CI-eligible rules are the deterministic subset a workflow can enforce with no secret.',
+   plane:'cp',io:{in:'committee-approved changes',out:'enforceable rules'}},
+  {id:'pins',label:'PINS.yaml',cls:'std',pos:[110,80],
+   role:'Which bundle version each team is on. Pinning is what makes a decision reproducible \u2014 you can tell which rules were in force when it was made.',
+   plane:'cp',io:{in:'team \u2192 version mapping',out:'resolved bundle'}},
+  {id:'reviewers',label:'reviewers.yaml',cls:'std',pos:[700,80],
+   role:'Required approver count and roles per blast class. The policy already exists as data \u2014 which is what makes control-plane quorum enforcement possible where GitHub Environments cannot express it.',
+   plane:'cp',io:{in:'blast_class',out:'N-of-M + required roles'}},
+  {id:'hier',label:'PRECEDENCE HIERARCHY',cls:'std',pos:[400,240],
+   role:'AGENTS.md, then copilot-instructions, then path-scoped instructions, then the agent persona, then the bundle. Lower layers refine \u2014 but a pinned bundle beats all of them.',
+   plane:'cp',io:{in:'the loaded instruction layers',out:'which rule wins'}},
+  {id:'enforce',label:'CI ENFORCEMENT',cls:'gate',pos:[400,400],
+   role:'Live today: loads PINS, resolves the team\u2019s pinned versions, runs the CI-eligible rules, and FAILS CLOSED on a load error. Policy-as-code already runs on GitHub with no repository secret.',
+   plane:'gh',io:{in:'every pull request',out:'required check'}},
+  {id:'chg',label:'STANDARDS-CHANGE PR',cls:'actor',pos:[110,240],
+   role:'The only way a bundle changes. OpenSpec proposal plus reviewer approval per the declared roster \u2014 an agent cannot quietly edit the law it is judged by.',
+   plane:'ext',io:{in:'proposed rule change',out:'meta ledger entry on merge'}},
+  {id:'semantic',label:'SEMANTIC RULES',cls:'hard',pos:[700,240],
+   role:'The majority of rules are NOT deterministically checkable. A green CI check cannot prove semantic policy compliance \u2014 which is precisely why the review loop and the human gate exist.',
+   plane:'cp',io:{in:'rules CI cannot decide',out:'routed to review, not to a check'}},
+ ],
+ edges:[
+  {s:'pins',t:'rules',label:'resolves version',cls:'e-gov'},
+  {s:'rules',t:'hier',label:'bundles win',cls:'e-hard fat'},
+  {s:'reviewers',t:'rules',label:'who may approve',cls:'e-gov'},
+  {s:'rules',t:'enforce',label:'CI-eligible subset',cls:'e-gov fat'},
+  {s:'semantic',t:'rules',label:'the rest cannot be a check',cls:'e-hard dashedE'},
+  {s:'chg',t:'rules',label:'only path to change',cls:'e-human fat'},
+ ]},
+
+teach:{
+ title:'Teaching loop',
+ tag:'The honest gap. accuracy_score is declared on the schema and is 0.0 on every live entry \u2014 a learning loop with no compute site. A governed system claiming an assurance it does not provide is the one failure this design cannot tolerate.',
+ nodes:[
+  {id:'retro',label:'RETROSPECTIVE (scheduled)',cls:'teach core',pos:[400,80],
+   role:'A bounded job sampling completed runs at RANDOM, not most-recent \u2014 recency bias would just re-teach whatever happened last week.',
+   plane:'cp',io:{in:'closed runs in the window',out:'examined decisions'}},
+  {id:'score',label:'accuracy_score',cls:'teach',pos:[110,80],
+   role:'Gets a compute site at last. The specific defect being closed: the field exists, nothing has ever written it.',
+   plane:'cp',io:{in:'retrospective judgement',out:'a real number on the entry'}},
+  {id:'tent',label:'TENTATIVE LESSON',cls:'teach',pos:[700,80],
+   role:'A pattern seen ONCE. Recorded, weighted below the injection floor, and never put in front of an agent. One observation is an anecdote.',
+   plane:'cp',io:{in:'first observation',out:'held, not injected'}},
+  {id:'promo',label:'PROMOTION',cls:'gate',pos:[700,240],
+   role:'Requires the same pattern to recur at the same stage on a SEPARATE run. Only then does a lesson become injectable.',
+   plane:'cp',io:{in:'recurrence evidence',out:'promoted lesson'}},
+  {id:'weight',label:'ASYMMETRIC WEIGHTING',cls:'hard',pos:[400,240],
+   role:'A lesson that misleads loses more weight than a helpful one gains. A bad memory costs more than a missing one \u2014 so the loop degrades toward silence, not toward confident nonsense.',
+   plane:'cp',io:{in:'outcome of an injected lesson',out:'adjusted weight'}},
+  {id:'decay',label:'DECAY + TOMBSTONE',cls:'teach',pos:[400,400],
+   role:'Unread lessons decay; below a floor they are archived with a tombstone recording why. Archived, never deleted \u2014 the ledger is append-only.',
+   plane:'cp',io:{in:'unused / contradicted lessons',out:'archival + reason'}},
+  {id:'key',label:'ORG-SCOPED KEY',cls:'ledger',pos:[110,240],
+   role:'Keyed by (ambiguity_class, slot_value_hash) \u2014 the same key precedent already uses. So lessons cross runs, stages and teams, which per-workflow memory structurally cannot do.',
+   plane:'cp',io:{in:'class + slot hash',out:'cross-team reuse'}},
+  {id:'phi',label:'PHI BLOCK + ENDORSEMENT',cls:'hard',pos:[700,400],
+   role:'Lesson content is subject to the same PHI rules as any other write, and an invariant-class lesson needs human endorsement before it is ever injected.',
+   plane:'cp',io:{in:'candidate lesson text',out:'blocked / endorsed'}},
+ ],
+ edges:[
+  {s:'retro',t:'score',label:'computes',cls:'e-ledger fat'},
+  {s:'retro',t:'tent',label:'first sighting',cls:'e-flow'},
+  {s:'tent',t:'promo',label:'recurs at same stage',cls:'e-gov fat'},
+  {s:'promo',t:'weight',label:'enters weighting',cls:'e-flow'},
+  {s:'weight',t:'decay',label:'falls below floor',cls:'e-flow dashedE'},
+  {s:'key',t:'promo',label:'scopes reuse',cls:'e-ledger'},
+  {s:'phi',t:'promo',label:'gates injection',cls:'e-hard fat'},
+ ]},
+};
+
+/* ============================ STYLE ============================ */
+const C={gh:'#58a6ff',cp:'#3fb950',ledger:'#bc8cff',hard:'#f85149',std:'#39c5cf',actor:'#d29922',teach:'#bc8cff'};
+const fill=h=>h+'1f';
+
+const cy = cytoscape({
+  container:document.getElementById('cy'),
+  autoungrabify:true, boxSelectionEnabled:false, wheelSensitivity:0.25,
+  style:[
+    {selector:'node',style:{
+      'shape':'round-rectangle','width':196,'height':62,
+      'background-color':'#161b22','border-width':1.5,'border-color':'#30363d',
+      'label':'data(label)','color':'#e6edf3','font-size':11.5,'font-weight':600,
+      'text-valign':'center','text-halign':'center','text-wrap':'wrap','text-max-width':172,
+      'font-family':'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif'}},
+    {selector:'node.gh',style:{'border-color':C.gh,'background-color':fill(C.gh),'color':'#cfe6ff'}},
+    {selector:'node.gate',style:{'border-color':C.cp,'background-color':fill(C.cp),'color':'#c6f0cd'}},
+    {selector:'node.ledger',style:{'border-color':C.ledger,'background-color':fill(C.ledger),'color':'#e4d3ff'}},
+    {selector:'node.teach',style:{'border-color':C.teach,'background-color':fill(C.teach),'color':'#e4d3ff'}},
+    {selector:'node.hard',style:{'border-color':C.hard,'background-color':fill(C.hard),'color':'#ffcdc9'}},
+    {selector:'node.std',style:{'border-color':C.std,'background-color':fill(C.std),'color':'#bff3f6'}},
+    {selector:'node.actor',style:{'border-color':C.actor,'background-color':fill(C.actor),'color':'#f5dfa8'}},
+    {selector:'node.core',style:{'border-width':3,'width':214,'height':70,'font-size':12.5}},
+    {selector:'node.drillable',style:{'border-style':'double'}},
+    {selector:'node.sel',style:{'border-width':4,'background-color':'#262c36'}},
+    {selector:'node.dim',style:{'opacity':0.2}},
+    {selector:'edge',style:{
+      'curve-style':'unbundled-bezier','control-point-distances':[42],'control-point-weights':[0.5],
+      'width':1.8,'target-arrow-shape':'triangle','arrow-scale':1.1,
+      'line-color':'#484f58','target-arrow-color':'#484f58',
+      'label':'data(label)','font-size':9.5,'color':'#8b949e',
+      'text-background-color':'#0d1117','text-background-opacity':0.95,
+      'text-background-padding':4,'text-wrap':'wrap','text-max-width':118,
+      'text-margin-y':-2,'font-weight':500}},
+    {selector:'edge.e-flow',style:{'line-color':C.gh,'target-arrow-color':C.gh}},
+    {selector:'edge.e-gov',style:{'line-color':C.cp,'target-arrow-color':C.cp}},
+    {selector:'edge.e-ledger',style:{'line-color':C.ledger,'target-arrow-color':C.ledger}},
+    {selector:'edge.e-hard',style:{'line-color':C.hard,'target-arrow-color':C.hard}},
+    {selector:'edge.e-human',style:{'line-color':C.actor,'target-arrow-color':C.actor}},
+    {selector:'edge.fat',style:{'width':3.6}},
+    {selector:'edge.dashedE',style:{'line-style':'dashed'}},
+    {selector:'edge.arc',style:{'control-point-distances':[-132],'control-point-weights':[0.5]}},
+    {selector:'edge.arcup',style:{'control-point-distances':[150],'control-point-weights':[0.5],
+      'text-margin-y':-10}},
+    {selector:'edge.dim',style:{'opacity':0.12}},
+    {selector:'.trace-dim',style:{'opacity':0.07}},
+    {selector:'edge.flowing',style:{'width':5,'opacity':1,'line-style':'dashed',
+      'line-dash-pattern':[12,6],'z-index':99,
+      'font-size':11,'color':'#e6edf3','text-background-opacity':1}},
+    {selector:'node.live',style:{'border-width':5,'opacity':1,'z-index':99,
+      'background-color':'#262c36','font-size':13}},
+    {selector:'node.blocked',style:{'border-width':6,'border-color':'#f85149',
+      'background-color':'rgba(248,81,73,0.22)','color':'#ffd7d4','opacity':1,'z-index':99}},
+    {selector:'node.passed',style:{'border-color':'#3fb950','opacity':1,'z-index':50}},
+    {selector:'edge.hi',style:{'width':4.2,'opacity':1}},
+  ]
+});
+
+/* ============================ RENDER ============================ */
+let stack=['root'];
+const titleOf=id=>VIEWS[id].title;
+const META={}; // id -> node meta for side panel
+
+function render(viewId, animateIn){
+  const v=VIEWS[viewId]; const els=[];
+  Object.keys(META).forEach(k=>delete META[k]);
+  v.nodes.forEach(n=>{
+    META[n.id]=n;
+    const cls=n.cls+(n.drill?' drillable':'');
+    els.push({data:{id:n.id,label:(n.drill?'+ ':'')+n.label,drill:n.drill||null},
+              classes:cls,position:{x:n.pos[0],y:n.pos[1]}});
+  });
+  v.edges.forEach(e=>els.push({data:{source:e.s,target:e.t,label:e.label||''},classes:e.cls||''}));
+
+  cy.elements().remove(); cy.add(els);
+  cy.layout({name:'preset',fit:true,padding:52,animate:false}).run();
+
+  if(animateIn){
+    cy.elements().style('opacity',0);
+    const z=cy.zoom(); cy.zoom(z*1.9);
+    cy.animate({zoom:z,fit:{padding:52}},{duration:420,easing:'ease-out'});
+    cy.elements().animate({style:{opacity:1}},{duration:420});
+  }
+  document.getElementById('tag').textContent=v.tag;
+  if(!(typeof trace!=='undefined' && trace.on))
+    document.getElementById('detail').innerHTML='<p class="empty">Click any node to see what it does, and what flows in and out of it.</p>';
+  drawCrumbs();
+  document.getElementById('back').style.display=stack.length>1?'block':'none';
+}
+
+function drawCrumbs(){
+  const el=document.getElementById('crumbs'); el.innerHTML='';
+  stack.forEach((vid,i)=>{
+    if(i>0){const s=document.createElement('span');s.className='sep';s.textContent='\u25b8';el.appendChild(s);}
+    if(i===stack.length-1){const c=document.createElement('span');c.className='cur';c.textContent=titleOf(vid);el.appendChild(c);}
+    else{const a=document.createElement('a');a.textContent=titleOf(vid);a.onclick=()=>goTo(i);el.appendChild(a);}
+  });
+}
+const PLANE={gh:['p-gh','GitHub \u2014 execution'],cp:['p-cp','Control plane \u2014 governance'],
+             both:['p-both','Spans both planes'],ext:['p-ext','Human actor']};
+
+function showDetail(n){
+  const [pc,pl]=PLANE[n.plane]||PLANE.cp;
+  document.getElementById('detail').innerHTML=
+   `<span class="pill ${pc}">${pl}</span>
+    <h3>${n.label}</h3>
+    <p class="role">${n.role}</p>
+    <div class="kv">
+      <div><b>Upstream</b><span>${n.io.in}</span></div>
+      <div><b>Downstream</b><span>${n.io.out}</span></div>
+      ${n.drill?'<div><b>Depth</b><span>click again to open its internals</span></div>':''}
+    </div>`;
+}
+
+function focusNode(node){
+  const hood=node.closedNeighborhood();
+  cy.elements().addClass('dim'); hood.removeClass('dim');
+  cy.nodes().removeClass('sel'); node.addClass('sel');
+  hood.edges().addClass('hi');
+}
+function clearFocus(){cy.elements().removeClass('dim hi');cy.nodes().removeClass('sel');}
+
+function drill(v){stack.push(v);render(v,true);}
+function back(){if(stack.length>1){stack.pop();render(stack.at(-1),false);}}
+function goTo(i){stack=stack.slice(0,i+1);render(stack.at(-1),false);}
+
+cy.on('tap','node',evt=>{
+  const n=evt.target, meta=META[n.id()];
+  if(meta) showDetail(meta);
+  if(n.hasClass('sel') && n.data('drill') && VIEWS[n.data('drill')]){
+    cy.animate({fit:{eles:n,padding:190}},{duration:300,easing:'ease-in',
+      complete:()=>drill(n.data('drill'))});
+    return;
+  }
+  focusNode(n);
+});
+cy.on('tap',evt=>{
+  if(evt.target===cy){
+    if(cy.nodes('.sel').length){clearFocus();
+      document.getElementById('detail').innerHTML='<p class="empty">Click any node to see what it does, and what flows in and out of it.</p>';}
+    else back();
+  }
+});
+document.getElementById('back').onclick=back;
+document.getElementById('reset').onclick=()=>{clearFocus();cy.animate({fit:{padding:52}},{duration:300});};
+/* ============================ LIVE TRACE ============================ */
+/* A scenario is a list of beats. Each beat: which view it plays in, the edge or
+   node it lights up, and what the narrator says. The engine handles descending
+   into a sub-view mid-scenario so the gate decision is watched up close.       */
+
+const SCENARIOS = {
+
+phi:{
+ label:'PHI leak \u2014 caught and stopped',
+ steps:['PRD submitted','Assessor classifies','Invariant class hit','Server refuses bulk',
+        'Run ends, gate opens','Named human decides','Recorded forever'],
+ beats:[
+  {v:'root',say:'A developer submits a requirement: "sync patient records into the analytics warehouse for the readmission model."',
+   sub:'Reads like an ordinary data-plumbing ticket. Nothing in the words announces itself as dangerous.',
+   beat:'Requirement submitted',bc:'b-run',node:'human',edge:['human','gh']},
+
+  {v:'root',say:'It runs on GitHub. The agent job is sandboxed, read-only, and cannot write to the repo even if it wanted to.',
+   sub:'Execution plane. Nothing has been decided yet \u2014 this is just where the work happens.',
+   beat:'Executing',bc:'b-run',node:'gh',edge:['gh','gate']},
+
+  {v:'root',say:'Before anything proceeds, the substrate asks the control plane one question: may this proceed?',
+   sub:'This is the crossing between planes. GitHub does not answer this question \u2014 it asks it.',
+   beat:'Asking for a verdict',bc:'b-run',node:'gate',descend:'gate'},
+
+  {v:'gate',say:'The assessor raises a typed ambiguity card. Patient records means MRNs. The class is phi-classification.',
+   sub:'Classification is on the SUBJECT MATTER \u2014 what is being decided, not who is deciding or how sure they are.',
+   beat:'Classified',bc:'b-run',node:'card',edge:['card','classify']},
+
+  {v:'gate',say:'The agent is 97% confident this is routine. Confidence is recorded as evidence. It gets no vote.',
+   sub:'A threshold on a scalar fails structurally: a confident enough agent clears any threshold. That is the failure mode this design refuses.',
+   beat:'Confidence recorded, not obeyed',bc:'b-run',node:'classify',edge:['classify','inv']},
+
+  {v:'gate',say:'phi-classification is an invariant class. Environment may extend that set. Nothing may shrink it.',
+   sub:'No configuration value, no environment variable, no request field makes confidence sufficient to bypass this.',
+   beat:'INVARIANT \u2014 hard gate',bc:'b-stop',node:'inv',hold:true,edge:['inv','409']},
+
+  {v:'gate',say:'Someone tries to clear it with a bulk approval. The server returns 409 and refuses.',
+   sub:'The floor is in the API, not the UI \u2014 and it is bound to the merge itself, so no administrator or merge queue can route around it.',
+   beat:'409 \u2014 refused',bc:'b-stop',node:'409',banner:['STOPPED \u2014 PHI decision cannot be auto-approved','stop'],
+   edge:['inv','pause']},
+
+  {v:'gate',say:'The run ends here. Not paused \u2014 ended. A committee may take six weeks, and no CI job lives that long.',
+   sub:'A new run resumes when a human decides. The Decision Ledger is the continuity, not a held process.',
+   beat:'Run ends, gate opens',bc:'b-stop',node:'pause',edge:['pause','reason']},
+
+  {v:'gate',say:'The pause carries a typed reason: invariant_class. Not a generic failure \u2014 a reportable governance event.',
+   sub:'"Paused: invariant" and "paused: budget exceeded" are different human actions. The operator feed can tell them apart.',
+   beat:'Typed reason stamped',bc:'b-rec',node:'reason',up:true},
+
+  {v:'root',say:'A named human decides \u2014 and for an invariant class, the quorum comes from the bundle, not from GitHub.',
+   sub:'GitHub Environments accept one approval out of six and cannot express N-of-M named approvers. So quorum stays here.',
+   beat:'Human decides',bc:'b-human',node:'op',edge:['op','gate']},
+
+  {v:'root',say:'Every part of it is written down: who decided, why, which rule applied, what was rejected, what it cost.',
+   sub:'Append-only, six-year retention. GitHub keeps its logs for days \u2014 which is exactly why this plane cannot be delegated.',
+   beat:'Recorded forever',bc:'b-rec',node:'ledger',edge:['gate','ledger'],
+   banner:['Decision recorded \u2014 auditable in six years','ok']},
+ ]},
+
+clean:{
+ label:'Clean requirement \u2014 autopilot',
+ steps:['PRD submitted','Assessor classifies','Not an invariant','Precedent found',
+        'Autopilot proceeds','Still recorded'],
+ beats:[
+  {v:'root',say:'A different requirement: "add pagination to the internal audit table."',
+   sub:'No patient data, no auth surface. The governance question is whether the system can tell the difference.',
+   beat:'Requirement submitted',bc:'b-run',node:'human',edge:['human','gh']},
+
+  {v:'root',say:'Same substrate, same sandbox, same question asked of the control plane.',
+   sub:'The path is identical. Only the classification differs \u2014 which is the point.',
+   beat:'Executing',bc:'b-run',node:'gh',edge:['gh','gate'],descend:'gate'},
+
+  {v:'gate',say:'Classified. Not phi-classification, not auth-policy. This is not an invariant class.',
+   sub:'A governed system that stops everything is useless. Stopping the right things is the whole engineering problem.',
+   beat:'Not an invariant',bc:'b-ok',node:'classify',edge:['classify','auto']},
+
+  {v:'gate',say:'And there is precedent \u2014 a comparable decision was made before, by a human, and recorded.',
+   sub:'No precedent would mean no autopilot. Autonomy is earned from the record, not granted by configuration.',
+   beat:'Precedent found',bc:'b-ok',node:'auto',hold:true,
+   banner:['Autopilot \u2014 proceeds without a human','ok'],up:true},
+
+  {v:'root',say:'It proceeds without waiting for anyone. No human was interrupted for a pagination ticket.',
+   sub:'This is what makes the hard gate credible: it is not a system that blocks everything indiscriminately.',
+   beat:'Autopilot proceeds',bc:'b-ok',node:'gh'},
+
+  {v:'root',say:'Still fully recorded \u2014 including autonomy_ref, which states WHY it was allowed to autopilot.',
+   sub:'Never silent. An unledgered auto-decision would be indistinguishable from an ungoverned one.',
+   beat:'Still recorded',bc:'b-rec',node:'ledger',edge:['gate','ledger']},
+ ]},
+
+test:{
+ label:'Missing tests \u2014 agent remediates',
+ steps:['Human opens PR','Gate fails','Agent blocked from branch','Stacked PR opened',
+        'Evidence chain attached','Human reviews','Gates re-run'],
+ beats:[
+  {v:'root',say:'A developer opens a pull request. It is good code. It has no tests.',
+   sub:'The interesting question is not whether the gate catches it \u2014 it is what happens next.',
+   beat:'Human opens PR',bc:'b-run',node:'human',edge:['human','gh']},
+
+  {v:'root',say:'The deterministic gate fails. Required check, red.',
+   sub:'No agent involved yet. This is ordinary policy-as-code, already running in the repo today.',
+   beat:'Gate fails',bc:'b-stop',node:'gh',edge:['gh','remed'],descend:'remed'},
+
+  {v:'remed',say:'A remediation agent writes the missing tests. Now: where does that code go?',
+   sub:'This is the fork in the road. The obvious answer is the wrong one.',
+   beat:'Agent produces work',bc:'b-run',node:'agent',edge:['agent','refuse']},
+
+  {v:'remed',say:'It refuses to push to the human\u2019s branch \u2014 and the patch is signed, naming the agent, the run, and the exact diff.',
+   sub:'The signature is what proves authorship. The refusal only buys review segregation \u2014 move the patch to another branch and the attestation still names the agent.',
+   beat:'Attested, and kept off the branch',bc:'b-stop',node:'refuse',hold:true,
+   banner:['Attested to the agent \u2014 relabeling cannot hide it','stop'],edge:['agent','pr2']},
+
+  {v:'remed',say:'Instead it opens a second PR, stacked on the first. Two diffs, two authors, both true.',
+   sub:'Human intent stays one reviewable unit. Agent remediation is its own. The gate is what forced it to exist.',
+   beat:'Stacked PR opened',bc:'b-ok',node:'pr2',edge:['pr2','eyev']},
+
+  {v:'remed',say:'Its body carries one durable ledger reference. The full evidence chain lives in the ledger, not in editable prose.',
+   sub:'A reviewer opening it cold can still reach everything. Duplicating the chain into a mutable PR body would turn editable text into a compliance record.',
+   beat:'Evidence chain attached',bc:'b-rec',node:'eyev',edge:['pr2','review']},
+
+  {v:'remed',say:'And the agent cannot approve its own work \u2014 because attribution comes from the signature, not from who opened the PR.',
+   sub:'This is the move that defeats a naive version: transplant the patch into a human-opened PR and the attestation still names the agent, so human review is still required.',
+   beat:'Human must review',bc:'b-human',node:'review',hold:true,edge:['review','rerun']},
+
+  {v:'remed',say:'On merge the new head SHA is re-evaluated, and the ref itself refuses any merge not authorized for that exact SHA.',
+   sub:'An API refusal a merge queue or an administrator can route around is advisory. The gate has to live at the ref, with admin bypass disabled.',
+   beat:'Gates re-run',bc:'b-ok',node:'rerun',edge:['rerun','pr1'],
+   banner:['Unblocked \u2014 provenance intact','ok'],up:true},
+ ]},
+};
+
+let trace={on:false,i:0,timer:null,dashT:null};
+
+function traceStop(){
+  trace.on=false;
+  clearTimeout(trace.timer); clearInterval(trace.dashT);
+  cy.elements().removeClass('trace-dim flowing live blocked passed');
+  document.getElementById('narr').classList.remove('on');
+  document.getElementById('detail').style.display='';
+  document.getElementById('banner').classList.remove('show');
+  document.getElementById('run').innerHTML='&#9654; Watch it run';
+}
+
+function marchAnts(edge){
+  clearInterval(trace.dashT); let off=0;
+  trace.dashT=setInterval(()=>{ off=(off-1.6)%18; try{edge.style('line-dash-offset',off);}catch(e){} },28);
+}
+
+function paintBeat(b,sc){
+  // narration
+  document.getElementById('n-beat').className='beat '+(b.bc||'b-run');
+  document.getElementById('n-beat').textContent=b.beat;
+  document.getElementById('n-say').textContent=b.say;
+  document.getElementById('n-sub').textContent=b.sub||'';
+  // progress list
+  const done=Math.min(trace.i, sc.steps.length-1);
+  document.getElementById('n-steps').innerHTML=sc.steps.map((s,i)=>{
+    const stepIdx=Math.floor(i*sc.beats.length/sc.steps.length);
+    const cls=trace.i>stepIdx?'done':(Math.abs(trace.i-stepIdx)<=1?'now':'');
+    return `<li class="${cls}">${s}</li>`;}).join('');
+  // graph
+  cy.elements().removeClass('flowing live blocked passed').addClass('trace-dim');
+  if(b.node){
+    const n=cy.$id(b.node);
+    if(n.length){ n.removeClass('trace-dim');
+      n.addClass(b.bc==='b-stop'?'blocked':'live');
+      if(b.bc==='b-ok') n.addClass('passed'); }
+  }
+  if(b.edge){
+    const e=cy.edges(`[source="${b.edge[0]}"][target="${b.edge[1]}"]`);
+    if(e.length){ e.removeClass('trace-dim').addClass('flowing');
+      e.connectedNodes().removeClass('trace-dim'); marchAnts(e); }
+  }
+  const ban=document.getElementById('banner');
+  if(b.banner){ ban.textContent=b.banner[0]; ban.className='show '+b.banner[1]; }
+  else ban.classList.remove('show');
+}
+
+function traceStep(){
+  const sc=SCENARIOS[document.getElementById('scenario').value];
+  if(!trace.on || trace.i>=sc.beats.length){ 
+    if(trace.on){ document.getElementById('run').innerHTML='&#9654; Watch again'; trace.on=false;
+      clearInterval(trace.dashT); }
+    return; }
+  const b=sc.beats[trace.i];
+  const go=()=>{ paintBeat(b,sc);
+    const wait=b.hold?3400:(b.descend?2600:2500);
+    trace.i++; trace.timer=setTimeout(traceStep,wait); };
+
+  const cur=stack.at(-1);
+  if(b.descend && cur!==b.descend){
+    paintBeat(b,sc);
+    trace.timer=setTimeout(()=>{ stack.push(b.descend); render(b.descend,true);
+      setTimeout(()=>{trace.i++;traceStep();},520); },1900);
+    return;
+  }
+  if(b.v!==cur){ stack=['root']; if(b.v!=='root'){stack.push(b.v);} render(b.v,false);
+    setTimeout(go,260); return; }
+  if(b.up){ go(); const keep=trace.i;
+    trace.timer=setTimeout(()=>{ if(!trace.on)return; stack=['root']; render('root',false);
+      trace.i=keep; traceStep(); },b.hold?3400:2500);
+    return; }
+  go();
+}
+
+document.getElementById('run').onclick=()=>{
+  if(trace.on){ traceStop(); return; }
+  traceStop();
+  trace.on=true; trace.i=0;
+  stack=['root']; render('root',false);
+  document.getElementById('detail').style.display='none';
+  document.getElementById('narr').classList.add('on');
+  document.getElementById('run').innerHTML='&#10073;&#10073; Stop';
+  setTimeout(traceStep,320);
+};
+document.getElementById('scenario').onchange=()=>{ if(trace.on) traceStop(); };
+cy.on('tap','node',()=>{ if(trace.on) traceStop(); });
+
+// ?play=<scenario>&beat=<n> — static render of one beat (screenshot/verification hook)
+const _p=new URLSearchParams(location.search);
+if(_p.get('play') && SCENARIOS[_p.get('play')]){
+  const sc=SCENARIOS[_p.get('play')], bi=Math.min(+(_p.get('beat')||0), sc.beats.length-1);
+  const b=sc.beats[bi];
+  document.getElementById('scenario').value=_p.get('play');
+  document.getElementById('detail').style.display='none';
+  document.getElementById('narr').classList.add('on');
+  trace.on=true; trace.i=bi;
+  stack = b.v==='root' ? ['root'] : ['root',b.v];
+  render(b.v,false);
+  paintBeat(b,sc);
+  clearInterval(trace.dashT);          // freeze the ants for a clean capture
+  throw new Error('static-beat');       // stop further init
+}
+
+// deep-link: ?view=<id> opens that plane directly (also lets a screenshot reach it)
+const _q=new URLSearchParams(location.search).get('view');
+if(_q && VIEWS[_q] && _q!=='root'){ stack=['root',_q]; render(_q,false); }
+else { render('root',false); }
+</script>
+</body>
+</html>

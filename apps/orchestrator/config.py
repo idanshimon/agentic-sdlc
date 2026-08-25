@@ -73,6 +73,24 @@ class Settings:
     # Identity for signing decisions.md entries.
     signer_identity: str = os.getenv("SIGNER_IDENTITY", "orchestrator@apim-agentic-ab9963")
 
+    # --- delivery target (add-per-run-delivery-target, task 1.1) -------------
+    # Where the deliver stage opens pull requests. `_resolve_target_repo` reads
+    # `delivery_overrides[team].target_repo` first and falls back here.
+    #
+    # These were previously read off `config` but declared NOWHERE: a team with
+    # no override hit an AttributeError at the DELIVER stage — after ingest,
+    # assessor, architect, design, test-plan, codegen and review-scan had all
+    # run and been paid for. A missing delivery target is a configuration error
+    # that must surface before the expensive work, not after it.
+    #
+    # No hardcoded default, matching the storage_account_url posture above: the
+    # reference repo stays tenant-neutral, and an unset value fails loudly
+    # rather than silently delivering somebody else's code somewhere plausible.
+    github_default_target_repo: str = os.getenv("GITHUB_DEFAULT_TARGET_REPO", "").strip()
+    github_app_installation_id: int = int(
+        os.getenv("GITHUB_APP_INSTALLATION_ID", "0") or "0"
+    )
+
 
 settings = Settings()
 

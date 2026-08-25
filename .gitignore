@@ -73,6 +73,8 @@ config/repo_autonomy.yaml
 config/org.yaml
 config/autonomy.yaml
 config/models.yaml
+config/integrations.yaml
 /org.yaml
 /autonomy.yaml
 /models.yaml
+/integrations.yaml

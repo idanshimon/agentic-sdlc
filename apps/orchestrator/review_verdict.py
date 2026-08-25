@@ -12,6 +12,19 @@ allowed to consume it.
 """
 from __future__ import annotations
 
+# Engine-internal check identifier — deliberately NOT a standards-bundle rule
+# reference. An earlier revision cited "runnability/v0.1.0/IMPORT-001", but no
+# `runnability` bundle exists under standards-bundles/: the citation named a
+# rule no committee ever approved and no loader could resolve. The static
+# import check is real and worth blocking on; what was false was claiming a
+# standards rule authorized it. `check=` already carries the provenance
+# ("static-runnability"), so the identifier here is namespaced to the engine.
+#
+# If this check should become governed, the correct path is a standards-change
+# PR adding the rule to a bundle — not a literal in engine code.
+RUNNABILITY_IMPORT_CHECK = "engine:static-runnability/IMPORT-001"
+RUNNABILITY_SYNTAX_CHECK = "engine:static-runnability/SYNTAX-001"
+
 import pathlib
 import sys
 from typing import AsyncIterator, Optional
@@ -76,7 +89,7 @@ def _static_runnability_blockers(code_files: dict[str, str]) -> "list[Blocker]":
             tree = ast.parse(content, filename=path)
         except SyntaxError as exc:
             blockers.append(Blocker(
-                check="static-runnability", rule="runnability/v0.1.0/SYNTAX-001",
+                check="static-runnability", rule=RUNNABILITY_SYNTAX_CHECK,
                 detail=f"file does not parse: {exc.msg}",
                 file=path, line=exc.lineno or 1, phi=False,
             ))
@@ -120,7 +133,7 @@ def _static_runnability_blockers(code_files: dict[str, str]) -> "list[Blocker]":
         for name, line in sorted(module_level_names.items(), key=lambda kv: kv[1]):
             blockers.append(Blocker(
                 check="static-runnability",
-                rule="runnability/v0.1.0/IMPORT-001",
+                rule=RUNNABILITY_IMPORT_CHECK,
                 detail=f"name `{name}` is used at module scope but never defined "
                        f"or imported (NameError at import time)",
                 file=path, line=line, phi=False,
@@ -161,7 +174,7 @@ def _static_runnability_blockers(code_files: dict[str, str]) -> "list[Blocker]":
             for name, line in sorted(fn_undefined.items(), key=lambda kv: kv[1]):
                 blockers.append(Blocker(
                     check="static-runnability",
-                    rule="runnability/v0.1.0/IMPORT-001",
+                    rule=RUNNABILITY_IMPORT_CHECK,
                     detail=f"name `{name}` is used in a function but never defined "
                            f"or imported at module scope (NameError at call time)",
                     file=path, line=line or 1, phi=False,

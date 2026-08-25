@@ -49,6 +49,7 @@ from .models import (
 )
 from .agent_bundles import bundles_for_stage
 from .decision_record import classify_gate_reason, collect_rejected_options
+from .teaching_signal import evaluate_precedent_threshold
 from .stages import (
     stage_architect, stage_assessor, stage_codegen, stage_deliver,
     stage_ingest, stage_review_scan, stage_test_plan,
@@ -414,13 +415,28 @@ async def _run_autopilot(run: RunState) -> None:
                 precedent = await _ledger.find_precedent(
                     run.team_id, card.ambiguity_class, card.slot_value_hash,
                 )
-                score = getattr(precedent, "accuracy_score", 0.0) if precedent else 0.0
-                if not precedent or score < rule.threshold:
+                # Previously: `score = getattr(precedent, "accuracy_score", 0.0)`
+                # compared directly against the threshold. `accuracy_score` has
+                # no writer anywhere in the system, so the score was always 0.0,
+                # every configured threshold (0.75/0.8/0.9) was unreachable, and
+                # this mode was silently identical to `gate` — an operator
+                # control that did nothing. Worse, it recorded the gate as
+                # low_precedent, asserting we had measured weak evidence when we
+                # had measured nothing at all.
+                verdict = evaluate_precedent_threshold(
+                    precedent, threshold=rule.threshold,
+                )
+                if not verdict.autopilot:
                     run.autopilot_overrides.append(card.card_id)
+                    if not verdict.signal_available:
+                        _logger.warning(
+                            "autopilot_above_threshold is INERT for class %r: %s",
+                            card.ambiguity_class, verdict.detail,
+                        )
                     continue
                 decision_ref = autonomy_ref(
                     run.team_id, card.ambiguity_class,
-                    reason=f"precedent{score:g}>=t{rule.threshold:g}",
+                    reason=f"precedent{verdict.score:g}>=t{rule.threshold:g}",
                 )
             else:  # autopilot_always
                 decision_ref = autonomy_ref(
@@ -478,6 +494,9 @@ async def _run_autopilot(run: RunState) -> None:
                 # autonomy rule + reason), so the decision is self-explaining in
                 # the compliance query. Computed per-branch above.
                 autonomy_ref=decision_ref,
+                # add-enterprise-integrations-plane: the planning work item this
+                # run came from. None for runs submitted without provenance.
+                work_item=run.work_item,
                 # Phase 2.6: pin the prompt chain that produced this
                 # auto-decision. Cards come out of the assessor stage,
                 # so the assessor's chain is the right one to capture.
@@ -858,6 +877,216 @@ async def get_repo_autonomy() -> dict:
     """
     from . import repo_autonomy as _ra
     return _ra.REPO_AUTONOMY.posture_summary()
+
+
+# --- Integrations plane (add-enterprise-integrations-plane) -------------------
+# The external systems this instance is wired to. Two honesty rules run through
+# every response below:
+#   1. No credential material ever leaves this process. Entries name the env var
+#      holding a credential and report only its PRESENCE.
+#   2. `configured` != `verified`. Only a real successful probe yields
+#      `verified`; a probe that cannot be attempted yields `unknown`, never a
+#      green check.
+
+# Probe results are cached in-process so the Settings surface can show the last
+# real outcome without re-probing on every render. This is deliberately NOT a
+# background poll — integrations are probed on demand only.
+_integration_probe_results: dict[str, dict] = {}
+
+
+@app.get("/api/integrations", tags=["Configuration"])
+async def list_integrations(request: Request) -> dict:
+    """Inventory of declared external systems, redacted.
+
+    With no integrations.yaml activated this returns `loaded: false` and an empty
+    list — the bootstrap posture, in which pipeline behaviour is identical to
+    pre-capability.
+    """
+    principal = _principal(request)
+    if not principal.has_any_role("operator", "release_manager", "standards_reviewer", "admin"):
+        raise HTTPException(403, "principal is not authorized to read integrations")
+
+    from .integrations import INTEGRATIONS
+
+    view = INTEGRATIONS.redacted()
+    # Fold in the last real probe outcome, if one was ever run. A declared
+    # integration that was never probed keeps its declared status — we do not
+    # promote it to verified just because it looks well-formed.
+    for item in view["integrations"]:
+        probed = _integration_probe_results.get(item["id"])
+        if probed:
+            item["status"] = probed["status"]
+            item["verified"] = probed["status"] == "verified"
+            item["last_probe"] = probed
+    return view
+
+
+@app.post("/api/integrations/{integration_id}/test", tags=["Configuration"])
+async def test_integration(integration_id: str, request: Request) -> dict:
+    """Bounded, read-only reachability probe for one integration.
+
+    Returns verified | failing | unknown with a reason. Never mutates anything in
+    the external system, and never returns credential material — a failure reason
+    names the failure class (auth rejected, HTTP status, exception type), not the
+    credential.
+    """
+    principal = _principal(request)
+    if not principal.has_any_role("operator", "release_manager", "admin"):
+        raise HTTPException(403, "principal is not authorized to test integrations")
+
+    from .integrations import INTEGRATIONS
+    from .planning_providers import probe_integration
+
+    integration = INTEGRATIONS.get(integration_id)
+    if integration is None:
+        raise HTTPException(404, f"no integration declared with id {integration_id!r}")
+
+    result = await probe_integration(integration)
+    from datetime import datetime, timezone
+    payload = {
+        "id": integration_id,
+        "status": result.status,
+        "reason": result.reason,
+        "identity": result.identity,
+        "probed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _integration_probe_results[integration_id] = payload
+    return payload
+
+
+@app.get("/api/config/settings", tags=["Configuration"])
+async def get_settings(request: Request) -> dict:
+    """Aggregated enterprise posture — a COMPOSITION of the existing config
+    loaders, never a new source of truth.
+
+    Each section declares whether it is `bootstrap` or `activated`, and whether it
+    is `editable_here` or `governed_pr_only`. One section failing to load is
+    reported as an error section rather than silently omitted — a settings page
+    that hides a broken loader is worse than one that shows the break.
+    """
+    principal = _principal(request)
+    if not principal.has_any_role("operator", "release_manager", "standards_reviewer", "admin"):
+        raise HTTPException(403, "principal is not authorized to read settings")
+
+    def _section(name: str, builder, *, governed_pr_only: bool = False) -> dict:
+        """Build one section, isolating its failure from the whole read."""
+        try:
+            body = builder()
+            body.setdefault("status", "ok")
+        except Exception as exc:  # one bad loader must not blank the page
+            _logger.warning("settings section %s failed to load: %s", name, exc)
+            body = {
+                "status": "error",
+                "error": f"{type(exc).__name__}: {exc}",
+                "activation": "unknown",
+            }
+        body["section"] = name
+        body["editable"] = "governed_pr_only" if governed_pr_only else "editable_here"
+        return body
+
+    def _org() -> dict:
+        from .org_model import ORG_MODEL
+        loaded = bool(getattr(ORG_MODEL, "loaded", False))
+        teams = sorted(getattr(ORG_MODEL, "teams", {}) or {})
+        return {
+            "activation": "activated" if loaded else "bootstrap",
+            "team_count": len(teams),
+            "teams": teams[:200],
+            "explainer": (
+                "The identity spine. With no org.yaml activated, team resolution is "
+                "permissive; once activated, an unknown team is refused at intake."
+            ),
+        }
+
+    def _autonomy() -> dict:
+        from .autonomy import AUTONOMY_MATRIX
+        loaded = bool(getattr(AUTONOMY_MATRIX, "loaded", False))
+        return {
+            "activation": "activated" if loaded else "bootstrap",
+            "explainer": (
+                "Per (decision class x team) gate/autopilot posture. PHI and auth "
+                "are hard-locked to gate and cannot be unlocked from here."
+            ),
+        }
+
+    def _models() -> dict:
+        from .model_policy import MODEL_POLICY
+        return {
+            "activation": "activated" if MODEL_POLICY.loaded else "bootstrap",
+            "allowlist": sorted(MODEL_POLICY.allowlist),
+            "denylist": sorted(MODEL_POLICY.denylist),
+            "phi_eligible": sorted(MODEL_POLICY.phi_eligible),
+            "routing": dict(MODEL_POLICY.routing),
+            "phi_stages": sorted(MODEL_POLICY.phi_stages),
+            "cost_ceiling_per_run": MODEL_POLICY.cost_ceiling_per_run,
+            "cost_ceiling_per_team_month": MODEL_POLICY.cost_ceiling_per_team_month,
+            "explainer": (
+                "Enforced at stage dispatch. A denied model, or a non-cleared model "
+                "on a PHI-adjacent stage, fails the run with a ledger entry citing "
+                "the rule."
+            ),
+        }
+
+    def _governance() -> dict:
+        # READ-ONLY BY DESIGN. There is deliberately no endpoint that can relax
+        # any of this from the Settings surface — changing it is a
+        # standards-change PR reviewed per the bundle's declared roster.
+        return {
+            "activation": "activated",
+            "hard_gate_classes": sorted(_config.HARD_GATE_CLASSES),
+            "floor": sorted(INVARIANT_CLASSES),
+            "explainer": (
+                "These classes can never be auto-resolved or bulk/soft-approved — "
+                "each requires an explicit, attributed human decision. PHI and auth "
+                "are an immovable floor. Changing this set is a standards-change PR, "
+                "not a toggle."
+            ),
+        }
+
+    def _integrations_section() -> dict:
+        from .integrations import INTEGRATIONS
+        view = INTEGRATIONS.redacted()
+        return {
+            "activation": "activated" if view["loaded"] else "bootstrap",
+            "integrations": view["integrations"],
+            "rejected": view["rejected"],
+            "load_error": view["error"],
+            "explainer": (
+                "External systems this instance is wired to. Credentials are "
+                "referenced by environment variable, never stored here."
+            ),
+        }
+
+    def _pins() -> dict:
+        from .pins import read_pins
+        pins = read_pins()
+        return {
+            "activation": "activated" if pins else "bootstrap",
+            "pins": pins,
+            "explainer": "Pinned standards bundle versions. Bundles are law.",
+        }
+
+    def _repo_autonomy_section() -> dict:
+        from . import repo_autonomy as _ra2
+        summary = _ra2.REPO_AUTONOMY.posture_summary()
+        summary.setdefault("activation", "activated")
+        summary["explainer"] = (
+            "Per-repo autonomy tier for the review loop. PHI/auth/deny always "
+            "force runtime escalation regardless of tier."
+        )
+        return summary
+
+    return {
+        "sections": [
+            _section("organization", _org),
+            _section("integrations", _integrations_section),
+            _section("autonomy", _autonomy),
+            _section("models", _models),
+            _section("standards_pins", _pins, governed_pr_only=True),
+            _section("repo_autonomy", _repo_autonomy_section),
+            _section("governance", _governance, governed_pr_only=True),
+        ],
+    }
 
 
 class ReviewLoopMergeBody(BaseModel):
@@ -1287,6 +1516,8 @@ async def create_run(
     team_id: str = Form(default_factory=lambda: os.environ.get("LEDGER_TEAM_ID", "team-demo")),
     mode: str = Form("manual"),
     stage_providers: str = Form(""),
+    source_system: str = Form(""),
+    source_ref: str = Form(""),
 ) -> dict:
     """Accept a PRD upload and kick off the 9-stage pipeline (design.md §2).
 
@@ -1344,9 +1575,33 @@ async def create_run(
     except UnknownTeamError as exc:
         raise HTTPException(422, str(exc))
 
+    # add-enterprise-integrations-plane: planning-system provenance. Optional and
+    # NON-BLOCKING by spec — a run without it behaves exactly as before this
+    # capability. When a reference IS supplied we record it as a `claimed`
+    # reference and only upgrade to `verified` if a configured tracker actually
+    # resolves it. A planning system that is down, unauthorized, or that does not
+    # know the id must never fail the run — it degrades to an unverified
+    # reference carrying its reason.
+    from .integrations import INTEGRATIONS as _INTEGRATIONS
+    from . import work_items as _wi
+
+    work_item_ref = _wi.normalize_ref(source_system, source_ref, registry=_INTEGRATIONS)
+    if work_item_ref is not None and work_item_ref.verification == "claimed":
+        tracker = _INTEGRATIONS.planning_tracker(source_system) if _INTEGRATIONS.loaded else None
+        if tracker is not None:
+            from .planning_providers import resolve_work_item as _resolve
+            try:
+                fetched = await _resolve(tracker, work_item_ref.source_ref)
+            except Exception:  # defensive: intake must never fail on the tracker
+                fetched = None
+            work_item_ref = _wi.apply_resolution(
+                work_item_ref, fetched, error="planning system did not resolve the reference"
+            )
+
     run = RunState(
         team_id=team_id, prd_blob_url=f"inline://{prd.filename}", mode=run_mode,
         stage_provider_overrides=overrides,
+        work_item=work_item_ref.model_dump() if work_item_ref is not None else None,
     )
     # Production acknowledges only after input + initial run are durable. Tests
     # that intentionally omit infrastructure retain the explicit local path.
@@ -1918,6 +2173,10 @@ async def approve(run_id: str, decision: GateDecision, request: Request) -> dict
                 # so a human decision is governed-attributed to the same bundles.
                 bundle_refs=bundles_for_stage("assessor"),
                 autonomy_ref=gate_ref,
+                # add-enterprise-integrations-plane: planning provenance travels
+                # with the human decision too — the audit chain must not depend
+                # on whether a human or the agent resolved the card.
+                work_item=run.work_item,
                 # adopt-github-native-execution-substrate: persist the options
                 # that were weighed but NOT chosen, so the record can answer
                 # "why not the other option?", and classify WHY this needed a
@@ -2376,6 +2635,9 @@ async def reject(run_id: str, decision: GateDecision, request: Request) -> dict:
                 autonomy_ref=_autonomy_ref(
                     run.team_id, card.ambiguity_class, reason="human-gate-reject",
                 ),
+                # add-enterprise-integrations-plane: a reject is a decision the
+                # work item caused, so it carries the same provenance.
+                work_item=run.work_item,
             ))
     _release_gate(run_id)
     return {"ok": True}

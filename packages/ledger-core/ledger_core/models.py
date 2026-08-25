@@ -149,6 +149,22 @@ class LedgerEntry(BaseModel):
 
     # cross-cutting attribution
     bundle_refs: List[str] = Field(default_factory=list)  # ["security/v0.1.0/PHI-001", ...]
+    # Provenance of `bundle_refs`. "rule_evaluated" = these specific rules were
+    # applied to reach this decision. "subscription" = we know the bundles in
+    # scope for the stage, NOT that any rule among them was evaluated. Defaults
+    # to the weaker claim: over-claiming rule-level precision is the failure
+    # mode with audit consequences, under-claiming is merely less useful.
+    # Task 2.3, adopt-github-native-execution-substrate.
+    citation_kind: Literal["rule_evaluated", "subscription"] = "subscription"
+    # WHERE the work was delivered. Previously this survived only inside the
+    # `rationale` prose string, so "which runs delivered to repository X" could
+    # not be answered by query — only by string-matching narrative text. A fact
+    # the system knows must be recorded as a fact, not as a sentence.
+    # `None` means unknown (a pre-existing entry), which is deliberately
+    # distinct from "" — an empty string would be indistinguishable from a
+    # delivery that recorded no target.
+    # Task 1.3, add-per-run-delivery-target.
+    target_repo: Optional[str] = None
     precedent_refs: List[str] = Field(default_factory=list)  # prior ledger entry IDs
     phi_class: PHIClass = "none"
     # config-plane (add-configuration-plane Phase 2): structured citation for the
@@ -193,6 +209,12 @@ class LedgerEntry(BaseModel):
     # self-heal cowork (add-self-heal-cowork): ties heal_proposed → heal_decided
     # → heal_executed into one queryable chain. Null on non-heal entries.
     heal_id: Optional[str] = None
+    # add-enterprise-integrations-plane: planning-system provenance, mirrored from
+    # the orchestrator's LedgerEntry in the SAME change (a field added to one of
+    # the two models must always be added to the other — see the recurring
+    # two-model drift). Null for every entry written without provenance, so
+    # pre-existing entries validate unchanged.
+    work_item: Optional[Dict[str, Any]] = None
 
     # ------------- meta-only fields -------------------------
     meta_kind: Optional[MetaKind] = None

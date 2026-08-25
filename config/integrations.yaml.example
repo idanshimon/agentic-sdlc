@@ -1,0 +1,88 @@
+# Integrations registry — TEMPLATE (customer-neutral)
+#
+# Copy to `config/integrations.yaml` (git-ignored) and edit, then point the
+# orchestrator at it:
+#
+#   az containerapp update -n <app> -g <rg> \
+#     --set-env-vars INTEGRATIONS_PATH=/app/config/integrations.yaml
+#
+# This TEMPLATE is never auto-discovered. Until you activate a registry, every
+# integration surface reports `unconfigured` and pipeline behaviour is identical
+# to an instance without this capability.
+#
+# ── HARD RULE ───────────────────────────────────────────────────────────────
+# NEVER put a credential in this file. There is no `token:` / `secret:` /
+# `api_key:` field — an entry carrying one is REFUSED at load. Name the
+# environment variable (or Container Apps secret ref) that holds the credential
+# with `token_env:`, and the API will report only whether it is present.
+# ─────────────────────────────────────────────────────────────────────────────
+
+integrations:
+  # ── Code host ──────────────────────────────────────────────────────────────
+  # Where delivered PRs are opened. Formalizes the DELIVER_GH_TOKEN /
+  # DELIVER_TARGET_REPO wiring as a declared, inspectable integration.
+  - id: code-host
+    kind: code_host
+    provider: github            # known: github
+    display_name: GitHub
+    base_url: https://api.github.com
+    identity: delivery-bot      # the principal the token belongs to (for audit)
+    scopes:
+      - repo
+      - workflow
+    token_env: DELIVER_GH_TOKEN
+    target_repo: your-org/your-repo
+    notes: >
+      Probed with a whoami-class read. A green status means this identity
+      genuinely authenticated — it is not inferred from configuration.
+
+  # ── Planning tracker ───────────────────────────────────────────────────────
+  # The system of record holding ideas / epics / stories. A run may cite a work
+  # item from here, which stamps provenance onto every ledger entry the run
+  # writes:  work item -> run -> decisions -> delivered PR.
+  #
+  # READ-ONLY. This capability never creates, updates, transitions, or closes a
+  # work item. Outbound write-back is a separate, separately-governed change.
+  #
+  # `provider` is one of: aha | jira | azure_boards | generic
+  # Swap the provider and the URL templates; nothing downstream changes, because
+  # every provider returns the same normalized record shape.
+  - id: planning
+    kind: planning_tracker
+    provider: generic
+    display_name: Planning tracker
+    base_url: https://tracker.example.com/api/v1
+    identity: planning-reader
+    scopes:
+      - read
+    token_env: PLANNING_TRACKER_TOKEN
+    # {ref} is substituted with the work-item id submitted on the run.
+    item_url_template: https://tracker.example.com/items/{ref}
+    item_api_template: https://tracker.example.com/api/v1/items/{ref}
+    notes: >
+      A rendered deep link is NOT verification. A reference this instance has not
+      fetched is recorded as `claimed`; only a successful read marks it
+      `verified`.
+
+# ── Provider examples (uncomment and adapt one) ───────────────────────────────
+#
+#  Aha!
+#    provider: aha
+#    base_url: https://<subdomain>.aha.io/api/v1
+#    item_url_template: https://<subdomain>.aha.io/features/{ref}
+#    item_api_template: https://<subdomain>.aha.io/api/v1/features/{ref}
+#    token_env: AHA_API_TOKEN
+#
+#  Jira
+#    provider: jira
+#    base_url: https://<site>.atlassian.net/rest/api/3
+#    item_url_template: https://<site>.atlassian.net/browse/{ref}
+#    item_api_template: https://<site>.atlassian.net/rest/api/3/issue/{ref}
+#    token_env: JIRA_API_TOKEN
+#
+#  Azure Boards
+#    provider: azure_boards
+#    base_url: https://dev.azure.com/<org>/<project>/_apis
+#    item_url_template: https://dev.azure.com/<org>/<project>/_workitems/edit/{ref}
+#    item_api_template: https://dev.azure.com/<org>/<project>/_apis/wit/workitems/{ref}?api-version=7.0
+#    token_env: AZURE_DEVOPS_PAT

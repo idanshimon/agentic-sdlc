@@ -1,7 +1,8 @@
 # Adopt GitHub as the execution substrate and close the decision-record gaps
 
 > **Status:** DRAFT (filed 2026-08-12)
-> **Capabilities:** deployment (MODIFIED), pipeline (MODIFIED), ledger (MODIFIED), agent-hq-integration (MODIFIED)
+> **Capabilities:** deployment (MODIFIED), pipeline (MODIFIED), ledger (MODIFIED),
+> agent-hq-integration (MODIFIED), **agent-remediation (ADDED)**
 > **Extends:** `redesign-decision-lifecycle-control-plane` (its delegate/retain boundary is the
 > premise of this change, not a duplicate of it)
 > **Severity:** Foundational — changes what this system *is*: a control plane above GitHub,
@@ -156,9 +157,10 @@ compliance artifact, and this is the strongest possible argument for keeping it.
 - The Copilot coding agent is **not available on data-residency deployments**. A customer
   requiring in-region processing cannot use that lane; the substrate decision must be made per
   customer, and the migration must not assume it.
-- The agentic workflow toolchain is a **research-stage project** whose own README has retired
-  releases over a billing defect. Governance controls must not depend on unpinned preview
-  features — hence the pinning-and-fallback requirement.
+- The agentic workflow toolchain is in **public preview**. (This supersedes an earlier
+  research-stage characterization; see design §6.5.) The mitigation is unchanged: governance
+  controls must not depend on unpinned preview features — hence the pinning-and-fallback
+  requirement. Preview status is a reason to pin, not a reason to defer.
 - Built-in threat detection is a **non-deterministic AI classifier**, not a rules engine. It is
   defense in depth, never the policy gate.
 
@@ -242,6 +244,10 @@ PHI rules as any other write.
 - Run budget limits: max stage retries, max total run minutes, idle timeout.
 - Human interrupt on a live run (an operator can halt an in-flight agent stage).
 - Repository identification for runs that do not already name their target repo.
+- **Stacked-PR agent remediation** (`agent-remediation`): when a governed gate fails, the agent's
+  work materializes as a separate pull request stacked on the triggering PR's branch, carrying its
+  full evidence chain, never as a commit on a human's branch. This answers what the agent
+  *produces* at a gate — which §1 establishes as a run boundary but does not otherwise specify.
 
 ### OUT
 

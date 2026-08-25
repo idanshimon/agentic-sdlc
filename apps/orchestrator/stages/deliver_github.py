@@ -22,6 +22,8 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from ..bundle_citation import classify_citation
+
 from ..decisions_md import render as render_decisions_md
 from ..models import RunState
 from ..github_app_client import GitHubAppClient
@@ -143,6 +145,13 @@ async def deliver_to_github(
 
     gh_audit_xref = f"gh-pr-{pr_number}"
 
+    # Honest citation for the delivered entry (task 2.1-2.3). `bundle_subscriptions`
+    # names the bundles in scope for this stage; no rule among them was evaluated
+    # to decide the delivery itself.
+    delivered_refs, citation_kind = classify_citation(
+        getattr(run, "bundle_subscriptions", None), kind="subscription"
+    )
+
     # 7. Write the "delivered" ledger entry
     if ledger_client is not None:
         try:
@@ -158,7 +167,19 @@ async def deliver_to_github(
                 run_id=run.run_id,
                 runtime_kind="delivered",
                 stage="deliver",
-                bundle_refs=["architect/v0.1.0/SERVICE-CONTAINERIZED-001"],
+                # Delivery evaluates no standards rule — it opens a PR for work
+                # earlier stages already decided. The previous literal here
+                # (`architect/v0.1.0/SERVICE-CONTAINERIZED-001`) claimed a rule
+                # had been applied that delivery never looked at, so an auditor
+                # filtering the ledger by that rule found deliveries that never
+                # evaluated it. Cite the stage's subscriptions honestly, marked
+                # as a subscription rather than a rule evaluation.
+                bundle_refs=delivered_refs,
+                citation_kind=citation_kind,
+                # Queryable destination (task 1.3). The prose rationale above
+                # still carries it for a human reader; this is the field an
+                # auditor queries.
+                target_repo=target_repo,
                 pr_url=pr_url,
                 gh_audit_xref=gh_audit_xref,
                 cost_usd=0.0,
@@ -223,10 +244,41 @@ def _render_pr_body(run: RunState) -> str:
     )
 
 
+class DeliveryTargetUnresolved(Exception):
+    """No delivery target could be resolved for a team.
+
+    A configuration error, not a runtime fault. Raised with the resolution order
+    that was attempted and the key to set, because the operator who sees this is
+    usually not the person who wrote the config.
+    """
+
+
 def _resolve_target_repo(team_id: str, config: Any) -> str:
+    """Resolve where this team's work is delivered.
+
+    Order: per-team override -> configured default. Task 1.2 of
+    add-per-run-delivery-target adds the explicit failure; previously an unset
+    default surfaced as an AttributeError at the deliver stage, after every
+    expensive pipeline stage had already run.
+    """
     overrides = getattr(config, "delivery_overrides", {}) or {}
     team_cfg = overrides.get(team_id, {})
-    return team_cfg.get("target_repo") or config.github_default_target_repo
+    target = (team_cfg.get("target_repo") or "").strip()
+    if target:
+        return target
+
+    default = (getattr(config, "github_default_target_repo", "") or "").strip()
+    if default:
+        return default
+
+    raise DeliveryTargetUnresolved(
+        f"no delivery target for team {team_id!r}. Tried, in order: "
+        f"delivery_overrides[{team_id!r}].target_repo, then the "
+        f"github_default_target_repo setting (env GITHUB_DEFAULT_TARGET_REPO). "
+        "Set one of them to an 'owner/repo' value. There is deliberately no "
+        "built-in default — delivering generated code to a plausible-looking "
+        "repository nobody chose is worse than refusing to deliver."
+    )
 
 
 def _resolve_installation_id(team_id: str, config: Any) -> int:
