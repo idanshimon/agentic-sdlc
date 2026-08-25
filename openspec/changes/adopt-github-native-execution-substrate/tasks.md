@@ -224,9 +224,30 @@ not a literal in engine code.
 > app identity) are live repository settings that must be applied to a real repo and verified
 > against it — they cannot be closed by a unit test, and claiming otherwise would be the same
 > over-claim this change keeps finding elsewhere.
-- [ ] 6d.2 Close every bypass path: administrator, GitHub App, bot, direct push, API merge, merge
+> **6d.2-6d.3 APPLIED AND VERIFIED LIVE on `idanshimon/agentic-sdlc` @ `main` (2026-08-25).**
+> `main` previously had NO protection at all (`404 Branch not protected`) while the repo shipped
+> `bundle-enforce`, CODEOWNERS, and 101 tests of merge-authorization logic — a reference design
+> arguing for governed refs without having one.
+>
+> Applied: `enforce_admins: true` (admin bypass disabled), required checks **bound to app_id
+> 15368** (`bundle-enforce`, `SBOM + CVE scan`) so a same-named check from another identity cannot
+> satisfy the gate, `dismiss_stale_reviews: true` (approval binds to a diff, not a PR),
+> `require_code_owner_reviews: true`, `required_linear_history: true`, force-push and deletion
+> blocked, conversation resolution required. `require_last_push_approval` left **false**
+> deliberately: this is a solo repo and it is the only setting that would stop Idan shipping.
+>
+> **Verified two ways, because a config that reports clean is not proof of enforcement.**
+> 1. `scan_ref_protection` against the LIVE config → **zero findings**.
+> 2. Server-side ref update attempted **as repo admin** →
+>    `422 Changes must be made through a pull request. 2 of 2 required status checks are expected.`
+>    `main` unchanged. The gate refuses the account that owns the repo.
+>
+> Note: `git push --dry-run` is NOT a valid test — it reports what git would send and never
+> contacts the ref rules. It reported success while the server refused.
+
+- [x] 6d.2 Close every bypass path: administrator, GitHub App, bot, direct push, API merge, merge
       queue. Disable admin bypass explicitly and TEST it (ties to 6a.1)
-- [ ] 6d.3 Bind required checks to the publishing app identity + exact head SHA; a same-named
+- [x] 6d.3 Bind required checks to the publishing app identity + exact head SHA; a same-named
       check from another identity does not satisfy the gate
 - [x] 6d.4 Patch attestation: initiating principal, agent identity, workflow run, source revision,
       toolchain, patch digest. Authorship derived from THIS — never from PR opener, commit
