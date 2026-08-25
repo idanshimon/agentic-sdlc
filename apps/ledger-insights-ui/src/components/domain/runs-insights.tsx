@@ -33,8 +33,12 @@ function shortModel(m: string): string {
   return m.replace(/^databricks-claude-/, "").replace(/^claude-/, "");
 }
 
-export function RunsInsights({ runs }: { runs: RunState[] }) {
-  const total = runs.length;
+export function RunsInsights({ runs, total: totalOverride }: { runs: RunState[]; total?: number }) {
+  // `runs` is the CURRENT PAGE. The headline count must be the true corpus
+  // total when the caller knows it, otherwise this tile reports the page size
+  // (50) and contradicts the footer's "Showing 1-50 of 69" two rows below it.
+  // Caught by looking at the deployed page, not by any test.
+  const total = totalOverride ?? runs.length;
   const completed = runs.filter((r) => r.status === "completed").length;
   const running = runs.filter((r) => r.status === "running").length;
   // Separate governance outcomes from defects. Lumping policy blocks into a

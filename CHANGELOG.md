@@ -2,6 +2,107 @@
 
 All notable changes to the v0.7 reference design.
 
+## [0.11.0] — 2026-08-18 — dead autonomy control revived, runs index made navigable, spec plane reconciled
+
+Three defects that shared one shape: a control that *looked* present and did
+nothing. An autonomy mode that could never fire, a runs list whose count could
+not be interpreted, and a spec directory that did not describe production. Each
+was found by checking a live surface rather than by reading code or trusting a
+green suite.
+
+### Fixed — `accuracy_score` computed at read time (openspec: `compute-accuracy-score-projection`)
+
+- `LedgerEntry.accuracy_score` was declared in two models, defaulted to `0.0`,
+  read in exactly one place, and **assigned nowhere in the codebase**. The
+  consequence was live: a rule with mode `autopilot_above_threshold` compares
+  the score against its threshold, so a structurally-zero score meant that mode
+  **always gated and had never once granted autonomy** *(0b40688)*.
+- Dead code wearing a working mode's name — the config plane accepted it, the
+  docs described it, and operators could select it. It failed safe, which is
+  why it survived. But a governance control that cannot fire is not
+  conservative, it is absent.
+- New `apps/orchestrator/accuracy.py`: `project_accuracy_score()`, pure, no I/O,
+  **no ledger writes** — a stored score would be stale by construction, and
+  `replay.py` already warns that inventing ledger rows to populate a metric
+  corrupts the audit substrate.
+- Reuses `score_replay` / `cases_from_ledger` unchanged. A second scorer with
+  slightly different semantics would let the autonomy gate and the
+  operator-facing replay report disagree about the same history, with no way to
+  tell which was lying.
+- Every ambiguous path gates: below `min_samples` (a perfect 4-for-4 record
+  scores `0.0`), no scored cases, invariant class (checked first, so a perfect
+  history cannot bypass it), or any exception.
+
+### Added — runs index paging, search and honest counts (openspec: `add-runs-index-paging-and-search`)
+
+- The runs index showed `Showing 50 runs` with no pager and no search. Three
+  problems: `/api/runs` took `limit` but no `offset`, so **run 51 was
+  unreachable by any means**; the footer rendered the *fetched page* length, so
+  "50" was indistinguishable from "there are only 50"; and search filtered only
+  the current page, returning a **confident empty result** for a run at
+  position 173 *(e9f6d0d)*.
+- A prior fix had corrected a real bug in the same path (`SELECT TOP` with no
+  `ORDER BY` made the newest run structurally unreachable). Its comment claimed
+  `truncated` "is reported so the caller can tell 'these are the newest N' from
+  'this is everything'" — **no such value was ever computed**. Documented
+  intent, missing mechanism.
+- `query_recent_runs` now returns `{items, count, total, offset, limit,
+  truncated}`. Search is server-side by construction; `truncated` marks `total`
+  as a floor so the UI renders `214+` rather than presenting a bounded scan as a
+  complete census.
+- **`total` must not depend on page size** *(7712728)*. Caught on the live
+  deployment: `limit=5` → `total=50, truncated=true` while `limit=200` →
+  `total=69, truncated=false`. The scan window was sized `limit * 10`, so
+  `total` measured the window rather than the data. All 13 tests passed against
+  this because each used a single limit — the invariant only breaks when page
+  size *varies*.
+- **Two surfaces still reported the page size** *(ad64bb6)*. After deploying,
+  the footer correctly said "Showing 1–50 of 69" while the RUNS KPI tile said
+  "50" and the filter bar said "Showing 50 runs" — the exact string the change
+  set out to fix, still on screen above the new pager.
+- Empty-search and empty-corpus are now distinct: a search matching nothing no
+  longer renders the "No runs yet — start a run" onboarding state.
+- Verified live at limits 5 / 25 / 200 → `total=69` each; `search=cardiology` →
+  `total=60` across the window.
+
+### Fixed — OpenSpec plane reconciled with production (openspec: n/a)
+
+- Audited all unarchived changes: 34 of 37 valid, 3 broken *(25e586f)*.
+  `add-security-bundle-v0.2.0` had a proposal and **no `specs/` directory at
+  all** — zero machine-checkable deltas — while the bundle it describes carries
+  SUPPLY-001, the gate blocking every merge on critical/high CVEs. The rule was
+  enforcing in production with no verifiable spec behind it.
+- Writing that spec, the claim "an unenforceable BLOCK rule fails the load" was
+  **empirically disproven**: a probe bundle with one BLOCK rule, no pattern and
+  no enforcement block loaded without error and yielded `[]` selected rules —
+  `_is_ci_eligible` silently excludes it, so the rule is neither enforced *nor
+  announced as unenforced*. The requirement was rewritten to describe reality.
+- Archived 9 changes at 100% task completion, promoting their deltas into the
+  canonical specs: **4 → 16 spec capabilities** *(42d373a)*. Twelve
+  capabilities live in production — including `orchestrator-pipeline-workflow`,
+  `bundle-ci-enforcement` and `ledger-decision-audit` — had no canonical spec.
+- **Deliberately not archived:** several changes report 0% while having
+  obviously shipped (`add-standards-bundles` at 0/39 with bundles enforcing in
+  CI). Checking each unticked task's named file against disk put them at
+  24–62% — genuinely partial. Archiving an incomplete change writes
+  unimplemented requirements into the canonical spec, asserting controls that do
+  not exist; strictly worse than a stale backlog.
+- `openspec validate --all --strict` → **45 passed, 0 failed** (29 changes +
+  16 specs). 655 tests pass.
+
+### Deployment note
+
+The first orchestrator deploy of this release crash-looped with
+`ModuleNotFoundError: No module named 'ledger_core'`. There are two orchestrator
+Dockerfiles: the plain one predates v0.7's extraction of `Ledger` into
+`packages/ledger-core/`. Building with repo-root context + the plain Dockerfile
+fails loudly on `COPY requirements.txt`; the tempting fix is to narrow the
+*context*, which builds clean and ships a dead image. **Use
+`apps/orchestrator/Dockerfile.repo-root` with repo root as context.** A revision
+stuck in `Activating` is a failing container, not a slow one — the prior
+revision keeps serving, so check `runningState` before believing a deploy
+landed.
+
 ## [0.10.0] — 2026-07-24 — real-LLM end-to-end, run-lifecycle stability, codegen governance
 
 The pipeline now runs end-to-end on a real LLM in the v07 resource group and

@@ -33,8 +33,15 @@ export function DecisionsInsights({ entries }: { entries: LedgerEntry[] }) {
   );
 
   const total = stageDecisions.length;
-  const humanCount = stageDecisions.filter((e) => e.actor?.kind === "human").length;
-  const agentCount = stageDecisions.filter((e) => e.actor?.kind === "agent").length;
+  // Ledger entries carry created_by + confidence_source (not a structured
+  // actor object), so derive the actor kind from confidence_source:
+  // "autopilot" => agent, anything else ("human" / unset) => human. Falls
+  // back to a structured actor.kind when one is present. Without this the
+  // tile counted e.actor?.kind on un-normalized entries and always read 0/0.
+  const kindOf = (e: LedgerEntry & { confidence_source?: string }) =>
+    e.actor?.kind ?? (e.confidence_source === "autopilot" ? "agent" : "human");
+  const humanCount = stageDecisions.filter((e) => kindOf(e) === "human").length;
+  const agentCount = stageDecisions.filter((e) => kindOf(e) === "agent").length;
   const humanPct = total ? Math.round((humanCount / total) * 100) : 0;
   const agentPct = total ? Math.round((agentCount / total) * 100) : 0;
 

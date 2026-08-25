@@ -165,6 +165,45 @@ class LedgerClient:
             _logger.warning("Ledger read failed: %s", exc)
         return out
 
+    async def query_class_history(
+        self,
+        team_id: str,
+        ambiguity_class: str,
+        limit: int = 500,
+    ) -> List[dict]:
+        """Raw runtime rows for one (team, class), for the accuracy projection.
+
+        Returns plain dicts, NOT LedgerEntry models, because the replay scorer
+        pairs a human ruling against an autopilot decision on the same card_id
+        and reads fields (confidence_source, resolution_text, card_id) straight
+        off the row. Round-tripping through the model would add nothing and
+        would silently normalise away rows the scorer needs to see as-is.
+
+        Read-only. The projection this feeds MUST NOT write to the ledger.
+        """
+        q = (
+            "SELECT TOP @n c.id, c.card_id, c.ambiguity_class, c.team_id, "
+            "c.confidence_source, c.resolution_text, c.created_at "
+            "FROM c WHERE c.team_id=@t AND c.ambiguity_class=@k "
+            "AND c.entry_type='runtime' "
+            "ORDER BY c.created_at DESC"
+        )
+        params = [
+            {"name": "@n", "value": limit},
+            {"name": "@t", "value": team_id},
+            {"name": "@k", "value": ambiguity_class},
+        ]
+        out: List[dict] = []
+        try:
+            async for item in self._ledger.query_items(
+                query=q, parameters=params, partition_key=team_id
+            ):
+                out.append(item)
+        except Exception as exc:
+            # Gate rather than guess: an empty history scores 0.0 upstream.
+            _logger.warning("Class history read failed: %s", exc)
+        return out
+
     async def query_meta_by_bundle(
         self,
         bundle_dept: str,

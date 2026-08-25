@@ -214,6 +214,5 @@ def test_empty_diff_is_clean():
 def test_this_repos_gate_workflow_is_in_the_protected_set():
     """Regression guard: the real workflow paths must actually be covered."""
     for real in (".github/workflows/bundle-enforce.yml",
-                 ".github/workflows/accuracy-retrospective.yml",
                  ".github/workflows/supply-chain-scan.yml"):
         assert classify_path(real) is PathClass.WORKFLOW

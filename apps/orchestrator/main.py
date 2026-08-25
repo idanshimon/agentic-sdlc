@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from .accuracy import project_accuracy_score
 from .auth import (
     AuthConfigurationError, Principal, authorize_mutation, principal_from_request,
     require_team, validate_auth_configuration,
@@ -49,7 +50,28 @@ from .models import (
 )
 from .agent_bundles import bundles_for_stage
 from .decision_record import classify_gate_reason, collect_rejected_options
+from .accuracy import project_accuracy_score
 from .teaching_signal import evaluate_precedent_threshold
+
+
+class _ProjectedPrecedent:
+    """Adapts a read-time projected score to the threshold evaluator's shape.
+
+    `project_accuracy_score` returns a float; `evaluate_precedent_threshold`
+    needs `accuracy_score` plus `sample_count` so it can tell "measured and
+    weak" from "never measured". The sample count comes from the precedent's
+    own history — a projection over zero observations is not a zero score.
+    """
+
+    __slots__ = ("accuracy_score", "sample_count")
+
+    def __init__(self, score: float, sample_count: int) -> None:
+        self.accuracy_score = score
+        # The count belongs to the HISTORY the projection scored, not to the
+        # precedent row — a precedent carries no sample_count. Reading it off
+        # the precedent made every projected score look "never measured", so a
+        # 10-for-10 agreement record was reported INERT.
+        self.sample_count = int(sample_count or 0)
 from .stages import (
     stage_architect, stage_assessor, stage_codegen, stage_deliver,
     stage_ingest, stage_review_scan, stage_test_plan,
@@ -415,16 +437,36 @@ async def _run_autopilot(run: RunState) -> None:
                 precedent = await _ledger.find_precedent(
                     run.team_id, card.ambiguity_class, card.slot_value_hash,
                 )
-                # Previously: `score = getattr(precedent, "accuracy_score", 0.0)`
-                # compared directly against the threshold. `accuracy_score` has
-                # no writer anywhere in the system, so the score was always 0.0,
-                # every configured threshold (0.75/0.8/0.9) was unreachable, and
-                # this mode was silently identical to `gate` — an operator
-                # control that did nothing. Worse, it recorded the gate as
-                # low_precedent, asserting we had measured weak evidence when we
-                # had measured nothing at all.
+                # accuracy_score is a READ-TIME projection, never a stored
+                # field. It was previously read straight off the entry, where it
+                # is declared with default 0.0 and assigned by nothing — so this
+                # branch could never grant autonomy, and the mode was silently
+                # identical to `gate`. See compute-accuracy-score-projection.
+                #
+                # Scoring is delegated to project_accuracy_score, which reuses
+                # replay.py's scorer unchanged. A SECOND scorer with slightly
+                # different semantics could let the autonomy gate and the
+                # operator-facing replay report disagree about the same history,
+                # and an operator would have no way to tell which was lying.
+                #
+                # evaluate_precedent_threshold then decides, so a gate caused by
+                # an UNMEASURABLE signal is recorded as verification_failed
+                # rather than low_precedent — "we could not measure" and "we
+                # measured and it was weak" are different facts.
+                score = 0.0
+                history = []
+                if precedent:
+                    history = await _ledger.query_class_history(
+                        run.team_id, card.ambiguity_class,
+                    )
+                    score = project_accuracy_score(
+                        history,
+                        team_id=run.team_id,
+                        ambiguity_class=card.ambiguity_class,
+                    )
                 verdict = evaluate_precedent_threshold(
-                    precedent, threshold=rule.threshold,
+                    _ProjectedPrecedent(score, len(history)) if precedent else None,
+                    threshold=rule.threshold,
                 )
                 if not verdict.autopilot:
                     run.autopilot_overrides.append(card.card_id)
@@ -2265,6 +2307,66 @@ async def admin_mark_failed(run_id: str, request: Request, body: dict | None = N
     return {"ok": True, "run_id": run_id, "status": "failed", "reason": reason}
 
 
+@app.delete("/api/admin/runs/{run_id}")
+async def admin_delete_run(run_id: str) -> dict:
+    """Admin: hard-delete a run doc from Cosmos pipeline-runs.
+
+    Removes the run from the /runs dashboard entirely. Used to purge
+    demo-seed / test / zombie runs. Only the pipeline-runs doc is deleted;
+    the Decision Ledger entries this run wrote live in a separate container
+    and are intentionally left intact for audit. Also drops any in-memory
+    handles so a subsequent read doesn't resurrect a partial copy.
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    deleted = await _ledger.delete_run(run_id)
+    # Drop in-memory handles regardless (idempotent cleanup).
+    _runs.pop(run_id, None)
+    _queues.pop(run_id, None)
+    _gate_events.pop(run_id, None)
+    _gate_started.pop(run_id, None)
+    _prd_cache.pop(run_id, None)
+    if not deleted:
+        raise HTTPException(404, "run not found in Cosmos")
+    return {"ok": True, "run_id": run_id, "deleted": True}
+
+
+@app.delete("/api/admin/ledger/{team_id}")
+async def admin_clear_team_ledger(team_id: str) -> dict:
+    """Admin: delete all Decision Ledger entries for a single team partition.
+
+    Dashboard/demo cleanup: purge stale seed decisions so the Decisions page
+    shows a clean set. Scoped to ONE team_id partition (the ledger's partition
+    key) — never cross-team. Returns the count deleted. The pipeline-runs
+    container is a separate concern (see admin_delete_run).
+    """
+    if _ledger is None:
+        raise HTTPException(503, "ledger not configured")
+    ids: list[str] = []
+    try:
+        # partition_key= scopes the query to this team's partition, which is
+        # both cheaper and required for correctness here — an unscoped query
+        # would need enable_cross_partition_query and could return other teams'
+        # entries. Same shape as LedgerClient.find_precedent in ledger-core.
+        async for item in _ledger._ledger.query_items(  # type: ignore[attr-defined]
+            query="SELECT c.id FROM c WHERE c.team_id=@t",
+            parameters=[{"name": "@t", "value": team_id}],
+            partition_key=team_id,
+        ):
+            if item.get("id"):
+                ids.append(item["id"])
+    except Exception as exc:
+        raise HTTPException(500, f"ledger query failed: {exc}") from exc
+    deleted = 0
+    for entry_id in ids:
+        try:
+            if await _ledger.delete_decision(entry_id, team_id):
+                deleted += 1
+        except Exception as exc:
+            _logger.warning("delete_decision failed for %s/%s: %s", team_id, entry_id, exc)
+    return {"ok": True, "team_id": team_id, "found": len(ids), "deleted": deleted}
+
+
 @app.post("/api/runs/{run_id}/finalize", tags=["Gates & Decisions"])
 async def finalize_gate(run_id: str, request: Request, body: dict | None = None) -> dict:
     """Close the open Resolver gate explicitly after the human reviews all decisions.
@@ -2796,23 +2898,31 @@ async def list_runs(
     team_id: str | None = None,
     status: str | None = None,
     limit: int = 50,
+    offset: int = 0,
+    search: str | None = None,
 ) -> dict:
     """Recent pipeline-runs summaries, newest-first by updated_at.
 
     Powers the /runs index page. Best-effort: returns empty list on Cosmos error
     rather than 500'ing the dashboard. Supports team_id and status filters
-    (status accepts comma-separated values, e.g. status=running,awaiting_gate).
+    (status accepts comma-separated values, e.g. status=running,awaiting_gate),
+    plus `offset` for paging and `search` for free-text matching.
+
+    Returns `total` and `truncated` alongside the page so the UI can say
+    "50 of 214" instead of a bare "50" — a count the operator cannot
+    distinguish from "there are only 50 runs".
     """
     principal = _principal(request)
     team_id = _scoped_team(principal, team_id)
     if team_id: require_team(principal, team_id)
     elif _requires_explicit_team(principal): raise HTTPException(400, "team_id is required")
     if _ledger is None:
-        return {"items": [], "count": 0}
-    items = await query_recent_runs(
+        return {"items": [], "count": 0, "total": 0, "offset": 0,
+                "limit": limit, "truncated": False}
+    return await query_recent_runs(
         _ledger, team_id=team_id, status=status, limit=limit,
+        offset=offset, search=search,
     )
-    return {"items": items, "count": len(items)}
 
 
 @app.post("/api/admin/backfill-canonical-teams", tags=["Admin"])

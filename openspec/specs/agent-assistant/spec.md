@@ -1,7 +1,8 @@
 # agent-assistant Specification
 
 ## Purpose
-TBD - created by archiving change add-context-aware-agent-assistant. Update Purpose after archive.
+The in-UI reading layer: every page declares assistant context, the reply engine gathers context fresh each turn, and citations reference real bundle_refs from real ledger entries.
+
 ## Requirements
 ### Requirement: Every page declares assistant context via useAssistantContext
 

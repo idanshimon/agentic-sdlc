@@ -128,7 +128,17 @@ export interface PromptDetailResponse {
 
 export interface RunsListResponse {
   items: RunState[];
+  /** Rows in THIS page. */
   count: number;
+  /** Rows matching the filters across the scanned window, not just this page.
+   *  Lets the footer say "50 of 214" instead of a bare "50" — a number an
+   *  operator cannot distinguish from "there are only 50 runs". */
+  total?: number;
+  offset?: number;
+  limit?: number;
+  /** True when the scan window saturated, so `total` is a floor rather than
+   *  the true count. The UI must not present it as complete. */
+  truncated?: boolean;
 }
 
 export interface TelemetryCostResponse {
@@ -194,22 +204,54 @@ export const orchestrator = {
   health() {
     return req<{ status: string; runs_in_memory: number }>("/healthz");
   },
-  async listRuns() {
+  async listRuns(params: {
+    limit?: number; offset?: number; search?: string;
+    status?: string; team_id?: string;
+  } = {}) {
+    const qs = new URLSearchParams();
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    if (params.offset) qs.set("offset", String(params.offset));
+    if (params.search) qs.set("search", params.search);
+    if (params.status) qs.set("status", params.status);
+    if (params.team_id) qs.set("team_id", params.team_id);
+    const path = qs.toString() ? `/api/runs?${qs}` : "/api/runs";
+
     if (isDemoMode()) {
       // Merge live runs with demo runs from localStorage. If the live API
       // is unreachable in demo mode (offline demos), return demo runs only.
-      const demoRuns = listDemoRuns();
+      // Demo runs are filtered/paged client-side to match the server's
+      // contract, so the footer's "N of M" stays truthful in demo mode too
+      // rather than reporting a total that ignores the search box.
+      const needle = (params.search ?? "").trim().toLowerCase();
+      let demoRuns = listDemoRuns();
+      if (needle) {
+        demoRuns = demoRuns.filter((r) =>
+          [r.run_id, r.team_id, r.status, r.mode]
+            .some((v) => v && String(v).toLowerCase().includes(needle)),
+        );
+      }
       try {
-        const live = await req<RunsListResponse>("/api/runs");
+        const live = await req<RunsListResponse>(path);
+        const items = [...demoRuns, ...live.items];
         return {
-          items: [...demoRuns, ...live.items],
-          count: demoRuns.length + live.count,
+          items,
+          count: items.length,
+          total: demoRuns.length + (live.total ?? live.count),
+          offset: live.offset ?? 0,
+          limit: live.limit ?? params.limit ?? 50,
+          truncated: live.truncated ?? false,
         };
       } catch {
-        return { items: demoRuns, count: demoRuns.length };
+        const start = params.offset ?? 0;
+        const size = params.limit ?? 50;
+        const page = demoRuns.slice(start, start + size);
+        return {
+          items: page, count: page.length, total: demoRuns.length,
+          offset: start, limit: size, truncated: false,
+        };
       }
     }
-    return req<RunsListResponse>("/api/runs");
+    return req<RunsListResponse>(path);
   },
   async getRun(runId: string) {
     if (isDemoMode() && isDemoRun(runId)) {
