@@ -149,6 +149,13 @@ class LedgerEntry(BaseModel):
 
     # cross-cutting attribution
     bundle_refs: List[str] = Field(default_factory=list)  # ["security/v0.1.0/PHI-001", ...]
+    # Provenance of `bundle_refs`. "rule_evaluated" = these specific rules were
+    # applied to reach this decision. "subscription" = we know the bundles in
+    # scope for the stage, NOT that any rule among them was evaluated. Defaults
+    # to the weaker claim: over-claiming rule-level precision is the failure
+    # mode with audit consequences, under-claiming is merely less useful.
+    # Task 2.3, adopt-github-native-execution-substrate.
+    citation_kind: Literal["rule_evaluated", "subscription"] = "subscription"
     precedent_refs: List[str] = Field(default_factory=list)  # prior ledger entry IDs
     phi_class: PHIClass = "none"
     # config-plane (add-configuration-plane Phase 2): structured citation for the

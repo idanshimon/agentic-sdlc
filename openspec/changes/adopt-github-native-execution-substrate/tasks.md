@@ -13,15 +13,23 @@
 
 ## 1 — Ledger schema: alternatives, confidence, gate reason
 
-- [ ] 1.1 Add `rejected_options`, `decision_confidence`, `gate_reason` to `LedgerEntry`
+> **STATE RECONCILED 2026-08-25.** Phase 1 was already implemented and passing but was
+> still marked unchecked, which caused it to be re-planned. Verified in code:
+> `packages/ledger-core/ledger_core/models.py` (fields + `GateReason`),
+> `apps/orchestrator/decision_record.py` (`collect_rejected_options`, `classify_gate_reason`),
+> wired at the resolve site in `main.py`, surfaced through `compliance_query.py`.
+> Tests green: `test_decision_record.py`, `test_autonomy_ref.py`,
+> `test_compliance_projection_governance_fields.py`, `packages/ledger-core/tests/`.
+
+- [x] 1.1 Add `rejected_options`, `decision_confidence`, `gate_reason` to `LedgerEntry`
       (`packages/ledger-core/ledger_core/models.py`)
-- [ ] 1.2 Define the `GateReason` literal (7 values) alongside the existing vocab
-- [ ] 1.3 Populate `rejected_options` at the resolve site (`apps/orchestrator/main.py` ~1878-1930)
+- [x] 1.2 Define the `GateReason` literal (7 values) alongside the existing vocab
+- [x] 1.3 Populate `rejected_options` at the resolve site (`apps/orchestrator/main.py`)
       from `AmbiguityCard.options`
-- [ ] 1.4 Stamp `gate_reason` on every gate-opening entry: invariant, autonomy tier, low precedent
-- [ ] 1.5 Record `decision_confidence` on the autopilot path (`main.py:413-479`)
-- [ ] 1.6 Assert no gate evaluation reads `decision_confidence` — confidence is evidence, not authority
-- [ ] 1.7 Backward-compat: new fields default empty on pre-existing entries; no historical mutation
+- [x] 1.4 Stamp `gate_reason` on every gate-opening entry: invariant, autonomy tier, low precedent
+- [x] 1.5 Record `decision_confidence` on the autopilot path
+- [x] 1.6 Assert no gate evaluation reads `decision_confidence` — confidence is evidence, not authority
+- [x] 1.7 Backward-compat: new fields default empty on pre-existing entries; no historical mutation
 
 **Test targets:** `packages/ledger-core/tests/test_models.py`, `apps/orchestrator/tests/`
 - multi-option card persists exactly the unselected options
@@ -32,10 +40,23 @@
 
 ## 2 — Bundle citation honesty
 
-- [ ] 2.1 Delete the hardcoded `bundle_refs` at `apps/orchestrator/stages/deliver_github.py:161`
+- [x] 2.1 Delete the hardcoded `bundle_refs` at `apps/orchestrator/stages/deliver_github.py`.
+      Delivery evaluates no rule; it now cites the stage's subscriptions, marked as such.
 - [ ] 2.2 Stamp `bundle_refs` in all seven stages, not only assessor (`main.py:475`, `main.py:1918`)
-- [ ] 2.3 Distinguish rule-evaluated citation from subscription-set citation on the entry
-- [ ] 2.4 Repo scan: no standards rule ID literal in stage implementation code
+- [x] 2.3 Distinguish rule-evaluated citation from subscription-set citation on the entry —
+      `citation_kind` on `LedgerEntry` (defaults to the weaker `subscription`) +
+      `apps/orchestrator/bundle_citation.py` (`classify_citation` fails closed on over-claim)
+- [x] 2.4 Repo scan: no standards rule ID literal in stage implementation code —
+      enforced continuously by `test_no_hardcoded_rule_id_in_stage_code`
+
+**Found while closing 2.1 — two citations named a bundle that does not exist.**
+`review_verdict.py` cited `runnability/v0.1.0/IMPORT-001` and `.../SYNTAX-001`, but there is no
+`runnability` bundle under `standards-bundles/`. That is worse than the deliver defect: the
+deliver literal named a real rule that was not evaluated, these named rules no committee ever
+approved and no loader can resolve. The checks are real and worth blocking on — what was false
+was claiming a standards rule authorized them. Renamed to engine-internal identifiers
+(`engine:static-runnability/...`). Promoting them to governed rules is a standards-change PR,
+not a literal in engine code.
 
 **Test targets:** `apps/orchestrator/tests/`
 - completed run has non-empty `bundle_refs` on every stage-decision entry

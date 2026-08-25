@@ -11,7 +11,11 @@ Regression guard for real defects found reviewing delivered PRs:
 """
 from __future__ import annotations
 
-from apps.orchestrator.review_verdict import build_review_verdict
+from apps.orchestrator.review_verdict import (
+    RUNNABILITY_IMPORT_CHECK,
+    RUNNABILITY_SYNTAX_CHECK,
+    build_review_verdict,
+)
 
 
 def _runnability(code: dict[str, str]):
@@ -32,7 +36,7 @@ def test_module_scope_undefined_name_is_a_blocker():
     bl = _runnability(code)
     assert bl, "module-scope undefined name must block"
     assert any("TestClient" in b.detail for b in bl)
-    assert any(b.rule == "runnability/v0.1.0/IMPORT-001" for b in bl)
+    assert any(b.rule == RUNNABILITY_IMPORT_CHECK for b in bl)
 
 
 def test_startup_missing_import_is_a_blocker():
@@ -66,7 +70,7 @@ def test_function_scope_undefined_name_is_a_blocker():
 def test_syntax_error_is_a_blocker():
     code = {"src/main.py": "def broken(:\n    pass\n"}
     bl = _runnability(code)
-    assert any(b.rule == "runnability/v0.1.0/SYNTAX-001" for b in bl)
+    assert any(b.rule == RUNNABILITY_SYNTAX_CHECK for b in bl)
 
 
 def test_clean_code_passes():

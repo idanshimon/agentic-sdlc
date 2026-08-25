@@ -368,7 +368,7 @@ def _classify_failure(run: dict) -> dict:
       failure_kind   — "policy_block" | "technical" | "unknown"
       failure_stage  — stage that emitted the terminal failure
       failure_reason — operator-readable message
-      blocking_rules — cited rule ids, e.g. ["security/v0.1.0/PHI-001"]
+      blocking_rules — cited rule ids in <dept>/v<x.y.z>/<RULE-ID> form
       blocker_count  — number of blockers reported by the gate
     """
     events = run.get("events") or []

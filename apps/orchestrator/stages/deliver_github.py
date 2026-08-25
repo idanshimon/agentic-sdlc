@@ -22,6 +22,8 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from ..bundle_citation import classify_citation
+
 from ..decisions_md import render as render_decisions_md
 from ..models import RunState
 from ..github_app_client import GitHubAppClient
@@ -143,6 +145,13 @@ async def deliver_to_github(
 
     gh_audit_xref = f"gh-pr-{pr_number}"
 
+    # Honest citation for the delivered entry (task 2.1-2.3). `bundle_subscriptions`
+    # names the bundles in scope for this stage; no rule among them was evaluated
+    # to decide the delivery itself.
+    delivered_refs, citation_kind = classify_citation(
+        getattr(run, "bundle_subscriptions", None), kind="subscription"
+    )
+
     # 7. Write the "delivered" ledger entry
     if ledger_client is not None:
         try:
@@ -158,7 +167,15 @@ async def deliver_to_github(
                 run_id=run.run_id,
                 runtime_kind="delivered",
                 stage="deliver",
-                bundle_refs=["architect/v0.1.0/SERVICE-CONTAINERIZED-001"],
+                # Delivery evaluates no standards rule — it opens a PR for work
+                # earlier stages already decided. The previous literal here
+                # (`architect/v0.1.0/SERVICE-CONTAINERIZED-001`) claimed a rule
+                # had been applied that delivery never looked at, so an auditor
+                # filtering the ledger by that rule found deliveries that never
+                # evaluated it. Cite the stage's subscriptions honestly, marked
+                # as a subscription rather than a rule evaluation.
+                bundle_refs=delivered_refs,
+                citation_kind=citation_kind,
                 pr_url=pr_url,
                 gh_audit_xref=gh_audit_xref,
                 cost_usd=0.0,
