@@ -214,10 +214,30 @@ not a literal in engine code.
       queue. Disable admin bypass explicitly and TEST it (ties to 6a.1)
 - [ ] 6d.3 Bind required checks to the publishing app identity + exact head SHA; a same-named
       check from another identity does not satisfy the gate
-- [ ] 6d.4 Patch attestation: initiating principal, agent identity, workflow run, source revision,
+- [x] 6d.4 Patch attestation: initiating principal, agent identity, workflow run, source revision,
       toolchain, patch digest. Authorship derived from THIS — never from PR opener, commit
-      author/committer, trailers, branch names, or labels
-- [ ] 6d.5 Unverifiable or mixed-provenance branch fails closed (`verification_failed`)
+      author/committer, trailers, branch names, or labels.
+      `apps/orchestrator/attestation.py` — `derive_actor` accepts `pr_opener` and never
+      consults it, so the parameter makes its irrelevance explicit at every call site.
+      The signature covers ALL provenance fields, not just the digest: signing the digest
+      alone would let an attacker swap `agent_id` and keep the signature valid.
+      **Transplant attack verified defeated by execution** — an agent patch cherry-picked
+      into a human-opened PR is still attributed to the agent.
+- [x] 6d.5 Unverifiable or mixed-provenance branch fails closed. Three distinct failures,
+      none degrading to "probably human": absent attestation → `UnverifiedProvenance`;
+      failed verification → `AttestationError`; a branch mixing attested and unattested
+      patches → `UnverifiedProvenance` (merging both claims would launder the unattested
+      half). Human authorship is a POSITIVE claim needing its own attestation.
+
+> **Honest scope of 6d.4/6d.5 as shipped.** This is an HMAC binding authorship to patch
+> content, which is the property the transplant attack requires. It is NOT the
+> workflow-identity binding 6d ultimately needs — real closure is Sigstore/in-toto
+> attestations minted by the executing workflow and verified server-side, so that a stolen
+> signing key is insufficient to forge authorship. What ships is the DECISION SURFACE
+> (`make_attestation` / `verify_attestation` / `derive_actor`) so call sites bind to a stable
+> contract and the cryptography swaps underneath. A test asserts the module documents this
+> limit — a governance control that overstates its own strength is the exact failure mode
+> this project keeps finding in itself.
 - [ ] 6d.6 Trust boundary resolves from an immutable trusted revision: policy, gate workflow,
       referenced actions (pinned by digest), verifier, evidence collectors, check publisher
 - [ ] 6d.7 A change modifying any trust-boundary component is routed as a standards change and
