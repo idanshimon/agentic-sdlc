@@ -91,6 +91,22 @@ not a literal in engine code.
 
 > This closes the audit's most serious finding: `accuracy_score` is `0.0` on all 229 live entries.
 
+> **FINDING 2026-08-25 — the gap is worse than an unpopulated field.**
+> `main.py` gated `autopilot_above_threshold` on `precedent.accuracy_score < rule.threshold`.
+> Nothing writes `accuracy_score`, so it was always `0.0`, every configured threshold
+> (0.75 / 0.8 / 0.9 in `config/autonomy.yaml.example`) was unreachable, and the mode was
+> **silently identical to `mode: gate`** — an operator control that did nothing. Setting
+> `threshold: 0.1` to loosen it would have changed nothing either. It also recorded the gate as
+> `low_precedent`, asserting we had measured weak evidence when we had measured nothing.
+>
+> Closed the dishonesty ahead of the compute site: `apps/orchestrator/teaching_signal.py`
+> distinguishes "measured and weak" (`low_precedent`) from "never measured"
+> (`verification_failed`), fails closed even at `threshold=0.0` so an inert control cannot
+> become an accidental `autopilot_always`, requires ≥2 observations before a score grants
+> autonomy, and logs INERT when the signal is unavailable. 12 tests.
+> The compute site below is still required — but the control no longer lies while it is absent.
+
+- [x] 5.0 Fail closed and report honestly while `accuracy_score` has no writer
 - [ ] 5.1 Retrospective job (scheduled workflow) sampling completed runs at random across the window
 - [ ] 5.2 Compute and write `accuracy_score` for examined decisions
 - [ ] 5.3 Tentative lessons: recorded, weight below injection floor, never injected

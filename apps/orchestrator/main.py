@@ -49,6 +49,7 @@ from .models import (
 )
 from .agent_bundles import bundles_for_stage
 from .decision_record import classify_gate_reason, collect_rejected_options
+from .teaching_signal import evaluate_precedent_threshold
 from .stages import (
     stage_architect, stage_assessor, stage_codegen, stage_deliver,
     stage_ingest, stage_review_scan, stage_test_plan,
@@ -414,13 +415,28 @@ async def _run_autopilot(run: RunState) -> None:
                 precedent = await _ledger.find_precedent(
                     run.team_id, card.ambiguity_class, card.slot_value_hash,
                 )
-                score = getattr(precedent, "accuracy_score", 0.0) if precedent else 0.0
-                if not precedent or score < rule.threshold:
+                # Previously: `score = getattr(precedent, "accuracy_score", 0.0)`
+                # compared directly against the threshold. `accuracy_score` has
+                # no writer anywhere in the system, so the score was always 0.0,
+                # every configured threshold (0.75/0.8/0.9) was unreachable, and
+                # this mode was silently identical to `gate` — an operator
+                # control that did nothing. Worse, it recorded the gate as
+                # low_precedent, asserting we had measured weak evidence when we
+                # had measured nothing at all.
+                verdict = evaluate_precedent_threshold(
+                    precedent, threshold=rule.threshold,
+                )
+                if not verdict.autopilot:
                     run.autopilot_overrides.append(card.card_id)
+                    if not verdict.signal_available:
+                        _logger.warning(
+                            "autopilot_above_threshold is INERT for class %r: %s",
+                            card.ambiguity_class, verdict.detail,
+                        )
                     continue
                 decision_ref = autonomy_ref(
                     run.team_id, card.ambiguity_class,
-                    reason=f"precedent{score:g}>=t{rule.threshold:g}",
+                    reason=f"precedent{verdict.score:g}>=t{rule.threshold:g}",
                 )
             else:  # autopilot_always
                 decision_ref = autonomy_ref(
