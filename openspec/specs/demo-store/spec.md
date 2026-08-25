@@ -1,7 +1,8 @@
 # demo-store Specification
 
 ## Purpose
-TBD - created by archiving change fix-demo-store-renderer-oom. Update Purpose after archive.
+The deterministic demo replay store: parse memoization by raw-string identity, LRU eviction at 10 retained runs, a clear path that wipes both localStorage and the in-process cache, and a one-click reset affordance.
+
 ## Requirements
 ### Requirement: Demo run store SHALL memoize JSON.parse by raw-string identity
 

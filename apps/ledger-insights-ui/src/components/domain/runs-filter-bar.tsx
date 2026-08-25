@@ -285,7 +285,7 @@ export function RunsFilterBar({
             {visibleCount !== runs.length && (
               <> of <span className="text-[var(--text-secondary)] tabular">{runs.length}</span></>
             )}
-            {" "}run{visibleCount === 1 ? "" : "s"}
+            {" "}on this page
           </span>
         </div>
         {count > 0 && (

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/idanshimon/agentic-sdlc/.github/agents/agent-frontmatter.schema.json",
+  "title": "Custom agent frontmatter",
+  "description": "Schema for the YAML frontmatter of .github/agents/*.agent.md. Runtime fields describe how the agent behaves; governance fields make the agent body a versioned, owned, auditable prompt artifact on par with prompts/**.yaml.",
+  "type": "object",
+  "required": [
+    "name",
+    "description",
+    "tools",
+    "bundle_subscriptions",
+    "ledger_writes",
+    "prompt_id",
+    "version",
+    "status",
+    "owner_persona",
+    "prompt_ref"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Agent identifier. MUST match the filename stem (e.g. 'assessor' for assessor.agent.md)."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 20,
+      "description": "What this agent does, in prose. Surfaced in the agent picker."
+    },
+    "tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "MCP tools and file/terminal capabilities this agent may call."
+    },
+    "preferred_models": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ordered model preference. First reachable model wins."
+    },
+    "bundle_subscriptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Standards bundles injected by the SessionStart hook. Bundles are law and override instruction layers."
+    },
+    "ledger_writes": {
+      "type": "array",
+      "description": "Declared ledger entry types this agent is permitted to write. An agent that writes an undeclared entry type is a governance violation."
+    },
+
+    "prompt_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Stable identifier across versions of this logical agent. Does not change when version increments."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^v\\d+(\\.\\d+){0,2}$",
+      "description": "Immutable once status is 'published'. A change to a published agent ships as a new version file, and the old one is marked superseded."
+    },
+    "status": {
+      "enum": ["draft", "published", "superseded"],
+      "description": "Lifecycle state. Only 'published' agents are considered active."
+    },
+    "owner_persona": {
+      "enum": ["pm", "architect", "qa", "sre", "seceng", "compliance", "platform"],
+      "description": "Who is accountable for this agent's instructions and who reviews changes to it."
+    },
+    "git_sha": {
+      "type": "string",
+      "description": "Commit SHA at which this version was published. Set by CI on merge."
+    },
+    "authored_by": {
+      "type": "string",
+      "description": "UPN or handle of the author of this version."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why this version exists. Read directly in audit; write it for a reader who was not in the room."
+    },
+    "superseded_by": {
+      "type": ["string", "null"],
+      "description": "Set when this version is retired, naming the version that replaced it."
+    },
+    "prompt_ref": {
+      "type": ["string", "null"],
+      "description": "prompt_id of the YAML prompt this agent inherits its shared instruction block from. MUST resolve to a published prompt in the catalog. Explicitly null for agents with no pipeline counterpart (pipeline-doctor, standards-change, review-loop-controller) — those are governed by this frontmatter alone."
+    }
+  }
+}

@@ -421,12 +421,20 @@ async def query_recent_runs(
     team_id: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
-    """Recent pipeline-runs summaries, ORDER BY updated_at DESC.
+    offset: int = 0,
+    search: Optional[str] = None,
+) -> dict[str, Any]:
+    """Recent pipeline-runs summaries, newest-first.
 
-    Returns project-shaped summary dicts (no full events/cards payload) suitable
-    for the runs index page. Empty list on Cosmos error.
+    Returns ``{"items", "count", "total", "offset", "limit", "truncated"}``.
+
+    `total` is how many runs matched the filters within the scanned window, so
+    the caller can render "showing 50 of 214" rather than a bare "50" that
+    cannot be distinguished from "there are only 50". `truncated` is True when
+    the container holds more matching runs than the scan window could see — the
+    honest signal that this is the newest N and not the whole archive.
     """
+
     limit = max(1, min(int(limit or 50), 200))
     clauses = ["1=1"]
     params: list[dict[str, Any]] = []
@@ -459,7 +467,14 @@ async def query_recent_runs(
     # into an unbounded scan as the container grows. When the container exceeds
     # the window, `truncated` is reported so the caller can tell "these are the
     # newest N" from "this is everything".
-    fetch_cap = max(limit, min(_RECENT_RUNS_SCAN_CAP, limit * 10))
+    # Scan a FIXED window, independent of `limit`. An earlier version sized it
+    # as `min(SCAN_CAP, limit * 10)`, which made `total` a function of the page
+    # size: limit=5 reported total=50 while limit=200 reported the true 69. A
+    # count that changes when you change the page size is not a count, and it
+    # made `truncated` fire spuriously on small pages. Verified against live
+    # data before and after this fix.
+    fetch_cap = _RECENT_RUNS_SCAN_CAP
+
     query = (
         f"SELECT TOP {fetch_cap} * FROM c WHERE {' AND '.join(clauses)}"
     )
@@ -510,12 +525,45 @@ async def query_recent_runs(
             out.append(summary)
         # Sort newest-first client-side (Cosmos ORDER BY cross-partition needs index).
         out.sort(key=lambda r: r.get("updated_at") or r.get("created_at") or "", reverse=True)
-        # Trim AFTER sorting. Sorting a pre-truncated slice is what hid new runs.
-        out = out[:limit]
+
+        # Free-text search across the identifying fields, applied AFTER the sort
+        # so paging stays stable. Kept server-side: filtering only the current
+        # page in the browser would search 50 rows and silently miss matches
+        # that exist two pages down.
+        if search:
+            needle = search.strip().casefold()
+            if needle:
+                def _hit(r: dict) -> bool:
+                    for key in ("run_id", "team_id", "status", "mode",
+                                "current_stage", "model", "namespace"):
+                        v = r.get(key)
+                        if v and needle in str(v).casefold():
+                            return True
+                    return False
+                out = [r for r in out if _hit(r)]
+
+        # `total` counts everything matching within the scanned window, so the
+        # caller can say "50 of 214" instead of a bare "50" — which is
+        # indistinguishable from "there are only 50".
+        total = len(out)
+        # Report whether the window itself was saturated. When it is, `total` is
+        # a floor, not the true count, and the caller must not present it as
+        # complete.
+        truncated = total >= fetch_cap
+        start = max(0, int(offset or 0))
+        page = out[start:start + limit]
     except Exception as exc:
         _logger.warning("query_recent_runs failed (returning empty): %s :: query=%r params=%r", exc, query, params)
-        return []
-    return out
+        return {"items": [], "count": 0, "total": 0, "offset": 0,
+                "limit": limit, "truncated": False}
+    return {
+        "items": page,
+        "count": len(page),
+        "total": total,
+        "offset": start,
+        "limit": limit,
+        "truncated": truncated,
+    }
 
 
 async def _negative_precedents(

@@ -17,6 +17,9 @@ modify, or delete ledger rows.
 
 ### Requirement: The metric MUST refuse to report on insufficient evidence
 
+The metric MUST report no rate when the sample count is below the configured
+minimum, rather than computing one from too few samples.
+
 A rate computed from too few samples is not a weak signal, it is a false one.
 
 #### Scenario: below the sample floor
@@ -53,6 +56,8 @@ Thresholds are governance. They MUST NOT be hardcoded in application code.
 
 ### Requirement: Invariant classes MUST never earn autonomy
 
+Invariant classes MUST never earn autonomy.
+
 #### Scenario: a perfect score does not unlock an invariant
 - **WHEN** a class in the invariant set scores zero disagreements over any number of samples
 - **THEN** the verdict MUST be `INVARIANT — HUMAN ALWAYS`, never `AUTONOMY EARNED`
@@ -63,6 +68,8 @@ Thresholds are governance. They MUST NOT be hardcoded in application code.
 
 ### Requirement: Unsupervised failures MUST be isolated from gated ones
 
+Unsupervised failures MUST be isolated from gated ones.
+
 A wrong suggestion caught by a human is the system working as designed.
 
 #### Scenario: gated disagreements do not count against autopilot
@@ -70,6 +77,8 @@ A wrong suggestion caught by a human is the system working as designed.
 - **THEN** it MUST increment the overall disagreement count but MUST NOT increment autopilot disagreements
 
 ### Requirement: Precedent identity MUST key on `card_id`
+
+Precedent identity MUST key on `card_id`.
 
 #### Scenario: entries sharing a class-level hash are not treated as the same question
 - **WHEN** two decisions share a `slot_value_hash` but have different `card_id` values
