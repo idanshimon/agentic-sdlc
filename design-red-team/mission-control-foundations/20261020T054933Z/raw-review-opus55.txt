@@ -1,0 +1,276 @@
+● Disabled tools: FabricIQ-DiscoverArtifacts, FabricIQ-ExecuteQuery, FabricIQ-GetReportMetadata,
+  FabricIQ-GetSemanticModelSchema, FabricIQ-ResolveReportIdFromUrl, FabricIQ-ValueSearch, bash,
+  calendar-AcceptEvent, calendar-CancelEvent, calendar-CreateEvent, calendar-DeclineEvent,
+  calendar-DeleteEventById, calendar-FindMeetingTimes, calendar-ForwardEvent,
+  calendar-GetOnlineMeetingAiInsights, calendar-GetOnlineMeetingAttendanceReports,
+  calendar-GetOnlineMeetingTranscripts, calendar-GetRooms, calendar-GetUserDateAndTimeZoneSettings,
+  calendar-ListCalendarView, calendar-ListEvents, calendar-TentativelyAcceptEvent,
+  calendar-UpdateEvent, computer-use-click, computer-use-drag, computer-use-get_window_state,
+  computer-use-list_apps, computer-use-patch_text, computer-use-perform_secondary_action,
+  computer-use-press_key, computer-use-scroll, computer-use-set_value, computer-use-type_text,
+  create, dynamic_workflows_manage, edit, fetch_copilot_cli_documentation, glob, grep, list_agents,
+  list_bash, mail-AddDraftAttachments, mail-CreateDraftMessage, mail-DeleteAttachment,
+  mail-DeleteMessage, mail-DownloadAttachment, mail-FlagEmail, mail-ForwardMessage,
+  mail-ForwardMessageWithFullThread, mail-GetAttachments, mail-GetMessage, mail-ReplyAllToMessage,
+  mail-ReplyAllWithFullThread, mail-ReplyToMessage, mail-ReplyWithFullThread, mail-SearchMessages,
+  mail-SearchMessagesQueryParameters, mail-SendDraftMessage, mail-SendEmailWithAttachments,
+  mail-UpdateDraft, mail-UpdateMessage, mail-UploadAttachment, mail-UploadLargeAttachment,
+  powerbi-remote-ExecuteQuery, powerbi-remote-GenerateQuery, powerbi-remote-GetReportBookmarks,
+  powerbi-remote-GetReportMetadata, powerbi-remote-GetReportSchema, powerbi-remote-GetReportSummary,
+  powerbi-remote-GetSemanticModelSchema, powerbi-remote-GetVisualsData,
+  powerbi-remote-GetVisualsDaxQuery, read_agent, read_bash, run_dynamic_workflow,
+  semantic_code_search, session_store_sql, sharepoint-checkOperationStatus,
+  sharepoint-copyFileOrFolder, sharepoint-createFolder, sharepoint-createSmallBinaryFile,
+  sharepoint-createSmallTextFile, sharepoint-deleteFileOrFolder, sharepoint-findFileOrFolder,
+  sharepoint-findSite, sharepoint-getDefaultDocumentLibraryInSite,
+  sharepoint-getFileOrFolderMetadata, sharepoint-getFileOrFolderMetadataByUrl,
+  sharepoint-getFolderChildren, sharepoint-getForThrottlingTesting, sharepoint-getSensitivityLabels,
+  sharepoint-listDocumentLibrariesInSite, sharepoint-moveFileOrFolder,
+  sharepoint-readSmallBinaryFile, sharepoint-readSmallTextFile, sharepoint-renameFileOrFolder,
+  sharepoint-setSensitivityLabelOnFile, sharepoint-shareFileOrFolder, sharepoint-uploadFileFromUrl,
+  skill, slack-slack_read_canvas, slack-slack_read_channel, slack-slack_read_thread,
+  slack-slack_read_user_profile, slack-slack_search_channels, slack-slack_search_public,
+  slack-slack_search_public_and_private, slack-slack_search_users, sql, stop_bash, task,
+  teams-AddChannelMember, teams-AddChatMember, teams-CreateChannel, teams-CreateChat,
+  teams-DeleteChat, teams-DeleteChatMessage, teams-GetChannel, teams-GetChat, teams-GetChatMessage,
+  teams-GetRichMessageFormats, teams-GetTeam, teams-GetUserPresence, teams-ListChannelFiles,
+  teams-ListChannelMembers, teams-ListChannelMessageReplies, teams-ListChannelMessages,
+  teams-ListChannels, teams-ListChatMembers, teams-ListChatMessages, teams-ListChats,
+  teams-ListTeamMembers, teams-ListTeams, teams-ReplyToChannelMessage,
+  teams-SearchTeamMessagesQueryParameters, teams-SearchTeamsMessages, teams-SendFileToChannel,
+  teams-SendFileToChat, teams-SendFileToUser, teams-SendMessageToChannel, teams-SendMessageToChat,
+  teams-SendMessageToSelf, teams-SendMessageToUser, teams-UpdateChannel, teams-UpdateChannelMember,
+  teams-UpdateChat, teams-UpdateChatMessage, web_fetch, word-AddComment, word-CreateDocument,
+  word-GetDocumentContent, word-ReplyToComment, write_agent
+
+# Review: Agentic Mission Control foundations, draft at f9b0233
+
+## 1. Verdict
+
+The vision is sound. The draft is not yet buildable as specified, because three load-bearing seams have no named owner:
+
+- who authorizes an automatic merge
+- who owns the acceptance tests that judge the agent
+- what the Simple profile actually deploys
+
+The wording discipline is good, but it hides contradictions with the code the draft says it will reuse. Approve the draft only after the requirement changes below; do not approve it as written.
+
+## 2. Top findings
+
+**F1 — CRITICAL: Bounded automatic merge has no authorization path in the reused merge contract.**
+
+*Classification:* verified baseline issue plus a present design defect.
+
+**Evidence:**
+- `proposal.md:11`: "Autonomous repair may include merge and deployment only where an explicit action/target policy permits it"
+- `specs/operational-repair/spec.md:30` (OP-03-01): "the loop may merge and deploy through the approved rollout path without demanding an unrelated blanket human step"
+- `design.md:68` names `merge_authorization.py` as a contract to reuse.
+- `merge_authorization.py:262`: `if author_kind == "agent" and not counted:`
+- `merge_authorization.py:269`: `if len(counted) < max(1, required_approvers):`
+- `merge_authorization.py:196`: `provenance_verified: bool = True,`
+- The same module claims at lines 41–42: "There is no path where an unverifiable condition results in a permitted merge."
+
+**Failure scenario:**
+- A docs-only repair qualifies for automatic release under a current envelope. The reused evaluator still refuses it with `AGENT_SELF_APPROVAL`, because only distinct humans count as approvals.
+- An integrator may then work around this by passing a synthetic "human" approval. That turns the safety floor into a formality.
+- The defaults also fail open. A caller that omits `provenance_verified`, `budget_remaining` or `active_remediations` gets values that pass the checks.
+- `autonomous-review-loop.yml:11` says Tier A "may auto-merge". It is unknown which evaluator Tier A uses; that is a discovery question.
+
+**Why the current mitigation is not enough:** D6 says "wire and test their real boundaries". But no requirement defines what non-human authority can count as an approval. Human-merged M2 only postpones the contradiction.
+
+**Changes:**
+- Add **AX-06 Policy admission principal**. For envelope-qualified action/target classes, the counted approval is a policy-issued admission record bound to the envelope ID, policy digest and `MergeState` fingerprint. It is never an agent identity.
+- Human approval stays the default.
+- Make provenance, budget and concurrency required inputs with no defaults.
+- Add task 5.3a to reconcile Tier A with this evaluator.
+
+**Acceptance:**
+- A qualifying test-target repair merges with zero human approvals.
+- The same repair after envelope revocation is refused with `NO_AUTHORIZATION`.
+- A caller that omits provenance is refused.
+
+---
+
+**F2 — CRITICAL: Nobody owns the acceptance tests ("acceptance oracle") in a greenfield project.**
+
+*Classification:* present design defect.
+
+**Evidence:**
+- `design.md:135`: "an author cannot silently weaken the acceptance oracle to finish a task."
+- `bootstrap-journey.md:36`: bootstrap generates "tests and acceptance cases".
+- `specs/autonomy-action-execution/spec.md:48` (AX-05) lists "standards, workflows, verifiers, collectors, publishers, pins and ownership". Tests and acceptance cases are missing from that list.
+- GD-02-02 protects "protected acceptance checks" but never defines how a check becomes protected.
+
+**Failure scenario:**
+- Bootstrap writes "staff can resolve tickets" as a test that only asserts HTTP 200.
+- Or an implementing agent adds the acceptance test for its own feature in the same PR. Nothing is "weakened", so GD-02-02 never fires.
+- The controller marks the milestone complete. All three loops then optimize against a test the agent wrote for itself.
+
+**Why the current mitigation is not enough:** it only protects against *changing* an existing test. It does not cover who *creates* the test, approves it, or proves it can fail.
+
+**Changes:**
+- Add **PB-06 / GD-05 Acceptance-test ownership**. Executable acceptance artifacts are generated from the approved intent and reviewed by the named product owner or another non-author reviewer.
+- Pin each approved test by digest before any task depending on it becomes eligible.
+- Register those test paths in evaluation-path classification (extend AX-05).
+- Tests added inside an implementation PR may run, but they do not count toward acceptance.
+
+**Acceptance:**
+- The task is ineligible until the test digest is approved.
+- The approved test must fail on the pre-implementation head.
+- A PR that edits a test path is routed to governance review.
+- A milestone cannot complete on tests the implementing agent wrote.
+
+---
+
+**F3 — HIGH: "Independent admission" has no identity separation.**
+
+*Classification:* present design defect, with discovery questions.
+
+**Evidence:**
+- `design.md:37`: "a durable action service validates user/workload identity and current envelope; a worker performs supported external commands; a reconciler reads back actual state."
+- GH-04 (`spec.md:37`) requires a "trusted publishing identity".
+- `merge_authorization.py:341–342` only checks that a check is bound to an app identity (`app_bound`). It does not check that this identity differs from the authoring or merging identity.
+
+**Failure scenario:** A single GitHub App installation holds contents, checks and pull-request write access. A prompt-injected agent run gets that installation's token. It publishes the "trusted" admission check on its own repair and merges it. Every GH-04 check passes.
+
+**Why the current mitigation is not enough:** "separation of duties" appears only in Risks (`design.md:182`). There is no requirement or probe for it.
+
+**Changes:**
+- Add **GH-05 Credential separation**. Three roles get distinct identities:
+  - the identity that publishes the admission check
+  - the identity that authors code
+  - the identity that merges or deploys
+- Agent runtimes never receive the publisher or merger tokens.
+- A readiness probe proves the agent token cannot create the admission check or perform a merge.
+
+**Discovery questions:** Can App permission scoping and ruleset bypass lists express this inside one App, or are two Apps required? Can an App appear on a bypass list?
+
+**Acceptance:** Using the agent token, an attempt to create the admission check and an attempt to merge are both refused, confirmed by exact readback.
+
+---
+
+**F4 — HIGH: The Simple profile is asserted, not designed, and it excludes the user's core outcome.**
+
+*Classification:* present design defect.
+
+**Evidence:**
+- `design.md:115`: "The smallest foundation has scoped identity, bounded commands, truthful status and a durable action receipt." The same line says: "Existing project obligations remain active until their owning specifications are explicitly adapted".
+- `design.md:159` requires, as shared foundation: "authenticated Mission Control/API… durable event/work dispatch and execution/reconciliation… independent health/alerts for the foundation."
+- Task 2.4 still only says "Define the supported minimum receipt backend".
+- `design.md:111` defines Simple as "(one repo, CI visibility, diagnosis/fix PR and human merge)". That leaves out deployment monitoring and bounded repair, which are the user's goal.
+- The current loop requires a hosted orchestrator (`autonomous-review-loop.yml:34`, `ORCHESTRATOR_URL`).
+
+**Failure scenario:** A small team picks Simple. They discover they must host:
+- an API and webhook receiver
+- a durable queue and a reconciler
+- foundation monitoring
+- any mandatory bundle obligations that have not been adapted
+
+The receipt store has no specified idempotency or compare-and-swap semantics, so AX-03 silently degrades. They also cannot get monitoring plus repair without moving to Team.
+
+**Changes:**
+- Add **FC-08 Simple reference topology**: an enumerated, versioned list of components and which ones GitHub supplies.
+- Define a **receipt-backend conformance suite** that any backend must pass:
+  - append-only writes
+  - conditional writes against an expected version
+  - durability across restart
+  - export
+- Inventory current mandatory bundle obligations and decide which ones block Simple before task 2.3.
+- Offer Simple with an optional "+monitor/repair (test target)" add-on.
+
+**Discovery question:** Can any GitHub-native store provide the conditional-write guarantees the receipt backend needs? Do not assert that it can.
+
+**Acceptance:**
+- On a fresh repo, deploy only the components listed for Simple. The conformance suite passes under duplicate dispatch and kill/restart.
+- An inventory of processes and resources shows the optional modules are actually absent.
+
+---
+
+**F5 — HIGH: Bootstrap creates multiple targets before precedent records the target.**
+
+*Classification:* verified baseline issue plus a present sequencing defect.
+
+**Evidence:**
+- `tests/test_precedent_target_blindness.py:95–96`: "precedent is accumulating under a target-blind key and CANNOT be split retroactively".
+- `accuracy.py:81–82` scopes history only by `team_id` and `ambiguity_class`.
+- `bootstrap-journey.md:17`: "Preview deployment is automatic; production initially needs my approval."
+- Task 5.1 gates only "before cross-target automation". `design.md:60` defers the fix to another change.
+
+**Failure scenario:** The first bootstrapped app already has preview and production targets, and the shared foundation serves several apps. Precedent and agreement history mix targets from day one. When the fix in `add-per-run-delivery-target` lands, the polluted history cannot be split.
+
+**Why the current mitigation is not enough:** it gates *use* of precedent across targets, not *writing* precedent without a target. Task groups 10–12 are not ordered after 5.1.
+
+**Changes:**
+- Fail closed when writing precedent: any precedent-forming entry without app, environment and target stamps is marked ineligible as precedent.
+- Make 5.1 a hard prerequisite for PB-04 whenever more than one target exists.
+- Replace the "window is still open" test with a test asserting every precedent entry is stamped.
+
+**Acceptance:** Preview approvals never contribute to production eligibility. Unstamped legacy entries report as ineligible, not as 0.0 agreement.
+
+---
+
+**F6 — MEDIUM: The milestones do not contain the product being promised.**
+
+*Classification:* present planning defect.
+
+**Evidence:**
+- `proposal.md:9` promises a "verified application-development-operating loop, not just a scaffold."
+- `design.md:98`: "D10 — One bounded existing-pipeline repair is the first product slice".
+- Neither M0–M4 nor `acceptance.md:179` mentions PB, GD or OP. Task groups 10–12 are not assigned to any milestone.
+- Automatic code release is not assigned to any milestone.
+
+**Failure scenario:** M0–M2 ship and the headline greenfield loop never gets an exit gate. Or teams build tasks 10–12 in parallel, which `tasks.md:3` forbids.
+
+**Change:** Map PB, GD and OP to milestones, and assign "automatic release to a test target" an explicit milestone (see §4).
+
+## 3. Premise test
+
+No finding kills the vision. F1 and F2 do invalidate the implicit premise that existing contracts plus wiring are enough to deliver bounded autonomy. Three controls must change ownership:
+
+- **Merge authority:** moves from the list of human approvals to a policy-issued admission record, published by an identity that never writes code (F1, F3).
+- **Acceptance tests:** move from the bootstrap/implementing agent to the product owner who approves the intent, pinned by digest (F2).
+- **Precedent eligibility:** moves from the read-time projection to a fail-closed, target-stamped write path (F5).
+
+The "Simple teams avoid enterprise modules" premise survives only if FC-08 exists. Today it is an assertion.
+
+## 4. Smallest coherent first release
+
+These are current-design recommendations, not future-scaling ones.
+
+**KEEP**
+- One repo and one pinned app template, covering both greenfield and existing-repo adoption.
+- Scoped GitHub connection, chosen after the GH-01 discovery.
+- Separated identities (F3) and a receipt backend that passes the conformance suite (F4).
+- Approved intent, with acceptance tests pinned by digest (F2).
+- A single-concurrency controller over the approved backlog.
+- CI, preview deployment, and one external health probe, plus signal → incident → investigation → repair PR.
+- Original-symptom retest on the deployed preview build.
+- Attention queue, decision workbench and command preview (MC-01 to MC-03), with a list view as the primary view.
+- One Archify explainer, built at build time.
+- **Automatic merge and deploy to the preview/test target for one qualifying action class**, under AX-06, with tested rollback. Production stays human-merged.
+
+**DEFER, with triggers**
+- *Production automatic release:* after AX-06, GH-05 and AX-01 are closed, rollback has been exercised in the test target, and the owner has approved an outcome threshold.
+- *Typed decision models:* after DM-04 shows a measured benefit.
+- *Cross-repo or multi-target precedent and memory recall:* after stamping is enforced and the poisoning tests pass.
+- *Doctor:* after `_apply_config_change` is real and verified by readback.
+- *Governed overlay (export/retention):* when a named adopter and a legal owner exist.
+- *Open-ended discovery:* after known-failure repair is proven and someone owns the budget.
+- *Live exploration graphs:* after the list workbench is in use.
+
+**EXCLUDE:** weight training, batch approval, commands issued from an iframe, self-modification of policy, and a replacement forge.
+
+## 5. Strongest objection to this critique
+
+The author can reasonably argue that F1 and F3 describe future state. The draft explicitly keeps the initial proof human-merged and says local contracts must be "wired and tested" before a loop is called safe. So the gaps would surface naturally in M3, and requiring AX-06/GH-05 now freezes integration details before GitHub discovery is done.
+
+That timing argument is fair for the implementation. It does not answer the specification problem: OP-03-01 already promises automatic merge, and the draft relies on a contract that structurally forbids it. The missing requirement belongs in the spec now, even if it is built later.
+
+● Session limits: 57.96/100 AI credits used.
+
+
+
+Changes    +0 -0
+AI Credits 57.96 (2m 20s)
+Tokens     ↑ 60.8k (2.0k cached, 58.7k written) • ↓ 14.3k (9.2k reasoning)
+Resume     copilot --resume=284a3890-4606-40d0-ab03-9ab43f225250

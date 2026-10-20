@@ -1,0 +1,93 @@
+{
+  "baseline_commit": "f9b0233",
+  "requested_model": "claude-opus-4.8",
+  "requested_reasoning_effort": "high",
+  "review_scope": "read-only design/source review",
+  "files": [
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/proposal.md",
+      "snapshot": "snapshot/proposal.md",
+      "sha256": "049e1a572cc4a9c38ed35b7eb0e881b90e456cb21d51ccc8afa9c0078dbc5000"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/design.md",
+      "snapshot": "snapshot/design.md",
+      "sha256": "626ca34df6d134067418a565816a7d77d0a5e2d09e3c891595631c3c51d82cd5"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/tasks.md",
+      "snapshot": "snapshot/tasks.md",
+      "sha256": "79237c5de280ff0be4a04f37973f28a268d9c5f8db6b8b5bf3fb235f03c5776c"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/acceptance.md",
+      "snapshot": "snapshot/acceptance.md",
+      "sha256": "d56b37e7590cf3bd5187aa56d07d7ef2d79fa40bae4098484401084e754f5fce"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/bootstrap-journey.md",
+      "snapshot": "snapshot/bootstrap-journey.md",
+      "sha256": "142392a37637b6a72b89815f051e7a167224703db55abe08c4ed08868cbf913e"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/AGENTS.md",
+      "snapshot": "snapshot/AGENTS.md",
+      "sha256": "e2e03b6a86c6c35a5ba9bb0e6e417f996270d3d599f8b0fa06924c33b2be5497"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/autonomy-action-execution/spec.md",
+      "snapshot": "snapshot/specs/autonomy-action-execution/spec.md",
+      "sha256": "d2ff14f6a4d82af389dec67dfe85db7b9c210ff65cd6a3fa4202856d41aef47f"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/decision-memory-outcomes/spec.md",
+      "snapshot": "snapshot/specs/decision-memory-outcomes/spec.md",
+      "sha256": "c6975e6176de19e2c695a164d76ec64d32c8008d041343aeb681830545f84025"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/evidence-graph-views/spec.md",
+      "snapshot": "snapshot/specs/evidence-graph-views/spec.md",
+      "sha256": "c2d66391d42fbe93030240a61b216ff66c36c10936ccc847b13bc09a84cf8855"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/foundation-configuration/spec.md",
+      "snapshot": "snapshot/specs/foundation-configuration/spec.md",
+      "sha256": "749965b7bdffd05f6d9203ac9ca0710677f5aff4c0e07952b07cffe15360c42e"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/github-repository-control/spec.md",
+      "snapshot": "snapshot/specs/github-repository-control/spec.md",
+      "sha256": "4ba03ecc1695b2df28b9da0ed9e544607e12cf622a5d09df618bf97205033435"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/goal-driven-development/spec.md",
+      "snapshot": "snapshot/specs/goal-driven-development/spec.md",
+      "sha256": "7ba061c8c532cf987548a5fa57a1123265f460737b68c16db3509594de2f7394"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/governed-decision-routing/spec.md",
+      "snapshot": "snapshot/specs/governed-decision-routing/spec.md",
+      "sha256": "bd74581bc22479a4b70f5b35a951c59b83c77edc304f52a741d701635d863032"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/incremental-adoption/spec.md",
+      "snapshot": "snapshot/specs/incremental-adoption/spec.md",
+      "sha256": "32589b9dfac4e154e89498f8dc45f6da7f26c39f955da857b786653a8223361a"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/mission-control-workspace/spec.md",
+      "snapshot": "snapshot/specs/mission-control-workspace/spec.md",
+      "sha256": "6b39c315308959a9932fbf185112ea433a18449ff4b0bc084ad56be65212b360"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/operational-repair/spec.md",
+      "snapshot": "snapshot/specs/operational-repair/spec.md",
+      "sha256": "a27fa5e9a83add0e6aaff79adf95c5c7c60c5cc98692d66b58db512853649b8f"
+    },
+    {
+      "path": "openspec/changes/add-agentic-mission-control-foundations/specs/project-bootstrap/spec.md",
+      "snapshot": "snapshot/specs/project-bootstrap/spec.md",
+      "sha256": "d540fc1cbabce1e7b3c0292eac6f0433658baa4c8133cd9df5324064e28fb49c"
+    }
+  ]
+}

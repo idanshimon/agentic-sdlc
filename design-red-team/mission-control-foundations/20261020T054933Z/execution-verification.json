@@ -1,0 +1,35 @@
+{
+  "reviewer_model_verified": "claude-opus-5.5",
+  "provider_verified": "copilot",
+  "requested_reasoning_effort": "high",
+  "reasoning_tokens_reported": 9236,
+  "totalNanoAiu": 57956360000,
+  "cli_exit_code": 0,
+  "code_changes_reported": {
+    "linesAdded": 0,
+    "linesRemoved": 0,
+    "filesModifiedCount": 0,
+    "filesModified": []
+  },
+  "reviewed_artifact_hashes_unchanged": true,
+  "attempts": [
+    {
+      "model": "claude-opus-4.8",
+      "status": "unavailable; no inference",
+      "raw": "raw-review.txt",
+      "usage": "usage.json"
+    },
+    {
+      "model": "claude-opus-5.5",
+      "status": "completed; actual model/provider verified",
+      "raw": "raw-review-opus55.txt",
+      "usage": "usage-opus55.json"
+    }
+  ],
+  "local_followup_tests": "34 passed in 2.46s",
+  "local_probes": {
+    "agent_authored_zero_human_approval_even_required_zero": "refused agent_self_approval",
+    "human_approval_provenance_budget_concurrency_omitted": "permitted; permissive defaults confirmed"
+  },
+  "scope": "review and local pure probes only; no spec/code/settings/deployment changes"
+}
