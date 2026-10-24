@@ -30,16 +30,21 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
-  undici: ">=7.29.0 <8"
+  undici: ">=7.29.1 <8"
   nanoid: ">=3.3.18 <4"
   postcss: ">=8.5.26 <9"
-  js-yaml: ">=4.3.1 <5"
-  fast-uri: ">=3.1.5 <4"
+  js-yaml: ">=4.3.2 <5"
+  fast-uri: ">=3.1.7 <4"
   # brace-expansion resolves at two majors in this tree; both were flagged.
-  brace-expansion@1: ">=1.1.18 <2"
-  brace-expansion@5: ">=5.0.9 <6"
+  brace-expansion@1: ">=1.1.20 <2"
+  brace-expansion@5: ">=5.0.11 <6"
   # sharp inherits four libvips CVEs (GHSA-f88m-g3jw-g9cj) below 0.35.0. It is
   # pulled in transitively by next for image optimization and is listed in
   # onlyBuiltDependencies above, so it compiles at install time — this bump is
   # verified by a real build, not by the lockfile alone.
-  sharp: ">=0.35.3 <0.36"
+  sharp: ">=0.35.5 <0.36"
+  # Supply-chain refresh (SUPPLY-001): advisory first-patched versions, all
+  # inside the resolved major.
+  browserslist: ">=4.28.7 <5"
+  source-map-js: ">=1.2.2 <2"
+  vite: ">=8.3.3 <9"
