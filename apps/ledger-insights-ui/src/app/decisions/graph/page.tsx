@@ -16,6 +16,10 @@ import { useCanvasTheme, type CanvasTheme } from "@/lib/graph/canvas-theme";
 import { buildGovernanceNetwork, type GraphEdgeKind } from "@/lib/graph/build-graph";
 import { applyMapFilters, defaultMapFilters } from "@/lib/graph/map-filters";
 import { mapToCyElements } from "@/lib/graph/cy-map";
+import { startCyMotion } from "@/lib/graph/cy-motion";
+import { HudFrame } from "@/lib/hyperframe";
+import { DecisionsCommandDeck } from "@/components/domain/decisions-command-deck";
+import { resolveMapFocus, type MapFocus } from "@/lib/graph/map-focus";
 
 if (typeof cytoscape === "function" && !(cytoscape as unknown as { _fcose?: boolean })._fcose) {
   cytoscape.use(fcose);
@@ -99,11 +103,29 @@ interface PanelData {
 
 export default function DecisionsMapPage() {
   const router = useRouter();
-  const { data, isLoading } = useDecisions({ limit: 1000 });
+  // The decision may land in the ledger a few seconds after the toast: poll
+  // briefly while the focused entry is still missing, then stop.
+  const [pollUntil] = useState(() => Date.now() + 30_000);
+  const [pollExpired, setPollExpired] = useState(false);
+  const { data, isLoading, refetch } = useDecisions({ limit: 1000 });
   const entries = useMemo(() => data?.entries ?? [], [data]);
 
   const [edgeKinds, setEdgeKinds] = useState<Set<GraphEdgeKind>>(() => defaultMapFilters().edgeKinds);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  // Deep link from a gate toast: /decisions/graph?run=<id>&card=<id>.
+  // Read once on mount (no Suspense boundary needed for useSearchParams).
+  const [link, setLink] = useState<{ run: string; card: string | null } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const run = q.get("run");
+    if (run) {
+      queueMicrotask(() => {
+        setLink({ run, card: q.get("card") });
+        // The run is what ties the operator's decision to the agents'.
+        setEdgeKinds((prev) => new Set([...prev, "in_run"]));
+      });
+    }
+  }, []);
 
   const toggleEdge = (k: GraphEdgeKind) =>
     setEdgeKinds((prev) => {
@@ -112,18 +134,44 @@ export default function DecisionsMapPage() {
       return next;
     });
 
+  // Resolved before the graph so the focused decision can be pinned in.
+  const pinnedId = useMemo(() => {
+    if (!link) return null;
+    return resolveMapFocus(entries, link.run, link.card).entryId ?? null;
+  }, [entries, link]);
   const graph = useMemo(() => {
     const full = buildGovernanceNetwork(entries);
-    return applyMapFilters(full, { ...defaultMapFilters(), edgeKinds, onlyFlagged });
-  }, [entries, edgeKinds, onlyFlagged]);
+    return applyMapFilters(full, {
+      ...defaultMapFilters(),
+      edgeKinds,
+      onlyFlagged,
+      pinned: pinnedId ? [pinnedId] : undefined,
+    });
+  }, [entries, edgeKinds, onlyFlagged, pinnedId]);
   const elements = useMemo(() => mapToCyElements(graph), [graph]);
   // Honest cap notice: this view aggregates ALL runs' decisions, but the ledger
   // read is bounded at 1000 most-recent entries. When we hit the ceiling, say so
   // rather than implying the map is the complete history.
   const atCap = entries.length >= 1000;
 
+  const focus: MapFocus | null = useMemo(
+    () => (link ? resolveMapFocus(entries, link.run, link.card) : null),
+    [entries, link],
+  );
+  useEffect(() => {
+    if (!focus || focus.status === "found") return;
+    if (Date.now() > pollUntil) {
+      queueMicrotask(() => setPollExpired(true));
+      return;
+    }
+    const t = setTimeout(() => refetch(), 3000);
+    return () => clearTimeout(t);
+  }, [focus, refetch, pollUntil, data]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const focusRef = useRef<((id: string) => boolean) | null>(null);
+  const focusedOnce = useRef<string | null>(null);
   const [panel, setPanel] = useState<PanelData | null>(null);
   // Live token values — re-read on theme switch so the canvas repaints.
   const theme = useCanvasTheme();
@@ -153,6 +201,11 @@ export default function DecisionsMapPage() {
       fit: true,
       padding: 40,
     } as cytoscape.LayoutOptions).run();
+    const stopMotion = startCyMotion(cy, {
+      flowSelector: 'edge[relation = "reuses"], edge[relation = "teaches"]',
+      pulseSelector: "node.flagged",
+      pulseColor: theme.danger,
+    });
 
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
@@ -164,9 +217,16 @@ export default function DecisionsMapPage() {
       if (evt.target === cy) resetView();
     });
 
-    cy.on("tap", "node", (evt) => {
-      const n = evt.target as NodeSingular;
-      const focused = n.closedNeighborhood();
+    cy.on("tap", "node", (evt) => focusNode(evt.target as NodeSingular));
+
+    function focusNode(n: NodeSingular, opts?: { widen?: boolean }) {
+      let focused = n.closedNeighborhood();
+      // From a deep link, widen one hop through the run node so the agents'
+      // decisions in the same run light up alongside the operator's.
+      if (opts?.widen) {
+        const runNode = n.neighborhood('node[kind = "run"]');
+        focused = focused.union(runNode.closedNeighborhood());
+      }
       cy.elements().addClass("dimmed").removeClass("focused sel");
       focused.removeClass("dimmed").addClass("focused");
       n.addClass("sel");
@@ -178,13 +238,31 @@ export default function DecisionsMapPage() {
         phiHigh: Number(n.data("phiHigh")) === 1,
         entryId: String(n.data("entryId") || ""),
       });
-    });
+      if (opts?.widen) cy.animate({ fit: { eles: focused, padding: 80 }, duration: 600 });
+    }
+    focusRef.current = (id: string) => {
+      const n = cy.getElementById(id);
+      if (n.nonempty()) focusNode(n as NodeSingular, { widen: true });
+      return n.nonempty();
+    };
 
     return () => {
+      stopMotion();
+      focusRef.current = null;
+      focusedOnce.current = null;
       cy.destroy();
       cyRef.current = null;
     };
   }, [elements, theme]);
+
+  // Apply the deep-link focus once the graph contains the entry.
+  useEffect(() => {
+    if (focus?.status !== "found" || !focus.entryId || focusedOnce.current === focus.entryId) return;
+    const t = setTimeout(() => {
+      if (focusRef.current?.(focus.entryId!)) focusedOnce.current = focus.entryId!;
+    }, 50);
+    return () => clearTimeout(t);
+  }, [focus, elements]);
 
   const closeModal = () => {
     setPanel(null);
@@ -203,6 +281,20 @@ export default function DecisionsMapPage() {
         }
         description="Every decision across ALL runs for this team, woven into one governance network — decisions, the rules they cite, their runs, and teaching signals. Green edges are the learning loop: an autopilot decision reusing a human's precedent from an earlier run. Click any node to focus its neighborhood and open its record."
       />
+
+      {!isLoading && entries.length > 0 && <DecisionsCommandDeck entries={entries} />}
+
+      {focus && link && (
+        <FocusBanner
+          focus={focus}
+          waiting={focus.status !== "found" && !pollExpired}
+          onClear={() => {
+            setLink(null);
+            window.history.replaceState(null, "", "/decisions/graph");
+            closeModal();
+          }}
+        />
+      )}
 
       {atCap && (
         <div className="rounded-md border border-[var(--warning)]/40 bg-[color-mix(in_srgb,var(--warning)_var(--tint),transparent)] px-3 py-2 text-xs text-[var(--warning)]">
@@ -265,6 +357,7 @@ export default function DecisionsMapPage() {
         ) : (
           <>
             <div ref={containerRef} className="h-full w-full" />
+            <HudFrame label={`${graph.nodes.length} nodes · ${graph.edges.length} links`} live />
             <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rotate-45 border-2 border-[var(--warning)]" /> Rule hub</span>
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Ambiguity class</span>
@@ -332,5 +425,34 @@ function EdgeChip({ label, active, color, onClick }: { label: string; active: bo
       <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: active ? color : "var(--border-default)" }} />
       {label}
     </button>
+  );
+}
+
+function FocusBanner({ focus, waiting, onClear }: { focus: MapFocus; waiting: boolean; onClear: () => void }) {
+  const run = focus.runId.slice(0, 8);
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-[var(--primary)]/40 bg-[color-mix(in_srgb,var(--primary)_var(--tint),transparent)] px-3 py-2 text-xs">
+      <User className="h-3.5 w-3.5 text-[var(--primary)]" />
+      {focus.status === "found" ? (
+        <span className="text-[var(--text-secondary)]">
+          <span className="font-medium text-[var(--text)]">Your decision</span> in run <span className="mono">{run}</span>
+          {" "}· connected to <b className="text-[var(--text)]">{focus.agentInRun}</b> agent decision{focus.agentInRun === 1 ? "" : "s"}
+          {focus.humanInRun > 0 && <> and {focus.humanInRun} other human decision{focus.humanInRun === 1 ? "" : "s"}</>} in the same run
+          {focus.reuses > 0 && <> · reused {focus.reuses} precedent{focus.reuses === 1 ? "" : "s"}</>}
+          {focus.reusedBy > 0 && <> · <span className="text-[var(--success)]">reused by {focus.reusedBy} later decision{focus.reusedBy === 1 ? "" : "s"}</span></>}
+        </span>
+      ) : waiting ? (
+        <span className="text-[var(--text-secondary)]">Waiting for your decision in run <span className="mono">{run}</span> to land in the ledger…</span>
+      ) : (
+        <span className="text-[var(--warning)]">
+          {focus.status === "run-only"
+            ? `Run ${run} is on the map, but your decision is not in the ledger read yet. Refresh in a moment.`
+            : `Run ${run} is not in the ledger read (latest 1,000 decisions).`}
+        </span>
+      )}
+      <button type="button" onClick={onClear} className="ml-auto inline-flex items-center gap-1 text-[var(--text-tertiary)] hover:text-[var(--text)]">
+        <X className="h-3 w-3" /> Clear focus
+      </button>
+    </div>
   );
 }

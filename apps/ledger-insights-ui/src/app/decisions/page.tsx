@@ -5,7 +5,7 @@ import { useDecisions } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
 import { DecisionCard } from "@/components/domain/decision-card";
 import { DecisionTable } from "@/components/domain/decision-table";
-import { DecisionsInsights } from "@/components/domain/decisions-insights";
+import { DecisionsCommandDeck } from "@/components/domain/decisions-command-deck";
 import { DecisionActivity } from "@/components/domain/decision-activity";
 import { EmptyState } from "@/components/domain/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -27,9 +27,13 @@ export default function DecisionsPage() {
 function DecisionsContent() {
   const searchParams = useSearchParams();
   const scope = useMemo(() => parseDecisionQuery(new URLSearchParams(searchParams.toString())), [searchParams]);
+  // Same read window as Map / Lineage / Run flow (1000), so the command deck
+  // shows identical figures on all four tabs. The default 50 made the table
+  // tab report a different autonomy split than its sibling views.
   const { data, isLoading } = useDecisions({
     run_id: scope.run,
     team_id: scope.team,
+    limit: 1000,
   });
   const entries = data?.entries ?? [];
 
@@ -98,7 +102,7 @@ function DecisionsContent() {
         </div>
       )}
 
-      {!isLoading && entries.length > 0 && <DecisionsInsights entries={entries} />}
+      {!isLoading && entries.length > 0 && <DecisionsCommandDeck entries={entries} />}
       {!isLoading && entries.length > 0 && <DecisionActivity entries={entries} />}
 
       {isLoading ? (

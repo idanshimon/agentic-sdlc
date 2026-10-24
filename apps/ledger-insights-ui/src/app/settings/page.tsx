@@ -27,7 +27,9 @@ import {
   RefreshCw,
   ShieldCheck,
   XCircle,
+  Info,
 } from "lucide-react";
+import { AboutTab } from "@/components/domain/about-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +50,9 @@ interface SettingsSection {
 interface SettingsResponse {
   sections?: SettingsSection[];
   error?: string;
+  /** True when the orchestrator predates /api/config/settings and the
+   *  posture was composed from its individual config endpoints. */
+  composed?: boolean;
 }
 
 interface IntegrationRow {
@@ -73,6 +78,7 @@ const TABS = [
   { id: "integrations", label: "Integrations", icon: Cable },
   { id: "models", label: "Models", icon: Cpu },
   { id: "governance", label: "Governance", icon: ShieldCheck },
+  { id: "about", label: "About", icon: Info },
 ] as const;
 
 /* ------------------------------------------------------------- helpers */
@@ -197,11 +203,12 @@ export default function SettingsPage() {
 function SettingsView() {
   const router = useRouter();
   const params = useSearchParams();
-  const activeTab = params.get("tab") ?? "organization";
 
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // An older orchestrator cannot serve Organization; open on a tab with data.
+  const activeTab = params.get("tab") ?? (data?.composed ? "governance" : "organization");
   const [probing, setProbing] = useState<string | null>(null);
   const [probeResults, setProbeResults] = useState<Record<string, IntegrationRow["last_probe"]>>({});
 
@@ -289,7 +296,7 @@ function SettingsView() {
       />
 
       {/* tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-[var(--border-default)] pb-2">
+      <div className="-mx-1 flex gap-1 overflow-x-auto border-b border-[var(--border-default)] px-1 pb-2 [scrollbar-width:none]">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = activeTab === t.id;
@@ -298,7 +305,7 @@ function SettingsView() {
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
                 active
                   ? "bg-[var(--overlay)] text-[var(--text)]"
                   : "text-[var(--text-secondary)] hover:bg-[var(--overlay)]/50 hover:text-[var(--text)]",
@@ -311,7 +318,7 @@ function SettingsView() {
         })}
       </div>
 
-      {loadError && (
+      {loadError && activeTab !== "about" && (
         <Card className="p-6">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--danger)]" />
@@ -329,7 +336,18 @@ function SettingsView() {
         </Card>
       )}
 
-      {loading && !data && !loadError && (
+      {data?.composed && activeTab !== "about" && (
+        <div className="flex items-start gap-2 rounded-md border border-[var(--border-default)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+          <Info className="mt-px h-3.5 w-3.5 shrink-0 text-[var(--info)]" />
+          <span>
+            The deployed orchestrator predates the combined settings endpoint, so this view is assembled
+            from its individual config endpoints. Sections it cannot serve are shown as unavailable, not
+            as empty.
+          </span>
+        </div>
+      )}
+
+      {loading && !data && !loadError && activeTab !== "about" && (
         <Card className="p-6 text-sm text-[var(--text-secondary)]">Reading posture…</Card>
       )}
 
@@ -345,7 +363,10 @@ function SettingsView() {
         />
       )}
       {data && activeTab === "models" && <ModelsTab section={byName.models} />}
-      {data && activeTab === "governance" && <GovernanceTab section={byName.governance} />}
+      {data && activeTab === "governance" && (
+        <GovernanceTab section={byName.governance} pins={byName.standards_pins} repoAutonomy={byName.repo_autonomy} />
+      )}
+      {activeTab === "about" && <AboutTab />}
     </div>
   );
 }
@@ -604,10 +625,19 @@ function ModelsTab({ section }: { section?: SettingsSection }) {
   );
 }
 
-function GovernanceTab({ section }: { section?: SettingsSection }) {
+function GovernanceTab({
+  section,
+  pins,
+  repoAutonomy,
+}: {
+  section?: SettingsSection;
+  pins?: SettingsSection;
+  repoAutonomy?: SettingsSection;
+}) {
   const hardGate = (section?.hard_gate_classes as string[] | undefined) ?? [];
   const floor = (section?.floor as string[] | undefined) ?? [];
   return (
+    <div className="space-y-4">
     <SectionShell section={section}>
       <Card className="space-y-4 p-5">
         <div className="flex items-center justify-between">
@@ -648,6 +678,100 @@ function GovernanceTab({ section }: { section?: SettingsSection }) {
         </div>
 
         <GovernedNote section={section} />
+      </Card>
+    </SectionShell>
+    {pins && <PinsCard section={pins} />}
+    {repoAutonomy && <RepoAutonomyCard section={repoAutonomy} />}
+    </div>
+  );
+}
+
+function PinsCard({ section }: { section: SettingsSection }) {
+  const p = (section.pins ?? {}) as {
+    defaults?: Record<string, string>;
+    teams?: Record<string, Record<string, string>>;
+    available?: Record<string, string[]>;
+  };
+  const depts = Object.keys(p.defaults ?? {});
+  const teams = Object.entries(p.teams ?? {});
+  return (
+    <SectionShell section={section}>
+      <Card className="space-y-4 p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-[var(--text)]">Standards bundle pins</h2>
+          <ActivationBadge activation={section.activation} />
+        </div>
+        <Explainer section={section} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-[var(--text-tertiary)]">
+              <tr>
+                <th className="py-1.5 pr-4 text-left font-medium">Scope</th>
+                {depts.map((d) => (
+                  <th key={d} className="py-1.5 pr-4 text-left font-medium">{d}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border-muted)]">
+              <tr>
+                <td className="py-1.5 pr-4 text-[var(--text-secondary)]">defaults</td>
+                {depts.map((d) => (
+                  <td key={d} className="mono py-1.5 pr-4 text-[var(--secondary)]">{p.defaults?.[d]}</td>
+                ))}
+              </tr>
+              {teams.map(([team, v]) => (
+                <tr key={team}>
+                  <td className="mono py-1.5 pr-4 text-[var(--text-secondary)]">{team}</td>
+                  {depts.map((d) => {
+                    const differs = v[d] && v[d] !== p.defaults?.[d];
+                    return (
+                      <td key={d} className={cn("mono py-1.5 pr-4", differs ? "text-[var(--warning)]" : "text-[var(--secondary)]")}>
+                        {v[d] ?? "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              <tr>
+                <td className="py-1.5 pr-4 text-[var(--text-tertiary)]">available</td>
+                {depts.map((d) => (
+                  <td key={d} className="mono py-1.5 pr-4 text-[var(--text-tertiary)]">{(p.available?.[d] ?? []).join(", ")}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <GovernedNote section={section} />
+      </Card>
+    </SectionShell>
+  );
+}
+
+function RepoAutonomyCard({ section }: { section: SettingsSection }) {
+  const repos = (section.repos as Array<{ repo: string; tier: string; why_capped?: string }> | undefined) ?? [];
+  return (
+    <SectionShell section={section}>
+      <Card className="space-y-3 p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-[var(--text)]">Review-loop repo autonomy</h2>
+          <ActivationBadge activation={section.activation} />
+        </div>
+        <Explainer section={section} />
+        <div className="text-xs text-[var(--text-secondary)]">
+          Default tier <span className="mono text-[var(--secondary)]">{String(section.default_tier ?? "—")}</span>
+          {repos.length === 0 && " · no per-repo overrides"}
+        </div>
+        {repos.length > 0 && (
+          <ul className="divide-y divide-[var(--border-muted)] text-xs">
+            {repos.map((r) => (
+              <li key={r.repo} className="flex items-center gap-3 py-1.5">
+                <span className="mono flex-1 truncate">{r.repo}</span>
+                <Badge variant="secondary">tier {r.tier}</Badge>
+                {r.why_capped && <span className="text-[var(--text-tertiary)]">{r.why_capped}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </SectionShell>
   );

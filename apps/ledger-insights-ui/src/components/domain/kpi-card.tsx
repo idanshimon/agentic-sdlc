@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { type LucideIcon } from "lucide-react";
+import { CountUp } from "@/lib/hyperframe";
 
 export function KpiCard({
   label,
@@ -37,11 +38,13 @@ export function KpiCard({
 
   const body = (
     <Card
+      data-hf="rise"
       className={cn(
-        "p-4 h-full",
+        "relative overflow-hidden p-4 h-full",
         href && "transition-colors hover:border-[var(--text-tertiary)]",
       )}
     >
+      <span aria-hidden className="absolute inset-x-0 top-0 h-[2px]" style={{ background: accentColor, opacity: 0.7 }} />
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
           {label}
@@ -52,7 +55,7 @@ export function KpiCard({
         <div className="skeleton h-8 w-24" />
       ) : (
         <div className="text-2xl font-semibold tabular text-[var(--text)] leading-none">
-          {value ?? "—"}
+          {typeof value === "number" ? <CountUp value={value} /> : (value ?? "—")}
         </div>
       )}
       <div className="flex items-center justify-between mt-2 min-h-[16px]">

@@ -7,17 +7,36 @@ import { cn } from "@/lib/utils";
 export const Sheet = DialogPrimitive.Root;
 export const SheetTrigger = DialogPrimitive.Trigger;
 export const SheetClose = DialogPrimitive.Close;
+export const SheetTitle = DialogPrimitive.Title;
+export const SheetDescription = DialogPrimitive.Description;
 
+/**
+ * Radix requires every dialog to carry a Title (screen readers announce it);
+ * missing one is a console error in dev. `title` is therefore REQUIRED here —
+ * rendered visually hidden by default so callers keep their own heading — so
+ * a new sheet cannot ship without an accessible name.
+ *
+ * `overlay`:
+ *   - "dim"  (default) a blocking modal: dimmed, blurred backdrop.
+ *   - "none" a docked side panel: no backdrop, the page stays sharp and
+ *            readable behind it. Use with `<Sheet modal={false}>` for work
+ *            surfaces you read *alongside* (the assistant).
+ */
 export const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     side?: "left" | "right";
+    title: string;
+    description?: string;
+    overlay?: "dim" | "none";
   }
->(({ className, children, side = "right", ...props }, ref) => (
+>(({ className, children, side = "right", title, description, overlay = "dim", ...props }, ref) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-    />
+    {overlay === "dim" && (
+      <DialogPrimitive.Overlay
+        className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+      />
+    )}
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
@@ -27,7 +46,12 @@ export const SheetContent = React.forwardRef<
       )}
       {...props}
     >
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text)]">
+      <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
+      <DialogPrimitive.Description className="sr-only">{description ?? title}</DialogPrimitive.Description>
+      <DialogPrimitive.Close
+        aria-label="Close"
+        className="absolute right-4 top-4 z-10 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text)]"
+      >
         <X className="h-4 w-4" />
       </DialogPrimitive.Close>
       {children}

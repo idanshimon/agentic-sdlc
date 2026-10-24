@@ -43,7 +43,7 @@ export function TopBar() {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-60">
+          <SheetContent side="left" title="Navigation" className="p-0 w-60">
             <SidebarBody />
           </SheetContent>
         </Sheet>

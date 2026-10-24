@@ -138,7 +138,14 @@ export function useDecisions(filter?: { team_id?: string; run_id?: string; limit
           ...e,
           actor: e.actor && typeof e.actor === "object"
             ? e.actor
-            : { kind: ((r.actor_kind as string) ?? "agent") as "agent" | "human", id: (r.actor_id as string) ?? (r.created_by as string) ?? "unknown" },
+            // Flat live rows: actor_kind if written, else confidence_source
+            // (the producer's record of who made the call). Defaulting to
+            // "agent" mislabelled every human-gated decision as autonomous.
+            : {
+                kind: ((r.actor_kind as string) ??
+                  (r.confidence_source === "human" ? "human" : "agent")) as "agent" | "human",
+                id: (r.actor_id as string) ?? (r.created_by as string) ?? "unknown",
+              },
           decision: e.decision ?? (r.resolution_text as string) ?? (r.ambiguity_class as string) ?? "",
           rationale: e.rationale ?? "",
           model_used: e.model_used ?? "",

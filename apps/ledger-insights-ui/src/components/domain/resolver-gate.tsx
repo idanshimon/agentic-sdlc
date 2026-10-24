@@ -9,6 +9,22 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { StageEvent } from "@/lib/types";
 
+/** Deep link into the Decision Map, focused on the decision just made. The
+ *  map resolves the ledger entry by run + card (it may land a few seconds
+ *  after the toast) and highlights how it connects to the agents' decisions. */
+export function decisionMapHref(runId: string, cardId?: string | null): string {
+  const q = new URLSearchParams({ run: runId });
+  if (cardId) q.set("card", cardId);
+  return `/decisions/graph?${q.toString()}`;
+}
+
+function mapAction(runId: string, cardId?: string | null) {
+  return {
+    label: "See on map",
+    onClick: () => window.location.assign(decisionMapHref(runId, cardId)),
+  };
+}
+
 /* Resolver Gate panel — surfaces when run.status === "awaiting_gate".
  *
  * Reads the full ambiguity card details from the assessor's
@@ -246,6 +262,8 @@ export function ResolverGate({ runId, events, gateVersion, onApproved }: Props) 
         await orchestrator.finalizeGate(runId, gateVersion);
         toast.success(`Approved ${approved} ${approved === 1 ? "card" : "cards"}`, {
           description: "Resolver gate closed — pipeline advancing to Architect.",
+          action: mapAction(runId),
+          duration: 10000,
         });
         onApproved();
       } else {
@@ -291,7 +309,9 @@ export function ResolverGate({ runId, events, gateVersion, onApproved }: Props) 
         [card.card_id!]: { label: card.options[optionIndex]?.label ?? "Selected", custom: false },
       }));
       toast.success(`Card decided: ${card.options[optionIndex]?.label ?? "option"}`, {
-        description: "Decision pinned to ledger with full prompt chain.",
+        description: "Pinned to the ledger. Open the map to see how it connects to the agents' decisions.",
+        action: mapAction(runId, card.card_id),
+        duration: 10000,
       });
       onApproved();
     } catch (e) {
@@ -323,6 +343,8 @@ export function ResolverGate({ runId, events, gateVersion, onApproved }: Props) 
       toast.success("Custom resolution recorded", {
         description:
           "Pinned to the ledger as a human teaching signal — future runs in this class will quote it back.",
+        action: mapAction(runId, card.card_id),
+        duration: 10000,
       });
       onApproved();
     } catch (e) {

@@ -285,3 +285,30 @@ body {
   animation: skeleton 1.6s ease-in-out infinite;
   border-radius: 6px;
 }
+
+/* Mission Control motion. Slow and calm — motion marks "live", it is not decoration.
+   Disabled by the prefers-reduced-motion rule above. */
+@keyframes mc-spin { to { transform: rotate(360deg); } }
+@keyframes mc-dash { to { stroke-dashoffset: -20; } }
+@keyframes mc-ping {
+  0% { transform: scale(0.7); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes mc-flow { to { background-position: 24px 0; } }
+.mc-spin { animation: mc-spin 120s linear infinite; }
+.mc-spin-rev { animation: mc-spin 40s linear infinite reverse; }
+.mc-dash { animation: mc-dash 1.4s linear infinite; }
+.mc-ping { animation: mc-ping 1.8s ease-out infinite; }
+.mc-flow {
+  background-image: linear-gradient(90deg, transparent 0 50%, color-mix(in srgb, var(--primary) 45%, transparent) 50% 100%);
+  background-size: 12px 2px;
+  animation: mc-flow 1.2s linear infinite;
+}
+
+/* HUD scan line over graph panes — a single soft band drifting downward. */
+@keyframes hf-scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(800%); } }
+.hf-scan {
+  top: 0;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary) 6%, transparent), transparent);
+  animation: hf-scan 9s linear infinite;
+}

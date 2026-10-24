@@ -19,6 +19,9 @@ import { useDecisions } from "@/lib/hooks/use-runs";
 import { PageHeader } from "@/components/layout/page-header";
 import { buildPrecedentLineage } from "@/lib/graph/build-lineage";
 import { layoutLineageLanes, type PositionedNode, type LaneBand } from "@/lib/graph/layout-lineage";
+import { useCanvasTheme } from "@/lib/graph/canvas-theme";
+import { HudFrame } from "@/lib/hyperframe";
+import { DecisionsCommandDeck } from "@/components/domain/decisions-command-deck";
 
 /**
  * Precedent Lineage — the learning-loop hero view. Reads the SAME useDecisions
@@ -163,6 +166,7 @@ export default function LineagePage() {
   const router = useRouter();
   const { data, isLoading } = useDecisions({ limit: 1000 });
   const entries = useMemo(() => data?.entries ?? [], [data]);
+  const theme = useCanvasTheme();
 
   const { graph, positioned, bands } = useMemo(() => {
     const g = buildPrecedentLineage(entries);
@@ -200,6 +204,12 @@ export default function LineagePage() {
     const decisionNodes: Node[] = positioned.map((p) => ({ id: p.id, type: "lineage", position: { x: p.x, y: p.y }, data: p as unknown as Record<string, unknown>, zIndex: 2 }));
     return [...bandNodes, ...headerNodes, ...decisionNodes];
   }, [positioned, bands, graph.lanes]);
+  const firstLaneNodes = useMemo(() => {
+    const keep = new Set(bands.slice(0, 6).map((b) => b.rootId));
+    return nodes
+      .filter((n) => n.id.startsWith("band-") ? keep.has(n.id.slice(5)) : n.id.startsWith("header-") ? keep.has(n.id.slice(7)) : false)
+      .map((n) => ({ id: n.id }));
+  }, [nodes, bands]);
   const [focusNode, setFocusNode] = useState<string | null>(null);
   const rootSet = useMemo(() => new Set(graph.roots), [graph.roots]);
   const edges: Edge[] = useMemo(
@@ -216,7 +226,9 @@ export default function LineagePage() {
           source,
           target,
           type: "smoothstep",
-          animated: reuse && focused,
+          // Reuse edges always flow (direction of learning); the focused chain is
+          // emphasised by width + glow rather than by being the only moving edge.
+          animated: reuse,
           label: reuse ? "reuses precedent" : undefined,
           labelStyle: { fill: "var(--success)", fontSize: 9, fontWeight: 600 },
           labelBgStyle: { fill: "var(--bg)", fillOpacity: 0.85 },
@@ -257,6 +269,8 @@ export default function LineagePage() {
         description="The learning loop as a timeline. Green nodes on the left are human precedents; each arrow shows an autopilot decision that reused it. A flagged precedent (red) is one a human ruled shouldn't be reused. Click any node for its full record."
       />
 
+      {!isLoading && entries.length > 0 && <DecisionsCommandDeck entries={entries} />}
+
       <div className="flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
         <Stat label="Precedent chains" value={graph.stats.chains} />
         <Stat label="Human roots" value={humanRoots} success />
@@ -285,7 +299,8 @@ export default function LineagePage() {
         </div>
       )}
 
-      <div className="h-[70vh] rounded-lg border border-[var(--border-default)] bg-[var(--bg)]">
+      <div className="relative h-[70vh] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg)]">
+        {!isLoading && !empty && <HudFrame label={`${graph.stats.chains} chains · ${graph.stats.reuseEdges} reuse hops`} live />}
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">Loading ledger…</div>
         ) : empty ? (
@@ -298,7 +313,7 @@ export default function LineagePage() {
           </div>
         ) : (
           <ReactFlow
-            colorMode="dark"
+            colorMode={theme.isLight ? "light" : "dark"}
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
@@ -306,6 +321,9 @@ export default function LineagePage() {
             onNodeMouseEnter={(_, n) => setFocusNode(n.id)}
             onNodeMouseLeave={() => setFocusNode(null)}
             fitView
+            // Fit the first lanes at a readable zoom instead of shrinking all
+            // chains into an illegible column; the rest are a scroll away.
+            fitViewOptions={{ nodes: firstLaneNodes, padding: 0.15, maxZoom: 1 }}
             minZoom={0.2}
             proOptions={{ hideAttribution: true }}
           >
