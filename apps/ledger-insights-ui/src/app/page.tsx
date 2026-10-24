@@ -10,10 +10,13 @@ import { KpiCard } from "@/components/domain/kpi-card";
 import { RunCard } from "@/components/domain/run-card";
 import { NeedsAttention } from "@/components/domain/needs-attention";
 import { EmptyState } from "@/components/domain/empty-state";
+import { PipelineFlow } from "@/components/domain/pipeline-flow";
 import { useRuns, useTelemetryCost, useDecisions } from "@/lib/hooks/use-runs";
 import { useAssistantContext } from "@/lib/assist/context";
 import { buildAttentionQueue, attentionCounts } from "@/lib/attention";
 import { fmtUsd } from "@/lib/utils";
+import { useHyperframe } from "@/lib/hyperframe";
+import { SystemPulse } from "@/components/domain/system-pulse";
 
 export default function DashboardPage() {
   const { data: runs, isLoading: runsLoading } = useRuns();
@@ -57,9 +60,12 @@ export default function DashboardPage() {
   const classifierRan = blockedByPolicy + technicalFailures > 0;
   const totalCost = cost?.total_cost_usd ?? 0;
   const recent = runsList.slice(0, 4);
+  const frameRef = useHyperframe<HTMLDivElement>([runsLoading]);
 
   return (
-    <div className="space-y-6">
+    <div ref={frameRef} className="space-y-6">
+      {!runsLoading && runsList.length > 0 && <SystemPulse runs={runsList} entries={entries} />}
+
       {/* Fold one: what needs a human. Not a pitch. */}
       <NeedsAttention items={queue} loading={runsLoading} total={queueTotal} />
 
@@ -123,6 +129,8 @@ export default function DashboardPage() {
           href="/economics"
         />
       </section>
+
+      {runsList.length > 0 && <div data-hf="rise"><PipelineFlow runs={runsList} href="/mission" /></div>}
 
       {/* Recent activity — context, deliberately below the queue. */}
       <section className="space-y-3">

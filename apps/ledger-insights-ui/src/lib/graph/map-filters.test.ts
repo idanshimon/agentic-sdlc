@@ -69,3 +69,22 @@ describe("applyMapFilters", () => {
     expect(f.nodes.some((n) => n.id === "flagged")).toBe(true);
   });
 });
+
+describe("pinned focus", () => {
+  it("keeps the pinned decision, its run and the run's other decisions under the budget", () => {
+    const nodes = [
+      { id: "run:r1", kind: "run" as const, label: "r1" },
+      ...Array.from({ length: 40 }, (_, i) => ({ id: `d${i}`, kind: "decision" as const, label: `d${i}`, degree: i })),
+    ];
+    const edges = [
+      { id: "e1", source: "d0", target: "run:r1", kind: "in_run" as const },
+      { id: "e2", source: "d1", target: "run:r1", kind: "in_run" as const },
+    ];
+    const g = { nodes, edges, stats: {} } as unknown as Parameters<typeof applyMapFilters>[0];
+    const out = applyMapFilters(g, { edgeKinds: new Set(["in_run"]), onlyFlagged: false, nodeBudget: 5, pinned: ["d0"] });
+    const ids = new Set(out.nodes.map((n) => n.id));
+    expect(ids.has("d0")).toBe(true);
+    expect(ids.has("d1")).toBe(true);
+    expect(ids.has("run:r1")).toBe(true);
+  });
+});

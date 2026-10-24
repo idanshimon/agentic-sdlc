@@ -17,7 +17,9 @@
  */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import gsap from "gsap";
+import { prefersReducedMotion } from "@/lib/hyperframe";
 import {
   ShieldAlert, ShieldCheck, ShieldOff, User, Bot,
   ChevronDown, ChevronRight, Filter, Search, X,
@@ -208,7 +210,7 @@ export function DecisionTable({
           cmp = a.created_at.localeCompare(b.created_at);
           break;
         case "cost_usd":
-          cmp = a.cost_usd - b.cost_usd;
+          cmp = (a.cost_usd || 0) - (b.cost_usd || 0);
           break;
         case "stage":
           cmp = (a.stage ?? "").localeCompare(b.stage ?? "");
@@ -221,6 +223,18 @@ export function DecisionTable({
     });
     return copy;
   }, [filtered, sortKey, sortDir]);
+
+  // Rows sweep in whenever the visible set changes (filter, sort) — a cue that
+  // the table actually re-queried rather than silently swapping content.
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const motionKey = `${sorted.length}|${sortKey}|${sortDir}|${sorted[0]?.id ?? ""}`;
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || prefersReducedMotion()) return;
+    const rows = Array.from(body.querySelectorAll("tr[data-hf-row]")).slice(0, 30);
+    const tw = gsap.fromTo(rows, { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.35, stagger: 0.018, ease: "power2.out", clearProps: "opacity,transform" });
+    return () => { tw.kill(); };
+  }, [motionKey]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -298,7 +312,7 @@ export function DecisionTable({
                 <th className="px-3 py-2 text-left w-36">Lineage</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--border-muted)]">
+            <tbody ref={bodyRef} className="divide-y divide-[var(--border-muted)]">
               {sorted.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-12 text-center text-[var(--text-tertiary)]">
@@ -560,6 +574,11 @@ function DecisionRow({
     <>
       <tr
         id={`decision-${entry.id}`}
+        data-hf-row
+        style={{
+          // Who decided, at a glance: agent = violet rail, human = blue rail.
+          boxShadow: `inset 3px 0 0 0 ${entry.actor.kind === "agent" ? "var(--secondary)" : "var(--primary)"}`,
+        }}
         className={cn(
           "hover:bg-[var(--overlay)]/50 cursor-pointer transition-colors scroll-mt-24",
           expanded && "bg-[var(--overlay)]/30",
@@ -615,7 +634,9 @@ function DecisionRow({
           <PhiIcon className="h-3.5 w-3.5" style={{ color: phiColor }} aria-label={`PHI ${entry.phi_class}`} />
         </td>
         <td className="px-3 py-2 align-top text-right tabular text-xs text-[var(--text-secondary)]">
-          {fmtUsd(entry.cost_usd)}
+          {typeof entry.cost_usd === "number" && entry.cost_usd > 0 ? fmtUsd(entry.cost_usd) : (
+            <span className="text-[var(--text-tertiary)]" title="No cost recorded on this entry">—</span>
+          )}
         </td>
         <td className="px-3 py-2 align-top text-[11px] text-[var(--text-tertiary)] tabular">
           {relativeTime(entry.created_at)}

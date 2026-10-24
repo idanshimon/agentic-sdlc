@@ -95,4 +95,21 @@ describe("buildPrecedentLineage", () => {
     expect(lane.blocked).toBe(1); // c2 flagged
     expect(lane.nodeIds.sort()).toEqual(["c1", "c2", "root"]);
   });
+
+  it("does not derive reuse when the autopilot entry predates the human ruling", () => {
+    // live shape: autopilot proposed first, a human re-decided at the gate later
+    const g = buildPrecedentLineage([
+      entry({ id: "auto", card_id: "c1", confidence_source: "autopilot", created_at: "2026-07-21T00:00:00Z" }),
+      entry({ id: "human", card_id: "c1", confidence_source: "human", created_at: "2026-07-26T00:00:00Z" }),
+    ]);
+    expect(g.edges).toHaveLength(0);
+  });
+
+  it("derives reuse when the autopilot entry follows the human ruling", () => {
+    const g = buildPrecedentLineage([
+      entry({ id: "human", card_id: "c1", confidence_source: "human", created_at: "2026-07-21T00:00:00Z" }),
+      entry({ id: "auto", card_id: "c1", confidence_source: "autopilot", created_at: "2026-07-26T00:00:00Z" }),
+    ]);
+    expect(g.edges.filter((e) => e.kind === "reuses")).toHaveLength(1);
+  });
 });

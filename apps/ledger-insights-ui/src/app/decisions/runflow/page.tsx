@@ -11,6 +11,9 @@ import cytoscape, { type Core, type NodeSingular } from "cytoscape";
 import dagre from "cytoscape-dagre";
 import { Workflow, User, Bot, ShieldAlert, Flag, X, ExternalLink } from "lucide-react";
 import { useDecisions } from "@/lib/hooks/use-runs";
+import { startCyMotion } from "@/lib/graph/cy-motion";
+import { HudFrame } from "@/lib/hyperframe";
+import { DecisionsCommandDeck } from "@/components/domain/decisions-command-deck";
 import { PageHeader } from "@/components/layout/page-header";
 import { buildRunFlow } from "@/lib/graph/build-runflow";
 import { buildRunOptions, filterRunOptions } from "@/lib/run-options";
@@ -180,6 +183,11 @@ export default function RunFlowPage() {
       fit: true,
       padding: 40,
     } as cytoscape.LayoutOptions).run();
+    const stopMotion = startCyMotion(cy, {
+      flowSelector: 'edge[relation = "of_class"]',
+      pulseSelector: "node.flagged, node.phi",
+      pulseColor: theme.danger,
+    });
 
     const resetView = () => {
       cy.elements().removeClass("focused dimmed sel");
@@ -208,6 +216,7 @@ export default function RunFlowPage() {
     });
 
     return () => {
+      stopMotion();
       cy.destroy();
       cyRef.current = null;
     };
@@ -230,6 +239,10 @@ export default function RunFlowPage() {
         }
         description="One run, stage by stage. Blue nodes are pipeline stages (or ambiguity buckets); each decision hangs under the stage that made it. Click a decision for its full record."
       />
+
+      {runId && entries.some((e) => e.run_id === runId) && (
+        <DecisionsCommandDeck compact entries={entries.filter((e) => e.run_id === runId)} />
+      )}
 
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label className="text-[var(--text-tertiary)]" htmlFor="runflow-search">
@@ -276,6 +289,7 @@ export default function RunFlowPage() {
         ) : (
           <>
             <div ref={containerRef} className="h-full w-full" />
+            <HudFrame label="run flow" live />
             <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 rounded-md border border-[var(--border-default)] bg-[var(--surface)]/90 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--primary)]" /> Stage / agent</span>
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-[var(--success)]" /> Human decision</span>

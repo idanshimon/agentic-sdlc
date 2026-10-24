@@ -93,6 +93,11 @@ export function buildPrecedentLineage(entries: LedgerEntry[]): LineageGraph {
       for (const e of group) {
         if (e.id === precedent.id) continue;
         if (e.confidence_source !== "autopilot") continue;
+        // Reuse must come AFTER the ruling it reuses. On live data every
+        // human+autopilot pair on a card is the reverse — autopilot proposed,
+        // then a human re-decided at the gate. Drawing that as "the agent
+        // learned from the human" inverts causality.
+        if (at(e) < at(precedent)) continue;
         reuse.push({ child: e.id, parent: precedent.id });
       }
     }

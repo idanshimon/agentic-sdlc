@@ -16,6 +16,7 @@ import {
   DollarSign,
   FileSearch,
   SlidersHorizontal,
+  Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ const nav = [
     section: "Operate",
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard, plane: null },
+      { href: "/mission", label: "Mission Control", icon: Radar, plane: "pipeline" },
       { href: "/runs", label: "Runs", icon: GitBranch, plane: "pipeline" },
       { href: "/decisions", label: "Decisions", icon: Scale, plane: "ledger" },
       { href: "/review-loop", label: "Review Loop", icon: GitMerge, plane: "agenthq" },
@@ -95,8 +97,11 @@ export function SidebarBody() {
             <span className="text-sm font-semibold text-[var(--text)] group-hover:text-[var(--primary)] transition-colors">
               Ledger Insights
             </span>
-            <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
-              agentic-sdlc v0.7
+            <span
+              className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider"
+              title={`Build ${process.env.NEXT_PUBLIC_BUILD_SHA ?? "unknown"} · details in Settings → About`}
+            >
+              agentic-sdlc v{process.env.NEXT_PUBLIC_APP_VERSION ?? "?"}
             </span>
           </div>
         </Link>

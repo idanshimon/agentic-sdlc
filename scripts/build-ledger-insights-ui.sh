@@ -92,6 +92,7 @@ az acr build \
     --build-arg "NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE" \
     --build-arg "NEXT_PUBLIC_ORCHESTRATOR_URL=$NEXT_PUBLIC_ORCHESTRATOR_URL" \
     --build-arg "NEXT_PUBLIC_LEDGER_MCP_URL=$NEXT_PUBLIC_LEDGER_MCP_URL" \
+    --build-arg "BUILD_GIT_SHA=$GIT_SHA" \
     .
 
 echo

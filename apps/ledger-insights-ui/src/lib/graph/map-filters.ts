@@ -14,6 +14,9 @@ export interface MapFilters {
   onlyFlagged: boolean; // focus on flagged + neighborhood
   bundleId?: string; // scope to one bundle node id (e.g. "bundle:security/v0.1.0/PHI-001")
   nodeBudget?: number; // hard cap on rendered nodes (hubs/flagged always kept)
+  /** Deep-link focus: these decision ids, their run node and every other
+   *  decision in that run are always kept (never dropped by the budget). */
+  pinned?: string[];
 }
 
 export const DEFAULT_EDGE_KINDS: GraphEdgeKind[] = ["reuses", "teaches", "grounded_in", "same_slot"];
@@ -50,12 +53,26 @@ export function applyMapFilters(graph: DecisionGraph, f: MapFilters): DecisionGr
     keep = new Set([...keep].filter((id) => focus.has(id)));
   }
 
+  // Pinned: the focused decision + its run + the run's other decisions.
+  const pinned = new Set<string>();
+  for (const id of f.pinned ?? []) {
+    if (!graph.nodes.some((n) => n.id === id)) continue;
+    pinned.add(id);
+    for (const e of graph.edges) {
+      if (e.kind === "in_run" && e.source === id) {
+        pinned.add(e.target);
+        for (const e2 of graph.edges) if (e2.kind === "in_run" && e2.target === e.target) pinned.add(e2.source);
+      }
+    }
+  }
+  for (const id of pinned) keep.add(id);
+
   // Node budget: if over cap, drop the lowest-degree plain decision nodes first.
   // Always keep hubs (bundle/class), runs, teaching, and flagged decisions.
   if (f.nodeBudget && keep.size > f.nodeBudget) {
     const protectedKinds = new Set<GraphNode["kind"]>(["bundle", "class", "run", "teaching"]);
     const candidates = graph.nodes
-      .filter((n) => keep.has(n.id) && !protectedKinds.has(n.kind) && !n.flagged)
+      .filter((n) => keep.has(n.id) && !protectedKinds.has(n.kind) && !n.flagged && !pinned.has(n.id))
       .sort((a, b) => (a.degree ?? 0) - (b.degree ?? 0));
     const mustKeep = keep.size - candidates.length;
     const room = Math.max(0, f.nodeBudget - mustKeep);
@@ -63,7 +80,7 @@ export function applyMapFilters(graph: DecisionGraph, f: MapFilters): DecisionGr
     keep = new Set(
       [...keep].filter((id) => {
         const n = graph.nodes.find((x) => x.id === id)!;
-        return protectedKinds.has(n.kind) || n.flagged || keptCandidates.has(id);
+        return protectedKinds.has(n.kind) || n.flagged || pinned.has(id) || keptCandidates.has(id);
       }),
     );
   }

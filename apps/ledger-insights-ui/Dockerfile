@@ -23,6 +23,8 @@ COPY apps/ledger-insights-ui ./apps/ledger-insights-ui
 ARG NEXT_PUBLIC_DEMO_MODE=1
 ARG NEXT_PUBLIC_ORCHESTRATOR_URL=https://ca-orchestrator.placeholder.eastus2.azurecontainerapps.io
 ARG NEXT_PUBLIC_LEDGER_MCP_URL=https://ca-ledger-mcp.placeholder.eastus2.azurecontainerapps.io
+# The build context has no .git, so the commit is passed in for the About panel.
+ARG BUILD_GIT_SHA=unknown
 
 WORKDIR /repo/apps/ledger-insights-ui
 
@@ -32,6 +34,7 @@ WORKDIR /repo/apps/ledger-insights-ui
 ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE \
     NEXT_PUBLIC_ORCHESTRATOR_URL=$NEXT_PUBLIC_ORCHESTRATOR_URL \
     NEXT_PUBLIC_LEDGER_MCP_URL=$NEXT_PUBLIC_LEDGER_MCP_URL \
+    BUILD_GIT_SHA=$BUILD_GIT_SHA \
     NEXT_TELEMETRY_DISABLED=1 \
     CI=true
 

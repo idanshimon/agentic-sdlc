@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@azure/identity": "^4.14.0",
     "@dagrejs/dagre": "^3.0.0",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -37,6 +38,7 @@
     "cytoscape-fcose": "^2.2.0",
     "date-fns": "^4.1.0",
     "geist": "^1.6.1",
+    "gsap": "3.15.0",
     "lucide-react": "^0.469.0",
     "next": "16.2.12",
     "next-themes": "^0.4.6",

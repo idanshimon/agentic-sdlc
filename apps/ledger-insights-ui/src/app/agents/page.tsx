@@ -1,10 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Bot, FileText, Shield, Code, Search, Wrench, GitMerge, ChevronLeft } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { AgentRoster } from "@/components/domain/agent-roster";
+import { ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PlaneBadge } from "@/components/domain/plane-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { VersionedEditor } from "@/components/domain/versioned-editor";
 import { orchestrator } from "@/lib/api/orchestrator";
@@ -12,15 +11,6 @@ import { AGENT_SEEDS } from "@/lib/versioning/seeds";
 import { useAssistantContext, type ApplyAction } from "@/lib/assist/context";
 import { saveVersion, getCurrentContent, getEntry, ensureSeeded } from "@/lib/versioning/store";
 import { toast } from "sonner";
-
-const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  assessor: FileText,
-  architect: Wrench,
-  codegen: Code,
-  "review-scan": Search,
-  "pipeline-doctor": Shield,
-  "standards-change": GitMerge,
-};
 
 export default function AgentsPage() {
   const [selected, setSelected] = useState<string | null>(null);
@@ -159,82 +149,7 @@ export default function AgentsPage() {
           />
         </>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {AGENT_SEEDS.map((a) => {
-            const Icon = ICONS[a.id] ?? Bot;
-            return (
-              <button
-                key={a.id}
-                onClick={() => setSelected(a.id)}
-                className="text-left rounded-lg border border-[var(--border-default)] bg-[var(--card)] p-4 space-y-3 hover:border-[var(--text-tertiary)] hover:bg-[var(--overlay)]/40 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="h-9 w-9 rounded-md bg-[var(--plane-agenthq)]/15 flex items-center justify-center shrink-0">
-                      <Icon className="h-4 w-4 text-[var(--plane-agenthq)]" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold mono truncate">
-                        {a.id}
-                      </h3>
-                      <PlaneBadge plane="agenthq" size="xs" />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                  {a.description}
-                </p>
-                <div className="pt-2 space-y-2 border-t border-[var(--border-muted)]">
-                  <div>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-                      Bundles
-                    </span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {a.bundles.map((b) => (
-                        <Badge key={b} variant="secondary" className="text-[10px]">
-                          {b}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-                      Writes
-                    </span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {a.ledger_writes.map((w) => (
-                        <span
-                          key={w}
-                          className="mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--overlay)] text-[var(--plane-ledger)]"
-                        >
-                          {w}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-                      Models
-                    </span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {a.preferred_models.map((m) => (
-                        <span
-                          key={m}
-                          className="mono text-[10px] text-[var(--text-secondary)]"
-                        >
-                          {m}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[10px] text-[var(--primary)] pt-1 font-medium">
-                  Click to edit →
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <AgentRoster onSelect={setSelected} />
       )}
     </div>
   );
